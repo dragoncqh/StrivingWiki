@@ -1,0 +1,2007 @@
+<!DOCTYPE html
+  SYSTEM "about:legacy-compat">
+<html lang="zh-cn"><head><meta charset="UTF-8"><meta name="copyright" content="(C) 版权 2024"><meta name="generator" content="DITA-OT"><meta name="description" content=""><title>图像局部与分割</title><link rel="stylesheet" type="text/css" href="../../commonltr.css">
+<link rel="stylesheet" type="text/css" href="../../common-extended.css"></head><body id="图像局部与分割-06CF5B81"><main role="main"><article role="article" aria-labelledby="ariaid-title1">
+<h1 class="title topictitle1" id="ariaid-title1">图像局部与分割</h1>
+
+
+<div class="body conbody"><p class="shortdesc"></p>
+<p class="p">局部与分割</p>
+<p class="p">&nbsp;</p>
+<p class="p">&nbsp;</p>
+<p class="p">本章重点讲述如何从图像中将目标或部分目标分割出来。这样做的原因很明显，比</p>
+<p class="p">如在视频安全应用中，摄像机经常观测一个不变的背景，而实际上我们对这些背景</p>
+<p class="p">并不感兴趣。我们所感兴趣的只是当行人或车辆进入场景时或者当某些东西被遗留</p>
+<p class="p">在场景中时。我们希望分离出这些事件而忽略没有任何事件发生的时间段。</p>
+<p class="p">&nbsp;</p>
+<p class="p">除了从图像中分割出前景目标之外，在很多情况下我们也希望将感兴趣的目标区域</p>
+<p class="p">分割出来，比如将一个人的脸或手分割出来。我们可以把图像预处理成有意义的超</p>
+<p class="p">像素（super pixel)所组成的诸如包含类似四肢、头发、脸、躯干、树叶、湖泊、道</p>
+<p class="p">路、草坪等物体的图像区域。这些超像素的使用节省了计算量。比如，对一幅图像</p>
+<p class="p">做目标分类器处理的时候，我们只需要在包含每个超像素的一个区域进行搜索。这</p>
+<p class="p">样可能只需要跟踪这些大的区域，而不是区域中的每一个像素点。</p>
+<p class="p">&nbsp;</p>
+<p class="p">在第5章介绍图像处理时我们已经讨论了几个图像分割的算法。这些程序涵盖了图</p>
+<p class="p">像形态学、种子填充法、阈值算法以及金字塔分割法等方面。本章将研究其他用于</p>
+<p class="p">查找、填充和分离一幅图像中的目标以及部分目标物体的算法。先从已知背景的场</p>
+<p class="p">景中分割出前景目标开始。这些背景的建模函数并没有内置在OpenCV 函数中，</p>
+<p class="p">更确切地说，它们仅仅用来说明如何利用OpenCV函数实现更加复杂的例子。</p>
+<p class="p">&nbsp;</p>
+<p class="p">&nbsp;</p>
+<p class="p">背景减除</p>
+<p class="p">&nbsp;</p>
+<p class="p">由于背景减除简单而且摄像机在很多情况下是固定的，在视频安全应用领域，背景</p>
+<p class="p">减除（又名背景差分）也许是最基本的图像处理操作。Toyama,Krumm,Brumitt 和</p>
+<p class="p">Meyers 对背景提取做了很好的概述并与许多技术进行了对比［Toyama99].要实现</p>
+<p class="p">背景减除，我们必须首先“学习”背景模型。【265】</p>
+<p class="p">&nbsp;</p>
+<p class="p">一旦背景模型建立，将背景模型和当前的图像进行比较，然后减去这些已知的背景</p>
+<p class="p">信息，则剩下的目标物大致就是所求的前景目标了。</p>
+<p class="p">&nbsp;</p>
+<p class="p">当然，“背景”在不同的应用场合下是一个很难定义的问题。例如，若正在观测一</p>
+<p class="p">条高速公路，那么或许平均流动的车流应该被认为是背景。通常情况下，背景被认</p>
+<p class="p">为是在任何所感兴趣的时期内，场景中保持静止或周期运动的目标。整个场景可以</p>
+<p class="p">包含随时间变动的单元，比如竖立在原地但却从早到晚摇曳在风中的树。两个容易</p>
+<p class="p">碰到的常见但却不同的环境类别是室内和室外场景。如果有工具在这两种环境中对</p>
+<p class="p">我们有所帮助，我们将很感兴趣。首先，我们将讨论经典背景模型的不足，再转向</p>
+<p class="p">阐述更高级的场景模型。接下来，我们提出一个快速的背景建模方法，该方法对于</p>
+<p class="p">光照条件变化不大的室内的静止背景的场景效果很好。然后将介绍 codebook 方</p>
+<p class="p">法，该方法虽然度稍慢，但在室内外环境下都能工作得很好；也能适应周期性的</p>
+<p class="p">运动（比如树在风中摇曳）以及灯光缓慢变化或有规律的变化，并且对偶尔有前景目</p>
+<p class="p">标移动的背景学习有很好的适应性。我们将随后在清除前景物体检测的内容中另行</p>
+<p class="p">讨论连通物体（首次见于第5章）的相关内容。最后将会比较快速背景建模方法和</p>
+<p class="p">codebook 背景方法。</p>
+<p class="p">&nbsp;</p>
+<p class="p">背景减除的缺点</p>
+<p class="p">&nbsp;</p>
+<p class="p">&nbsp;</p>
+<p class="p">虽然背景建模方法在简单的场景中能够达到较好的效果，但该方法受累于一个不常</p>
+<p class="p">成立的假设：所有像素点是独立的。我们所描述的这种建模方法在计算像素变化时</p>
+<p class="p">并没有考虑它相邻的像素。为了考虑到周围的像素，我们需要建立一个多元模型，</p>
+<p class="p">它把基本的像素独立模型扩展为包含了相邻像素的亮度的基本场景。在这种情况</p>
+<p class="p">下，我们用相邻像素的亮度来区别相邻像素值的相对明暗。然后对单个像素的两种</p>
+<p class="p">模型进行有效的学习：一个其周围像素是明亮的，另一个则是周围像素是暗淡的。</p>
+<p class="p">这样，我们就有了一个考虑到了周围因素的模型。但是，这样需要消耗两倍的内存</p>
+<p class="p">和更多的计算量，因为当周围的像素是亮或暗的时，需要用不同的亮度值来表示，</p>
+<p class="p">而且还要两倍的数据来填充这个双状态模型。我们将这种“高低”关系的思路归纳</p>
+<p class="p">到单个像素及其周围像素亮度的多维直方图中，并且可以通过一系列的操作步骤使</p>
+<p class="p">该思路更加复杂。当然，这种更完整的空间和时间模型需要更多的内存、收集数据</p>
+<p class="p">样本更多的以及更多的计算资源。</p>
+<p class="p">&nbsp;</p>
+<p class="p">由于这些额外的开销，通常会避免使用复杂的模型。当像素独立假设不成立情况</p>
+<p class="p">下，我们可以更有效地把精力投入到清除那些错误的检测结果中。清除采用图像处</p>
+<p class="p">理的方式（主要是cvErode(),cvDilate()和 cvFloodFil1()等）去掉那些孤立的像</p>
+<p class="p">素。在前面的章节中（第5章）我们已经讨论过如何在噪声数据中寻找大块紧凑连通</p>
+<p class="p">域的程序①.本章我们将再次使用连通域，就目前而言，我们将把讨论的方法严格</p>
+<p class="p">限制在像素变化独立的假设基础上。</p>
+<p class="p">&nbsp;</p>
+<p class="p">场景建模</p>
+<p class="p">&nbsp;</p>
+<p class="p">&nbsp;</p>
+<p class="p">如何定义背景和前景呢？如果在监视一个停车场时，一辆汽车开了进来，那么这辆</p>
+<p class="p">车就是一个新的前景目标，但是，这辆轿车一直应该是前景吗？对于场景中物体移</p>
+<p class="p">动后的情况呢？这里将显示两个地方为前景：一是物体移动到的位置，另一个则是</p>
+<p class="p">物体离开后留下的“空洞”，如何分辨出两者的不同？再者，留下的“空洞”能在</p>
+<p class="p">前景状态保持多长时间？如果给一个黑暗屋子建模，突然有人打开了一盏灯，那么</p>
+<p class="p">整个屋子都变成前景了吗？为了回答这些问题，我们需要更高级的场景建模，在此</p>
+<p class="p">模型中，要对前景状态和背景状态定义多重指标，以时间为基础将不变的前景模块</p>
+<p class="p">缓慢转换为背景模块。当场景完全发生变化时我们还必须检测并建立一个新的</p>
+<p class="p">模型。</p>
+<p class="p">&nbsp;</p>
+<p class="p">通常，一个场景模型可能包含许多层次，从“新的前景”到旧的前景再到背景。还</p>
+<p class="p">可能有一些运动检测，这样，当一个目标移动时，我们可以识别其“真的”的前景</p>
+<p class="p">（新位置）和“假的”的前景（其旧的位置，“空洞”）。</p>
+<p class="p">&nbsp;</p>
+<p class="p">这样，一个新的前景目标就会放进“新前景”目标级别，标识为一个真目标或一个</p>
+<p class="p">空洞。在没有任何前景物体的地方，我们将继续更新我们的背景模型。如果一个前</p>
+<p class="p">景物体在给定的时间内没有发生移动，就将它降级为“旧的前景”，这里它的像素</p>
+<p class="p">统计特性还将暂时学习直到它的学习模型融合进学习背景模型之中。</p>
+<p class="p">&nbsp;</p>
+<p class="p">对于像在屋里打开一盏灯时的全局改变的检测，我们可以使用全局帧差来计算。比</p>
+<p class="p">如，一次有许多像素发生变化，我们就能够将它归类为全局的变化而不是局部的变</p>
+<p class="p">化，而后转用一种适用于这种新情况的模型。</p>
+<p class="p">&nbsp;</p>
+<p class="p">注① 这里，我们使用数学中的“紧凑”定义，与大小无关。</p>
+<p class="p">&nbsp;</p>
+<p class="p">&nbsp;</p>
+<p class="p">像素片段</p>
+<p class="p">&nbsp;</p>
+<p class="p">&nbsp;</p>
+<p class="p">在转到为像素变化建模之前，先要对图像中的像素点在一段时间内如何变化有个概</p>
+<p class="p">念。考虑一个摄像机从窗口拍摄一棵被风吹拂着的树的场景。图9-1显示了图像中</p>
+<p class="p">给定线段的像素在60帧图像中的变化。我们希望给这种波动建立模型。然而在建</p>
+<p class="p">模之前，我们作一个小小的离题讨论，如何对这条线进行采样，通常这是创建特征</p>
+<p class="p">和调试都很有用的手段。【267】</p>
+<p class="p">&nbsp;</p>
+<p class="p">[PIC]</p>
+<p class="p">&nbsp;</p>
+<p class="p">图9-1:树在风中移动的场景中一条线上的像素在60帧内的波动。一些黑色区</p>
+<p class="p">域（左上）很稳定，而移动的树枝（中上）变化范围很大</p>
+<p class="p">&nbsp;</p>
+<p class="p">OpenCV 有这样的函数，它能够很容易对任意直线上的像素进行采样。线采样函数</p>
+<p class="p">是cvInitLineIterator()和CV_NEXT_LINE_POINT(),前者原型如下：</p>
+<p class="p">&nbsp;</p>
+<p class="p">int cvInitLineIterator( &nbsp;&nbsp;&nbsp; const CvArr*&nbsp;&nbsp;&nbsp;
+image, &nbsp;&nbsp;&nbsp; CvPoint&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+pt1, &nbsp;&nbsp;&nbsp; CvPoint&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+pt2, &nbsp;&nbsp;&nbsp; CvLineIterator* line_iterator, &nbsp;&nbsp;&nbsp;
+int&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;connectivity&nbsp;
+= 8, &nbsp;&nbsp;&nbsp; int&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+left_to_right = 0 );</p>
+<p class="p">&nbsp;</p>
+<p class="p">输入参数image 可以是任意数据类型和任何通道数，点pt1和pt2是线段的两个</p>
+<p class="p">端点。迭代器line_iterator 说明直线上两个像素之间的移动步长。如果图像是</p>
+<p class="p">多通道的，每次调用CV_NEXT_LINE_POINT()函数都使 line_iterator</p>
+<p class="p">指向下一个像素。每个通道的像素值可同时用line_iterator.ptr[0],</p>
+<p class="p">line_iterator.ptr[1]等依次得到。连通性可以是4(直线可以是沿着右、左、上、下方向）和8(再增加沿着对角线方向）。最后，如果把
+left_to_right 设置为</p>
+<p class="p">0(false),line_iterator 将从 pt1 扫描到 pt2;否则，它将从最左边的点扫描</p>
+<p class="p">到最右边的点?.函数 cvInitLineIterator()将返回直线上迭代的点的个数。伴</p>
+<p class="p">随宏（CV_NEXT_LINE_POINT(line_iterator)使迭代器从一个像素到另一个</p>
+<p class="p">像素。【268~269】</p>
+<p class="p">&nbsp;</p>
+<p class="p">让我们花点时间看一下这种方法是如何从一个文件提取数据的（例 9-1),接下来，</p>
+<p class="p">我们再检查下图9-1中来自视频文件的结果数据。</p>
+<p class="p">&nbsp;</p>
+<p class="p">例 9-1:从视频的一行中读出所有像素的RGB值，收集这些数值并将其分成三</p>
+<p class="p">文件</p>
+<p class="p">&nbsp;</p>
+<p class="p">／／ STORE TO DISK A LINE SEGMENT OF BGR PIXELS FROM pt1 to pt2</p>
+<p class="p">／／</p>
+<p class="p">CvCapture*&nbsp;&nbsp;&nbsp;&nbsp; capture = cvCreateFileCapture(
+argv[1] );</p>
+<p class="p">int&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+max_buffer;</p>
+<p class="p">IplImage*&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; rawImage;</p>
+<p class="p">int&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+r[10000],g[10000],b[10000];</p>
+<p class="p">CvLineIterator iterator;</p>
+<p class="p">FILE *fptrb = fopen(“blines.csv”,“w”); // Store the data here</p>
+<p class="p">FILE *fptrg = fopen(“glines.csv”,“w”); // for each color channel</p>
+<p class="p">FILE *fptrr = fopen(“rlines.csv”,“w”);</p>
+<p class="p">// MAIN PROCESSING LOOP:</p>
+<p class="p">//</p>
+<p class="p">for(;;){</p>
+<p class="p">&nbsp;&nbsp;&nbsp; if( !cvGrabFrame( capture ))</p>
+<p class="p">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; break;</p>
+<p class="p">&nbsp;&nbsp;&nbsp; rawImage = cvRetrieveFrame( capture );</p>
+<p class="p">&nbsp;&nbsp;&nbsp; max_buffer = cvInitLineIterator(rawImage,pt1,pt2,&amp;iterator,8,0);</p>
+<p class="p">&nbsp;&nbsp;&nbsp; for(int j=0; j&lt;max_buffer; j++){</p>
+<p class="p">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; fprintf(fptrb,“%d,”,
+iterator.ptr[0]); //Write blue value</p>
+<p class="p">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; fprintf(fptrg,“%d,”,
+iterator.ptr[1]); //green</p>
+<p class="p">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; fprintf(fptrr,“%d,”,
+iterator.ptr[2]); //red</p>
+<p class="p">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; iterator.ptr[2] = 255;&nbsp;
+//Mark this sample in red</p>
+<p class="p">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; CV_NEXT_LINE_POINT(iterator);
+//Step to the next pixel</p>
+<p class="p">&nbsp;&nbsp;&nbsp; }</p>
+<p class="p">&nbsp;&nbsp;&nbsp; // OUTPUT THE DATA IN ROWS:</p>
+<p class="p">&nbsp;&nbsp;&nbsp; //</p>
+<p class="p">&nbsp;&nbsp;&nbsp; fprintf(fptrb,“/n”);fprintf(fptrg,“/n”);fprintf(fptrr,“/n”);</p>
+<p class="p">}</p>
+<p class="p">// CLEAN UP:</p>
+<p class="p">//</p>
+<p class="p">fclose(fptrb); fclose(fptrg); fclose(fptrr);</p>
+<p class="p">cvReleaseCapture( &amp;capture );</p>
+<p class="p">&nbsp;</p>
+<p class="p">①left_to_right 标识符的引入因为从pt1到pt2的不连续线段并不完全与从pt2</p>
+<p class="p">到pt1的相吻合。因此，设置标识位为用户提供一致的光栅，不管pt1和pt2的顺</p>
+<p class="p">序如何。</p>
+<p class="p">&nbsp;</p>
+<p class="p">也可以用下面的函数更轻松地对直线采样：</p>
+<p class="p">int cvSampleLine(</p>
+<p class="p">&nbsp;&nbsp;&nbsp; const CvArr* image,</p>
+<p class="p">&nbsp;&nbsp;&nbsp; CvPoint&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; pt1,</p>
+<p class="p">CvPoint&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; pt2,</p>
+<p class="p">void*&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; buffer,</p>
+<p class="p">int&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; connectivity
+= 8</p>
+<p class="p">);</p>
+<p class="p">【269~270】</p>
+<p class="p">&nbsp;</p>
+<p class="p">该函数只是函数cvnitLineterator()和宏 CV_NEXT_LINE_POINT (line_</p>
+<p class="p">iterator)的简单封装。从pt1到pt2取样，之后，传递给它一个指针，指向正确</p>
+<p class="p">类型和长度为Nchannels X max(|pt1x - pt2x| + 1, |ptly - pt2,| +1)的缓冲区。正如</p>
+<p class="p">line_iterator一样，在转向下一个像素之前，cvSampleLine()会访问多通道图</p>
+<p class="p">像的每一个像素通道。函数返回缓冲区中的实际元素的数目。</p>
+<p class="p">我们现在转到图9-1中像素波动的一些建模方法。当我们从简单的模型向越来越复</p>
+<p class="p">杂的模型过程中，将主要关注那些能实时运行且内存消耗可接受的模型上。</p>
+<p class="p">&nbsp;</p>
+<p class="p">帧差</p>
+<p class="p">&nbsp;</p>
+<p class="p">&nbsp;</p>
+<p class="p">最简单的背景减除方法就是用一帧减去另一帧（也可能是后几帧），然后将足够大的</p>
+<p class="p">差别标为前景。这种方法往往能捕捉运动目标的边缘。简而言之，假如我们有三个</p>
+<p class="p">单通道的图像：frameTeim1,frameTime2 和frameForeground.图像</p>
+<p class="p">frameTimel 用上一时刻的灰度图像填充，frameTime2 用当前灰度图像填充。则</p>
+<p class="p">用下面的代码检测图像frameForeground中前景差别的幅值（绝对值）：</p>
+<p class="p">&nbsp;</p>
+<p class="p">cvAbsDiff(</p>
+<p class="p">frameTime1,</p>
+<p class="p">frameTime2,</p>
+<p class="p">frameForeground</p>
+<p class="p">）；</p>
+<p class="p">&nbsp;</p>
+<p class="p">由于像素值总会受到噪声和波动的影响，我们应该忽略（将结果设为 0)很小的差异</p>
+<p class="p">（小于15),标识其余的作为较大的差别（将结果设为255)</p>
+<p class="p">&nbsp;</p>
+<p class="p">cvThreshold(</p>
+<p class="p">frameForeground,</p>
+<p class="p">frameForeground,</p>
+<p class="p">15,</p>
+<p class="p">255,</p>
+<p class="p">CV_THRESH_BINARY</p>
+<p class="p">）；</p>
+<p class="p">&nbsp;</p>
+<p class="p">在图像frameForeground 中候选的前景目标值为255,背景值为 0.我们需要清除</p>
+<p class="p">前面讨论过的噪声；可以调用cvErode()函数或者用连通域去噪。对于彩色图</p>
+<p class="p">像，我们用相同的代码对每个颜色通道分别处理，之后再调用 cvor()函数将所有</p>
+<p class="p">通道拼接在一起。如果不仅仅是检测运动区域，这种方法有些简单。对更有效的背</p>
+<p class="p">景模型，我们需要保留场景中像素的均值和平均差等统计特征。在后面的“快速测</p>
+<p class="p">试”小节的图9-5和图9-6中，可以看到作帧差的例子。</p>
+<p class="p">【270】</p>
+<p class="p">&nbsp;</p>
+<p class="p">平均背景法</p>
+<p class="p">&nbsp;</p>
+<p class="p">&nbsp;</p>
+<p class="p">平均背景法的基本思路是计算每个像素的平均值和标准差（或相似的，但计算速度</p>
+<p class="p">更快的平均差值）作为它的背景模型。考虑图9-1的像素直线。我们可以通过视频</p>
+<p class="p">中的平均值和平均差来描述每一个像素的变化（图 9-2),而不是对每一帧图像绘出</p>
+<p class="p">一个像素值序列（像我们在那幅图像中做的那样）。在同一个视频中，一个前景目标</p>
+<p class="p">（实际上，可能是一只手）经过摄像机的前面。这个前景目标显然不如背景中的天空</p>
+<p class="p">和树明亮，手的亮度在图9-2中也表示出来了。</p>
+<p class="p">&nbsp;</p>
+<p class="p">[PIC]</p>
+<p class="p">&nbsp;</p>
+<p class="p">图9-2:表示的是一组平均差分。一个目标（一只手）从摄像机前掠过，目标亮</p>
+<p class="p">度相对较暗，图中表示了它的亮度</p>
+<p class="p">&nbsp;</p>
+<p class="p">平均背景法使用四个OpenCV 函数：CVACC(),累积图像；cvAbsDiff(),计算一</p>
+<p class="p">定时间内的每帧图像之差；cvInRange(),将图像分割成前景区域和背景区域（背</p>
+<p class="p">景模型已经学习的情况下）；函数 cvor(),将不同的彩色通道图像中合成为一个掩</p>
+<p class="p">模图像。由于这个例子代码比较长，我们将它分开成几块，对每一块分别讨论。</p>
+<p class="p">&nbsp;</p>
+<p class="p">首先，我们为需要的不同临时图像和统计属性图像创建指针。这样有助于根据图像</p>
+<p class="p">的不同类型对以后使用的图像指针排序。</p>
+<p class="p">&nbsp;</p>
+<p class="p">／／Global storage</p>
+<p class="p">／／</p>
+<p class="p">／／Float, 3-channel images</p>
+<p class="p">／／</p>
+<p class="p">IplImage *IavgF,*IdiffF, *IprevF, *IhiF,*IlowF;</p>
+<p class="p">IplImage *Iscratch,*Iscratch2 ;</p>
+<p class="p">／／Float, 1-channel images</p>
+<p class="p">／／</p>
+<p class="p">IplImage *Igray1, *Igray2, *Igray3;</p>
+<p class="p">IplImage *Ilow1,*I1ow2, *I1ow3;</p>
+<p class="p">IplImage *Ihil, *Ihi2, *Ihi3;</p>
+<p class="p">／／ Byte, 1-channel image</p>
+<p class="p">／／</p>
+<p class="p">IplImage *Imaskt;</p>
+<p class="p">／／Counts number of images learned for averaging later.</p>
+<p class="p">／／</p>
+<p class="p">float Icount;</p>
+<p class="p">【271~272】</p>
+<p class="p">&nbsp;</p>
+<p class="p">接下来，我们创建一个函数来给需要的所有临时图像分配内存。为了方便，我们传</p>
+<p class="p">递一幅图像（来自视频）作为大小参考来分配临时图像。</p>
+<p class="p">&nbsp;</p>
+<p class="p">// I is just a sample image for allocation purposes</p>
+<p class="p">// (passed in for sizing)</p>
+<p class="p">//</p>
+<p class="p">void AllocateImages( IplImage* I ){</p>
+<p class="p">&nbsp; CvSize sz = cvGetSize( I );</p>
+<p class="p">&nbsp; IavgF&nbsp;&nbsp;&nbsp;&nbsp; = cvCreateImage( sz, IPL_DEPTH_32F,
+3 );</p>
+<p class="p">&nbsp; IdiffF&nbsp;&nbsp;&nbsp; = cvCreateImage( sz, IPL_DEPTH_32F,
+3 );</p>
+<p class="p">&nbsp; IprevF&nbsp;&nbsp;&nbsp; = cvCreateImage( sz, IPL_DEPTH_32F,
+3 );</p>
+<p class="p">&nbsp; IhiF&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; = cvCreateImage( sz,
+IPL_DEPTH_32F, 3 );</p>
+<p class="p">&nbsp; IlowF&nbsp; &nbsp;&nbsp;&nbsp;= cvCreateImage( sz, IPL_DEPTH_32F,
+3 );</p>
+<p class="p">&nbsp; Ilow1&nbsp;&nbsp;&nbsp;&nbsp; = cvCreateImage( sz, IPL_DEPTH_32F,
+1 );</p>
+<p class="p">&nbsp; Ilow2&nbsp;&nbsp;&nbsp;&nbsp; = cvCreateImage( sz, IPL_DEPTH_32F,
+1 );</p>
+<p class="p">&nbsp; Ilow3&nbsp;&nbsp;&nbsp;&nbsp; = cvCreateImage( sz, IPL_DEPTH_32F,
+1 );</p>
+<p class="p">&nbsp; Ihi1&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; = cvCreateImage( sz,
+IPL_DEPTH_32F, 1 );</p>
+<p class="p">&nbsp; Ihi2&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; = cvCreateImage( sz,
+IPL_DEPTH_32F, 1 );</p>
+<p class="p">&nbsp; Ihi3&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; = cvCreateImage( sz,
+IPL_DEPTH_32F, 1 );</p>
+<p class="p">&nbsp; cvZero( IavgF );</p>
+<p class="p">&nbsp; cvZero( IdiffF );</p>
+<p class="p">&nbsp; cvZero( IprevF );</p>
+<p class="p">&nbsp; cvZero( IhiF );</p>
+<p class="p">&nbsp; cvZero( IlowF );</p>
+<p class="p">&nbsp; Icount&nbsp;&nbsp;&nbsp; = 0.00001; //Protect against divide
+by zero</p>
+<p class="p">&nbsp; Iscratch&nbsp; = cvCreateImage( sz, IPL_DEPTH_32F, 3 );</p>
+<p class="p">&nbsp; Iscratch2 = cvCreateImage( sz, IPL_DEPTH_32F, 3 );</p>
+<p class="p">&nbsp; Igray1&nbsp;&nbsp;&nbsp; = cvCreateImage( sz, IPL_DEPTH_32F,
+1 );</p>
+<p class="p">&nbsp; Igray2&nbsp;&nbsp;&nbsp; = cvCreateImage( sz, IPL_DEPTH_32F,
+1 );</p>
+<p class="p">&nbsp; Igray3&nbsp;&nbsp;&nbsp; = cvCreateImage( sz, IPL_DEPTH_32F,
+1 );</p>
+<p class="p">&nbsp; Imaskt&nbsp;&nbsp;&nbsp; = cvCreateImage( sz, IPL_DEPTH_8U,&nbsp;
+1 );</p>
+<p class="p">&nbsp; cvZero( Iscratch );</p>
+<p class="p">&nbsp; cvZero( Iscratch2 );</p>
+<p class="p">}</p>
+<p class="p">&nbsp;</p>
+<p class="p">&nbsp;</p>
+<p class="p">在接下来的代码片段中，我们学习累积背景图像和每一帧图像差值的绝对值（一个</p>
+<p class="p">计算更快的学习图像像素的标准偏差的替代）。这通常需要30至1000帧，有时每</p>
+<p class="p">秒几帧或者有时需要所有有价值的帧图像。函数调用需要通道为3,深度为8的彩</p>
+<p class="p">色图像。</p>
+<p class="p">／／ Learn the background statistics for one more frame</p>
+<p class="p">／／ I is a color sample of the background, 3-channel, 8u</p>
+<p class="p">／／</p>
+<p class="p">void accumulateBackground( IplImage *I){</p>
+<p class="p">static int first =1;</p>
+<p class="p">／／ nb. Not thread safe</p>
+<p class="p">cvCvtScale( I, Iscratch, 1,0);</p>
+<p class="p">／／ convert to float</p>
+<p class="p">if(!first){</p>
+<p class="p">CVAcc(Iscratch, IavgF );</p>
+<p class="p">cvAbsDiff( Iscratch, IprevF, Iscratch2 );</p>
+<p class="p">cvAcc(Iscratch2,IdiffF );</p>
+<p class="p">Icount +=1.0;</p>
+<p class="p">｛</p>
+<p class="p">first =0;</p>
+<p class="p">cvCopy( Iscratch, IprevF );</p>
+<p class="p">}</p>
+<p class="p">&nbsp;</p>
+<p class="p">我们首先用函数cvcvtScale()将原始的每通道8位，3颜色通道的彩色图像转换</p>
+<p class="p">成一个浮点型的3通道图像。之后我们积累原始的浮点图像为IavgF.接下来，我</p>
+<p class="p">们用函数cvAbsDiff()计算每帧图像之间的绝对差图像，并将其积累为图像</p>
+<p class="p">IdiffF.每次积累图像之后，增加图像计数器 Icount的值，该计数器是一个全局</p>
+<p class="p">变量用于接下来计算平均值。</p>
+<p class="p">&nbsp;</p>
+<p class="p">一旦我们积累了足够多的帧图像之后，就将其转化成为一个背景的统计模型。这就</p>
+<p class="p">&nbsp;</p>
+<p class="p">①注意，我们用“替代”（proxy)这个词。平均差分并不等价于算术上的标准差，但是，</p>
+<p class="p">在这里它会产生相似的结果。平均差分的优势在于它比标准差的计算速度稍快。仅需</p>
+<p class="p">要对例子中的代码稍作改变，就可以用标准差代替来比较结果的好坏；我们将在后面</p>
+<p class="p">对此作更详细的讨论。</p>
+<p class="p">&nbsp;</p>
+<p class="p">是说，计算每一个像素的均值和方差观测（平均绝对差分）。</p>
+<p class="p">void createModelsfromStats() {</p>
+<p class="p">cvConvertScale( IavgF, IavgF,( double)(1.0/Icount));</p>
+<p class="p">cvConvertScale( IdiffF, IdiffF, (double)(1.0/Icount) );</p>
+<p class="p">／／Make sure diff is always something</p>
+<p class="p">／／</p>
+<p class="p">cvAddS( IdiffF, cvScalar(1.0, 1.0,1.0), IdiffF );</p>
+<p class="p">setHighThreshold(7.0);</p>
+<p class="p">setLowThreshold(6.0);</p>
+<p class="p">｝</p>
+<p class="p">【273】</p>
+<p class="p">在这段代码中，函数cvConvertScale()通过除以输入图像累积的数目计算平均原</p>
+<p class="p">始图像和绝对差分图像。预防起见，我们确保平均差分图像的值最小是 1;当计算</p>
+<p class="p">前景和背景阈值以及避免前景阈值和背景阈值相等而出现的退化情况时，我们要缩</p>
+<p class="p">放这个因素。</p>
+<p class="p">函数setHighThreshold()和</p>
+<p class="p">set LowThreshold()都是基于每一帧图像平均绝对</p>
+<p class="p">差设置阈值的有效函数。函数setHighThreshold(7.0)固定一个阈值，使得对于?</p>
+<p class="p">每一帧图像的绝对差大于平均值7倍的像素都认为是前景；同样的，函数</p>
+<p class="p">setLowThreshold(6.0)设置一个阈值，认为每一帧图像的绝对差小于平均值6倍</p>
+<p class="p">的像素认为是前景。像素平均值范围内，认为目标为背景，阈值函数如下：</p>
+<p class="p">void setHighThreshold( float scale)</p>
+<p class="p">（</p>
+<p class="p">cvConvertScale( IdiffF, Iscratch, scale );</p>
+<p class="p">cvAdd( Iscratch, IavgF, IhiF );</p>
+<p class="p">cvSplit ( IhiF, Ihil, Ihi2, Ihi3, 0 );</p>
+<p class="p">｛</p>
+<p class="p">void setLowThreshold( float scale )</p>
+<p class="p">（</p>
+<p class="p">cvConvertScale( IdiffF, Iscratch,&nbsp; scale );</p>
+<p class="p">cvSub( IavgF, Iscratch, IlowF );</p>
+<p class="p">cvSplit ( IlowF, Ilow1, Ilow2, Ilow3, 0 );</p>
+<p class="p">｛</p>
+<p class="p">再者，使用函数setLowThreshold()和函数setHighThreshold()时，我们用函</p>
+<p class="p">数cvconvertScale()乘以预先设定的值来增加或减小与IavgF相关的范围。这个</p>
+<p class="p">操作通过函数cvSplit()为图像的每个通道设置IhiF和IloWF的范围。</p>
+<p class="p">一旦我们有了自己的背景模型，同时给出了高、低阈值，我们就能用它将图像分割</p>
+<p class="p">成前景（不能被背景模型“解释”的图像部分）和背景（在背景模型中，任何在高低</p>
+<p class="p">阈值之间的图像部分）。图像分割通过调用下面的函数来完成。</p>
+<p class="p">／／ Create a binary: 0,255 mask where 255 means foreground pixel</p>
+<p class="p">I //</p>
+<p class="p">Input image, 3-channel, 8u</p>
+<p class="p">／／ Imask Mask image to be created, 1-channel 8u</p>
+<p class="p">／／</p>
+<p class="p">void backgroundDi ff (</p>
+<p class="p">IplImage *I,</p>
+<p class="p">IplImage *Imask</p>
+<p class="p">）｛</p>
+<p class="p">cvCvtScale(I,Iscratch,1,0); // To float;</p>
+<p class="p">cvSplit( Iscratch, Igray1, Igray2 , Igray3, 0 ) ;</p>
+<p class="p">／／Channel 1</p>
+<p class="p">／／</p>
+<p class="p">cvInRange (Igray1, Ilow1, Ihil,Imask);</p>
+<p class="p">／／Channel 2</p>
+<p class="p">／／</p>
+<p class="p">cvInRange (Igray2 , Ilow2, Ihi2, Imaskt) ;</p>
+<p class="p">cvor(Imask,Imaskt,Imask);</p>
+<p class="p">／／Channel 3</p>
+<p class="p">／／</p>
+<p class="p">cvInRange (Igray3 , Ilow3, Ihi3, Imaskt) ;</p>
+<p class="p">cvOr (Imask, Imaskt , Imask)</p>
+<p class="p">／／Finally, invert the results</p>
+<p class="p">／／</p>
+<p class="p">cvSubRS( Imask, 255, Imask) ;</p>
+<p class="p">し</p>
+<p class="p">【274~275】</p>
+<p class="p">函数首先通过调用函数cvCvtScale()将输入图像I(用于分割的图像）转换成浮点型</p>
+<p class="p">的图像。之后调用函数cvSplit()将3 通道图像分解为单通道图像。最后通过函</p>
+<p class="p">数 cvInRange()检查这些单通道图像是否在平均背景像素的高低阈值之间，该函</p>
+<p class="p">数将8位深度的灰度图像Imaskt中在背景范围内的像素设为最大值（255),否则设</p>
+<p class="p">为0.对于每一颜色通道，理论上，我们都能将分割结果转变成掩模图像 Imask,</p>
+<p class="p">在任何颜色通道中非常大的差别都可认为是前景像素。最后，利用函数 cvSubRS()</p>
+<p class="p">将其转化为 Imask 图像，因为前景的颜色值在背景阈值范围之外。掩模图像就是</p>
+<p class="p">函数的输出值。</p>
+<p class="p">完成背景建模后，我们需要将内存释放。</p>
+<p class="p">void DeallocateImages()</p>
+<p class="p">（</p>
+<p class="p">CVReleaseImage( &amp;IavgF);</p>
+<p class="p">cvReleaseImage( &amp;IdiffF ) ;</p>
+<p class="p">CVReleaseImage(&amp;IprevF);</p>
+<p class="p">cvReleaseImage( &amp;IhiF );</p>
+<p class="p">cvReleaseImage( &amp;IlowF );</p>
+<p class="p">cvReleaseImage( &amp;Ilow1 );</p>
+<p class="p">CvReleaseImage( &amp;Ilow2 );</p>
+<p class="p">CVReleaseImage( &amp;Ilow3 );</p>
+<p class="p">cvReleaseImage(&amp;Ihi1 );</p>
+<p class="p">CVReleaseImage(&amp;Ihi2 );</p>
+<p class="p">CvReleaseImage(&amp;Ihi3 );</p>
+<p class="p">CVReleaseImage(&amp;Iscratch );</p>
+<p class="p">cvReleaseImage( &amp;Iscratch2 );</p>
+<p class="p">CVReleaseImage(&amp;Igray1 );</p>
+<p class="p">CVReleaseImage( &amp;Igray2 );</p>
+<p class="p">CVReleaseImage(&amp;Igray3);</p>
+<p class="p">cvReleaseImage( &amp;Imaskt);</p>
+<p class="p">｛</p>
+<p class="p">我们刚才已经介绍了一种学习背景场景和分割前景目标的简单方法。这种方法只能</p>
+<p class="p">用于背景场景中不包含运动的部分（比如摆动的窗帘和在风中摇曳的树）。而且，这</p>
+<p class="p">种方法还要求光线保持不变（如在室内静止的场景）。你可以用后面的图9-5来验证</p>
+<p class="p">这种平均方法的性能。</p>
+<p class="p">。【275~276】</p>
+<p class="p">累积均值、方差和协方差</p>
+<p class="p">刚刚描述的平均背景法利用一个累积函数 CVACC().它只是所有一组用于累计图像</p>
+<p class="p">的函数，如平方图像，乘图像或者平均图像操作等中的一个函数。通过这些操作，</p>
+<p class="p">我们可以计算得到整个场景或部分场景的基本统计特性（均值，方差和协方差）。在</p>
+<p class="p">这一节中，将要看到本组函数中的其他一些函数。</p>
+<p class="p">任何给定函数中的图像必须有相同的宽度和高度。对于每一个函数，输入图像命名</p>
+<p class="p">为image,image1或image2,它们可以是8位深度的单通道或3通道图像，也可</p>
+<p class="p">以是浮点型（32F)的图像数组。输出的累积图像命名为sum,sIsum或acc,可能是</p>
+<p class="p">单精度的数组（32F),也可以是双精度的数组（64F).在累积函数中，掩模图像（如果</p>
+<p class="p">存在）的处理严格限制操作在掩模像素不为0的区域。</p>
+<p class="p">均值漂移值</p>
+<p class="p">通过大量图像计算每个像素的均值的最简单的方法就是调用函数</p>
+<p class="p">CVACC()把它们加起来再除以图像总数来获得均值。</p>
+<p class="p">void cVAcc(</p>
+<p class="p">const Cvrr*</p>
+<p class="p">image,</p>
+<p class="p">CvArr*</p>
+<p class="p">sum,</p>
+<p class="p">const CvArr* mask =NULL</p>
+<p class="p">）；</p>
+<p class="p">另外也可以选择均值漂移。</p>
+<p class="p">void cvRunningAvg(</p>
+<p class="p">const CvArr* image,</p>
+<p class="p">CvArr*</p>
+<p class="p">acc,</p>
+<p class="p">double</p>
+<p class="p">alpha,</p>
+<p class="p">const CvArr* mask =NULL</p>
+<p class="p">）；</p>
+<p class="p">均值漂移值由下式给出：</p>
+<p class="p">acc(x, y)=(1-α)?acc(x,y)+α?image(x,y) if mask(x,y)≠0</p>
+<p class="p">对于常量a,均值漂移值并不等于利用函数 CVACC()得到的和。为了说明这个，简</p>
+<p class="p">单地考虑一种情况，就是假设把三个数（2,3,4)相加，并设a为0.5.如果用函数</p>
+<p class="p">CVACc()来累积，得到的结果是9,均值为3.如果我们用函数 cvRunningAverage()</p>
+<p class="p">来累积，首先得到的和为0.5x2+0.5x3=2.5,接下来加上第三项，可得0.5x</p>
+<p class="p">2.5+0.5x4=3.25.第二个数字大的原因是最近值给了较大的权值。因此这样的</p>
+<p class="p">均值漂移又被称作跟踪器。因为前一帧图像褪色的影响，参数a本质上是设置所需</p>
+<p class="p">的时间。</p>
+<p class="p">【276】</p>
+<p class="p">计算方差</p>
+<p class="p">我们可以累积平方图像，这将有助于我们快速计算单个像素的方差。</p>
+<p class="p">void cvSquareAcc(</p>
+<p class="p">Const CvArr* image,</p>
+<p class="p">CvArr*</p>
+<p class="p">sqsum,</p>
+<p class="p">const CvArr* mask = NULL</p>
+<p class="p">）；</p>
+<p class="p">画想一下统计的最后一节，方差定义如下：</p>
+<p class="p">&nbsp;</p>
+<p class="p">[[[]]]</p>
+<p class="p">&nbsp;</p>
+<p class="p">其中又是N个样本x的均值，该公式的问题在于计算x时遍历一次整幅图像，计算</p>
+<p class="p">。2时需要再次遍历整幅图像。下面的一个简单代数公式可以实现相同功能：</p>
+<p class="p">&nbsp;</p>
+<p class="p">[[[]]]</p>
+<p class="p">&nbsp;</p>
+<p class="p">使用这种形式，仅需一次遍历图像就能够累积出像素值和它们的平方值。单个像素</p>
+<p class="p">的方差正好是平方的均值减去均值的平方。</p>
+<p class="p">计算协方差</p>
+<p class="p">我们可以通过选择一个特定的时间间隔来观测图像是怎么变化的，</p>
+<p class="p">然后用当前图像乘以和特定时间间隔相对应的图像。用函数 CVMultiplyAcc()来</p>
+<p class="p">实现两幅图像之间的像素相乘，之后将结果与acc累加。</p>
+<p class="p">void cvMultiplyAcc(</p>
+<p class="p">const CvArr* image1,</p>
+<p class="p">const CvArr* image2,</p>
+<p class="p">CvArr*</p>
+<p class="p">acc,</p>
+<p class="p">const CvArr* mask = NULL</p>
+<p class="p">）；</p>
+<p class="p">对于协方差的计算，有一个和方差相似的公式。该式子也是只需要遍历一次图像，</p>
+<p class="p">因为它是从标准形式经数学推导而来，所以，不需要两次遍历图像。</p>
+<p class="p">&nbsp;</p>
+<p class="p">[[[]]]</p>
+<p class="p">&nbsp;</p>
+<p class="p">这里x表示t时刻的图像，y表示t-d时刻的图像，d是时间间隔。</p>
+<p class="p">【277】</p>
+<p class="p">&nbsp;</p>
+<p class="p">我们可以用这里描述的累积函数创建各种基于统计学的背景模型。文献中有很多和</p>
+<p class="p">我们的例子类似的基本模型的变型。你可能会发现，在应用过程中，可能更倾向于</p>
+<p class="p">将这种最简单的模型扩展到稍微专业的版本。比如一个常用的提高是设置阈值以适</p>
+<p class="p">应某些观测的全局状态变化。</p>
+<p class="p">&nbsp;</p>
+<p class="p">高级背景模型</p>
+<p class="p">&nbsp;</p>
+<p class="p">很多背景场景都包含复杂的运动目标，诸如，摇曳在风中的树，转动的风扇，摆动</p>
+<p class="p">的窗帘等等。通常这样的场景中还包含光线的变化，比如，云彩掠过，门窗中照进</p>
+<p class="p">来不同的光线。</p>
+<p class="p">解决这种问题的较好方法是得到每个像素或一组像素的时间序列模型。这种模型能</p>
+<p class="p">很好地处理时间起伏，缺点是需要消耗大量的内存［Toyama99].如果我们使用频率</p>
+<p class="p">为两秒 30Hz的输入图像序列，就意味着对于每个像素都需要60个样本。每个像</p>
+<p class="p">素的结果模型都会被学习的60种不同的适合权值进行编码。常常我们需要获取比</p>
+<p class="p">2秒更长时间的背景统计，这就意味着该方法在现有硬件设施下显得不实际。</p>
+<p class="p">为了获得与自适应滤波相当接近的性能，我们从视频压缩技术中得到灵感，我们试</p>
+<p class="p">图形成一个codebook(编码本）?以描绘背景中感兴趣的状态?.最简单的方法就是将</p>
+<p class="p">一个像素现在的观测值和先前的观测值作比较。如果两个值很接近，它被建模为在</p>
+<p class="p">那种颜色下的扰动。如果两个值不接近，它可以产生与该像素相关的一组色彩。结</p>
+<p class="p">果可以想像为一束漂浮在RGB 空间的斑点，每一个斑点代表一个考虑到背景的分</p>
+<p class="p">离的体积。</p>
+<p class="p">实际应用中，选择RGB空间模型并不是最优的。选择轴与亮度联系在一起的颜色</p>
+<p class="p">空间效果更好，比如YUV空间（YUV是最通常的选择，选择HSV空间也行，V实</p>
+<p class="p">际上是亮度）。原因是，从经验角度看绝大部分背景中的变化倾向于沿着亮度轴，</p>
+<p class="p">而不是颜色轴。</p>
+<p class="p">下一个细节是如何给“blobs”建模。我们与以前的简单模型有相同的选择。比</p>
+<p class="p">如，将blob的模型建立为包含均值和方差的高斯分布类。最简单的情况，当这些</p>
+<p class="p">“blobs”就是一些包含三个颜色空间每个轴的学习的范围时，模型给出的结果也</p>
+<p class="p">相当好。这种模型消耗内存最少，而计算速度取决于新的像素是否在已经学习的模</p>
+<p class="p">块里面。</p>
+<p class="p">【278~279】</p>
+<p class="p">&nbsp;</p>
+<p class="p">①OpenCV 中实现的该方法的实现起源于Kim,Chalidabhongse,Harwood 和 Davis</p>
+<p class="p">［Kim05],为了更高的速度，这些作者使用YUV空间的轴向盒子，而不使用RGB空间</p>
+<p class="p">的学习型管子。清除背景图像的最快的方法可以在Martins 中找到［Martins99].</p>
+<p class="p">&nbsp;</p>
+<p class="p">②关于背景模型和分割的文献有很多。用于为了收集设置分类器的数据而搜索前景目</p>
+<p class="p">标，OpenCV的使用主要是努力提高速度和增强鲁棒性。最近的背景减除方法允许摄</p>
+<p class="p">像机的任意运动［Farin04;Cplombari07]以及利用 mean-shif 算法［Liu07]处理动态背景</p>
+<p class="p">模型。</p>
+<p class="p">&nbsp;</p>
+<p class="p">让我们通过一个例子（图9-3)解释codebook.codebook 由一些 boxes 组成，这些</p>
+<p class="p">boxes 包含很长时间不变的像素值。图9-3的上一层显示了一个随着时间变化的波</p>
+<p class="p">形。下一层中，boxes 覆盖了一个新的值，之后渐渐覆盖附近的值。如果当前值和</p>
+<p class="p">历史值相差比较大，就会产生一个新的box来覆盖它，同样慢慢地接近新的值。</p>
+<p class="p">&nbsp;</p>
+<p class="p">[[[]]]</p>
+<p class="p">&nbsp;</p>
+<p class="p">图9-3:codebook是“boxes”划定的强度值。形成的box覆盖新的值并逐渐</p>
+<p class="p">变为覆盖附近的值。如果该值离得太远，便形成一个新的box(见正文）</p>
+<p class="p">&nbsp;</p>
+<p class="p">在这种背景模型情况下，我们将学习一个覆盖三维的 codebook:组成图像每个像</p>
+<p class="p">素的三个通道。图9-4将 codebook 形象化了，它是从图9-1数据中学习的6个不</p>
+<p class="p">同像素?.这种 codebook 方法能够解决像素剧烈变化的问题（例如，被风吹的树的</p>
+<p class="p">像，它可能在很多树叶的颜色和树之间的蓝天颜色之间交替出现）。有了这个更</p>
+<p class="p">精确的模型方法，我们就能够探测有不同像素值的前景目标。和图9-2比较，平均</p>
+<p class="p">&nbsp;</p>
+<p class="p">①在这种情况下，我们选择了几个扫描线上的随机像素以避免过多的杂乱。当然，实际</p>
+<p class="p">上每个像素都有一个codebook.</p>
+<p class="p">&nbsp;</p>
+<p class="p">法不能从波动的像素中把手的值（图中虚线）辨别出来。先看看下一节的标题，我们</p>
+<p class="p">稍后将看到比图9-7中的平均法有更好性能的方法，即codebook方法。</p>
+<p class="p">【279~280】</p>
+<p class="p">&nbsp;</p>
+<p class="p">在背景学习模型的codebook方法中，在每一个三颜色轴上，每一个box 用两个阈</p>
+<p class="p">值（最大和最小）定义。如果新的背景模型落到学习的阈值（learnHigh 和 learnLow)</p>
+<p class="p">之间，这些 box的边界将膨胀（最大阈值变大，最小阈值变小）。如果新的背景样本</p>
+<p class="p">在 box 和学习阈值外，将开始生成一个新的 box.在背景差分模型中，也能容纳</p>
+<p class="p">maxMod 和 minMod 阈值。使用这些阈值，可以说，如果一个像素和box边界的最</p>
+<p class="p">大值和最小值非常接近，我们就认为它在box里面。再次调整阈值，允许模型适应</p>
+<p class="p">特殊情形。</p>
+<p class="p">&nbsp;</p>
+<p class="p">[[[]]]</p>
+<p class="p">&nbsp;</p>
+<p class="p">图9-4:学习的codebook的亮度部分输入6个所选择的像素（如垂直的方块所</p>
+<p class="p">示）。codebook box容纳呈现多维不连续分布的像素，所以能更好地模拟像素</p>
+<p class="p">的不连续分布；因此它们能探测到前景目标一手（虚线所示），手的平均值在背景</p>
+<p class="p">像素值之间可以假定。在这种情况下，codebook的空间是一维的，仅能描述</p>
+<p class="p">强度的变化</p>
+<p class="p">&nbsp;</p>
+<p class="p">注意：我们没有讨论到的一个情况是由于摄像机的运动得到的场景，当这种情况发生的时</p>
+<p class="p">候，有必要将摄像机的旋转和倾斜的角度考虑进去。</p>
+<p class="p">【280】</p>
+<p class="p">&nbsp;</p>
+<p class="p">结构</p>
+<p class="p">&nbsp;</p>
+<p class="p">现在是要看更多细节的时候了，让我们创建一个 codebook 算法的执行程序。首</p>
+<p class="p">先，看 codebook 的结构，在 YUV 颜色空间，codebook 结构会简单地指向一串</p>
+<p class="p">box.</p>
+<p class="p">typedef struct code_book (</p>
+<p class="p">code_element **cb;</p>
+<p class="p">int numEntries;</p>
+<p class="p">int t;</p>
+<p class="p">／／count every access</p>
+<p class="p">｝ codeBook;</p>
+<p class="p">跟踪在 mumEries中有多少 codebook.变量t记录了从开始或最后一次清除操作之</p>
+<p class="p">间累积的像素点的数目。实际codebook的原理的描述如下：</p>
+<p class="p">＃define CHANNELS 3</p>
+<p class="p">typedef struct ce{</p>
+<p class="p">uchar learnHigh[CHANNELS]; //High side threshold for learning</p>
+<p class="p">uchar learnLow[CHANNELS];</p>
+<p class="p">／／Low side threshold for learning</p>
+<p class="p">uchar max[CHANNELS];</p>
+<p class="p">／／High side of box boundary</p>
+<p class="p">uchar min[CHANNELS];</p>
+<p class="p">／／Low side of box boundary</p>
+<p class="p">int t_last_update;</p>
+<p class="p">／／Allow us to kill stale entries</p>
+<p class="p">int stale;</p>
+<p class="p">／／max negative run (longest period of inactivity)</p>
+<p class="p">｝ code_element;</p>
+<p class="p">每一个 codebook 索引消耗每个通道的4个字节加上2个整数，也就是：</p>
+<p class="p">CHANNELSx4+4+4个字节（如果用3通道就是20个字节）。我们可以设置</p>
+<p class="p">CHANNELS 为任何小于或等于图像通道数的整数，但是通常是指它为1(“Y”，仅</p>
+<p class="p">表示亮度）或者3(YUV,HSV 空间）。在这个结构中，对于每一个通道，最大值和</p>
+<p class="p">最小值就是 codebook box的分界线。参数learnHigh[]和learnLow[]触发产生一</p>
+<p class="p">个新的码元素的阈值。具体来说，如果一个像素值的每个通道都不在 min-</p>
+<p class="p">learnLow和max+learnHigh之间，就会生成一个新的码元素。距离上次更新和</p>
+<p class="p">陈旧的时间（t_last_update)用于删除过程中学习的很少使用的码本条目。现在我</p>
+<p class="p">们可以着手研究在这结构中使用的函数，并训练动态的背景。</p>
+<p class="p">背景学习</p>
+<p class="p">我们为每一个像素设置一个码元code_elements,需要有与训练的图像像素数目</p>
+<p class="p">长度一样的一组码本。对每一个不同的像素，调用函数 update_codebook()以捕</p>
+<p class="p">捉背景中相关变化的图像。训练可以自始至终定期更新，同时函数 clear_stale_</p>
+<p class="p">entries()用于训练有移动的前景目标（数目很小）的背景。这是有可能的，因为由</p>
+<p class="p">移动的前景目标引起的很少使用的“陈旧”条目会被删除，函数 update_</p>
+<p class="p">codebook()的接口如下：</p>
+<p class="p">//////////////////////////////////////////////////////////////</p>
+<p class="p">// int update_codebook(uchar *p, codeBook &amp;c, unsigned cbBounds)</p>
+<p class="p">// Updates the codebook entry with a new data point</p>
+<p class="p">//</p>
+<p class="p">// p&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Pointer to a YUV pixel</p>
+<p class="p">// c&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Codebook for this pixel</p>
+<p class="p">// cbBounds&nbsp;&nbsp;&nbsp;&nbsp; Learning bounds for codebook
+(Rule of thumb: 10)</p>
+<p class="p">// numChannels&nbsp; Number of color channels we’re learning</p>
+<p class="p">//</p>
+<p class="p">//&nbsp; N O TES:</p>
+<p class="p">//&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; cvBounds must be of length equal
+to numChannels</p>
+<p class="p">//</p>
+<p class="p">//&nbsp; RET U R N</p>
+<p class="p">//&nbsp;&nbsp; codebook index</p>
+<p class="p">//</p>
+<p class="p">int update_codebook(</p>
+<p class="p">&nbsp; uchar*&nbsp;&nbsp;&nbsp; p,</p>
+<p class="p">&nbsp; codeBook&amp; c,</p>
+<p class="p">&nbsp; unsigned* cbBounds,</p>
+<p class="p">&nbsp; int&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; numChannels</p>
+<p class="p">){</p>
+<p class="p">&nbsp;&nbsp; unsigned int high[3],low[3];</p>
+<p class="p">&nbsp;&nbsp; for(n=0; n&lt;numChannels; n++)</p>
+<p class="p">&nbsp;&nbsp; {</p>
+<p class="p">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; high[n] = *(p+n)+*(cbBounds+n);</p>
+<p class="p">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; if(high[n] &gt; 255) high[n] = 255;</p>
+<p class="p">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; low[n] = *(p+n)-*(cbBounds+n);</p>
+<p class="p">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; if(low[n] &lt; 0) low[n] = 0;</p>
+<p class="p">&nbsp;&nbsp; }</p>
+<p class="p">&nbsp;&nbsp; int matchChannel;</p>
+<p class="p">&nbsp;&nbsp; // SEE IF THIS FITS AN EXISTING CODEWORD</p>
+<p class="p">&nbsp;&nbsp; //</p>
+<p class="p">&nbsp;&nbsp; for(int i=0; i&lt;c.numEntries; i++){</p>
+<p class="p">&nbsp;&nbsp;&nbsp;&nbsp; &nbsp;matchChannel = 0;</p>
+<p class="p">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; for(n=0; n&lt;numChannels; n++){</p>
+<p class="p">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; if((c.cb[i]-&gt;learnLow[n]
+&lt;= *(p+n)) &amp;&amp;</p>
+<p class="p">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; //Found an entry
+for this channel</p>
+<p class="p">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; (*(p+n) &lt;=
+c.cb[i]-&gt;learnHigh[n]))</p>
+<p class="p">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+{</p>
+<p class="p">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+matchChannel++;</p>
+<p class="p">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+}</p>
+<p class="p">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; }</p>
+<p class="p">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; if(matchChannel == numChannels)
+//If an entry was found</p>
+<p class="p">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; {</p>
+<p class="p">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; c.cb[i]-&gt;t_last_update
+= c.t;</p>
+<p class="p">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; //adjust this
+codeword for the first channel</p>
+<p class="p">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; for(n=0; n&lt;numChannels;
+n++){</p>
+<p class="p">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+if(c.cb[i]-&gt;max[n] &lt; *(p+n))</p>
+<p class="p">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+{</p>
+<p class="p">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+c.cb[i]-&gt;max[n] = *(p+n);</p>
+<p class="p">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+}</p>
+<p class="p">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+else if(c.cb[i]-&gt;min[n] &gt; *(p+n))</p>
+<p class="p">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+{</p>
+<p class="p">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+c.cb[i]-&gt;min[n] = *(p+n);</p>
+<p class="p">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+}</p>
+<p class="p">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; }</p>
+<p class="p">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; break;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+}</p>
+<p class="p">&nbsp;&nbsp; }</p>
+<p class="p">. . . continued below</p>
+<p class="p">&nbsp;</p>
+<p class="p">if(matchChannel == numChannels) //If an entry was found</p>
+<p class="p">（</p>
+<p class="p">c.cb[i]-&gt;t_last_update =c.t;</p>
+<p class="p">／／adjust this codeword for the first channel</p>
+<p class="p">for(n=0;n&lt;numChannels; n++){</p>
+<p class="p">if(c.cb[i]-&gt;max[n]&lt;*(p+n))</p>
+<p class="p">｛</p>
+<p class="p">c.cb[i]-&gt;max[n] =*(p+n);</p>
+<p class="p">（</p>
+<p class="p">else if(c.cb[i]-&gt;min[n] &gt; *(p+n))</p>
+<p class="p">（</p>
+<p class="p">c.cb[i]-&gt;min[n] = *(p+n);</p>
+<p class="p">｛</p>
+<p class="p">｛</p>
+<p class="p">break;</p>
+<p class="p">）</p>
+<p class="p">｝</p>
+<p class="p">【281~283】</p>
+<p class="p">当像素p超出现存的 codebook box时，函数将增加一个 codebook条目。当这个</p>
+<p class="p">像素是在现存的方块里面时，方块边界将增大。如果一个像素在方块的边界距离之</p>
+<p class="p">外，将创建一个新的codebook.随后程序将设置一个高低阈值；然后通过每一个</p>
+<p class="p">codebook条目去检查像素值p是否在学习的codebook“box”边界内；如果该像</p>
+<p class="p">素值在所有通道都在学习的边界内，则调整阈值最大值和最小值以使该元素被包括</p>
+<p class="p">在 codebook box,同时设置最后一次的更新时间为当前时间 c.t;接下来，</p>
+<p class="p">update_codebook()将统计每个码本条目多长时间被访问一次。</p>
+<p class="p">／／ OVERHEAD TO TRACK POTENTIAL STALE ENTRIES</p>
+<p class="p">／／</p>
+<p class="p">for(int s=0; s&lt;c.numEntries; s++){</p>
+<p class="p">／／ Track which codebook entries are going stale:</p>
+<p class="p">／／</p>
+<p class="p">int negRun =c.t -c.cb[s]-&gt;t_last_update;</p>
+<p class="p">if(c.cb[s]-&gt;stale &lt; negRun) c.cb[s}-&gt;stale = negRun;</p>
+<p class="p">在这里，变量 stale 包含最大的消极时间（即 codebook 没有数据进入的最长时</p>
+<p class="p">间）。追踪 stale 的索引使我们能够删除那些由噪声或移动前景目标形成的从此随</p>
+<p class="p">着时间推移变为陈旧的codebook.背景学习的下一个阶段是，update_ </p>
+<p class="p">codebook()函数根据所需添加一个新的 codebook.</p>
+<p class="p">／／ENTER A NEW CODEWORD IF NEEDED</p>
+<p class="p">／／</p>
+<p class="p">if(i==c.numEntries) //if no existing codeword found, make one</p>
+<p class="p">し</p>
+<p class="p">code_element **foo = new code_element* [c.numEntries+1];</p>
+<p class="p">for(int ii=0; ii&lt;c.numEntries; ii++) {</p>
+<p class="p">foo[ii] =c.cb[ii];</p>
+<p class="p">（</p>
+<p class="p">foo[c.numEntries] = new code_element;</p>
+<p class="p">if(c.numEntries) delete [] c.cb;</p>
+<p class="p">c.cb=foo;</p>
+<p class="p">for(n=0; n&lt;numChannels; n++) {</p>
+<p class="p">c.cb[c.numEntries]-&gt;learnHigh[n] = high[n];</p>
+<p class="p">c.cb[c.numEntries]-&gt;learnLow[n] =1ow[n];</p>
+<p class="p">c.cb[c.numEntries]-&gt;max[n] =*(p+n);</p>
+<p class="p">c.cb[c.numEntries]-&gt;min[n] =*(p+n);</p>
+<p class="p">｛</p>
+<p class="p">c.cb[c.numEntries]-&gt;t_last_update =c.t;</p>
+<p class="p">c.cb[c.numEntries]-&gt;stale =0;</p>
+<p class="p">c.numEntries +=1;</p>
+<p class="p">【283~284】</p>
+<p class="p">（</p>
+<p class="p">最后，如果发现像素在 box 阈值之外，但仍然在其高和低范围内，函数</p>
+<p class="p">update_codebook()将慢慢调整 learnHigh和learnLow的学习界限（通过加1).</p>
+<p class="p">／／SLOWLY ADJUST LEARNING BOUNDS</p>
+<p class="p">／／</p>
+<p class="p">for(n=0; n&lt;numChannels; n++)</p>
+<p class="p">（</p>
+<p class="p">if(c.cb[i]-&gt;learnHigh[n] &lt; high[n]) c.cb[i]-&gt;learnHigh[n]</p>
+<p class="p">＋＝1;</p>
+<p class="p">if(c.cb[i]-&gt;learnLow[n] &gt;1ow[n]) c.cb[i]-&gt;learnLow[n] -=</p>
+<p class="p">1;</p>
+<p class="p">（</p>
+<p class="p">return(i);</p>
+<p class="p">（</p>
+<p class="p">函数结果返回修改的码本的索引。我们已经看到了 codebook 是如何学习的。为了</p>
+<p class="p">学习现存的移动的前景目标，避免学习噪声的 codebook,我们需要一种删除在学</p>
+<p class="p">习过程中很少有访问的codebook条目。</p>
+<p class="p">&nbsp;</p>
+<p class="p">学习有移动前景目标的背景</p>
+<p class="p">&nbsp;</p>
+<p class="p">以下程序，使用函数clear_stale_entries()允许我们训练有移动前景条件下的</p>
+<p class="p">背景。</p>
+<p class="p">1////</p>
+<p class="p">／／int clear_stale_entries(codeBook &amp;c)</p>
+<p class="p">／／ During learning,after you've learned for some period of time,</p>
+<p class="p">／／periodically call this to clear out stale codebook entries</p>
+<p class="p">／／</p>
+<p class="p">／／C</p>
+<p class="p">Codebook to clean up</p>
+<p class="p">／／</p>
+<p class="p">／／ Return</p>
+<p class="p">／／ number of entries cleared</p>
+<p class="p">／／</p>
+<p class="p">int clear_stale_entries(codeBook &amp;c){</p>
+<p class="p">int staleThresh =c.t&gt;&gt;1;</p>
+<p class="p">int *keep =new int [c.numEntries];</p>
+<p class="p">int keepCnt=0;</p>
+<p class="p">／／ SEE WHICH CODEBOOK ENTRIES ARE TOO STALE</p>
+<p class="p">／／</p>
+<p class="p">for(int i=0; i&lt;c.numEntries; i++){</p>
+<p class="p">if(c.cb[i]-&gt;stale &gt; staleThresh)</p>
+<p class="p">keep[i] =0;//Mark for destruction</p>
+<p class="p">else</p>
+<p class="p">｛</p>
+<p class="p">keep[i] =1;//Mark to keep</p>
+<p class="p">keepCnt +=1;</p>
+<p class="p">）</p>
+<p class="p">）</p>
+<p class="p">／／ KEEP ONLY THE GOOD</p>
+<p class="p">／／</p>
+<p class="p">c.t=0;</p>
+<p class="p">／／Full reset on stale tracking</p>
+<p class="p">code_element **foo= new code_element*[keepcnt];</p>
+<p class="p">int k=0;</p>
+<p class="p">for(int ii=0; ii&lt;c.numEntries; ii++){</p>
+<p class="p">if(keep[ii])</p>
+<p class="p">｝</p>
+<p class="p">foo[k] = c.cb[ii];</p>
+<p class="p">／／We have to refresh these entries for next clearstale</p>
+<p class="p">）</p>
+<p class="p">1</p>
+<p class="p">）</p>
+<p class="p">&nbsp;</p>
+<p class="p">foo[k]-&gt;t_last_update=0;</p>
+<p class="p">k++;</p>
+<p class="p">｛</p>
+<p class="p">）</p>
+<p class="p">／／ CLEAN UP</p>
+<p class="p">／／</p>
+<p class="p">delete [] keep;</p>
+<p class="p">delete [] c.cb;</p>
+<p class="p">c.cb=foo;</p>
+<p class="p">int numCleared = c.numEntries- keepCnt;</p>
+<p class="p">c.numEntries =keepCnt;</p>
+<p class="p">return(numCleared);</p>
+<p class="p">【284~285】</p>
+<p class="p">函数由定义参数staleThresh 开始，该参数设置为总运行时间的一半（经验值）。</p>
+<p class="p">这意味着，在训练背景过程中，如果 codebook的条目i在总时间一半的时间段没</p>
+<p class="p">有被访问，该条目（keep[i]=0)将被删除。</p>
+<p class="p">向量 keep[]使我们能够标识每个输入码，因此它的长度是 c.numEntries.变量</p>
+<p class="p">keepCnt 统计将要保持的 codebook的数目。随着记录保持了哪个 codebook条目，</p>
+<p class="p">就可以创建一个新的指针foo,一个code_element 向量的指针，用于指向</p>
+<p class="p">keepCnt 的长度，然后把非陈旧的条目复制给该指针。最后，删除旧的指向</p>
+<p class="p">codebook向量的指针，而用非陈旧的指针取代它。</p>
+<p class="p">背景差分：寻找前景目标</p>
+<p class="p">我们已经看到如何创建一个背景codebook 模型，以及如何清除很少使用的码本条</p>
+<p class="p">目。下面，我们来看看函数background_diff(),使用经验模型在先前的背景中</p>
+<p class="p">将前景目标的像素分割出来。</p>
+<p class="p">1111111//111111111111111111111111///</p>
+<p class="p">／／／／／／／／／／／／／／／／／／</p>
+<p class="p">／／ uchar background_diff ( uchar *p, codeBook &amp;C,</p>
+<p class="p">／／</p>
+<p class="p">int minMod, int maxMod)</p>
+<p class="p">／／ Given a pixel and a codebook, determine if the pixel is</p>
+<p class="p">／／ covered by the codebook</p>
+<p class="p">／／</p>
+<p class="p">d //</p>
+<p class="p">Pixel pointer (YUV interleaved)</p>
+<p class="p">／／C</p>
+<p class="p">Codebook reference</p>
+<p class="p">／／ numChannels Number of channels we are testing</p>
+<p class="p">／／</p>
+<p class="p">maxMod</p>
+<p class="p">Add this (possibly negative) number onto</p>
+<p class="p">／／</p>
+<p class="p">max level when determining if new pixel is foreground</p>
+<p class="p">／／ minMod</p>
+<p class="p">Subract this (possibly negative) number from</p>
+<p class="p">／／</p>
+<p class="p">min level when determining if new pixel is</p>
+<p class="p">：</p>
+<p class="p">foreground</p>
+<p class="p">／／</p>
+<p class="p">／／</p>
+<p class="p">／／ NOTES:</p>
+<p class="p">／／ minMod and maxMod must have length numChannels,</p>
+<p class="p">／／ e.g. 3 channels=&gt;minMod[3], maxMod{3]. There is one min and</p>
+<p class="p">／／</p>
+<p class="p">one max threshold per channel.</p>
+<p class="p">／／</p>
+<p class="p">／／Return</p>
+<p class="p">／／0 =&gt; background, 255 =&gt; foreground</p>
+<p class="p">／／</p>
+<p class="p">uchar background_diff(</p>
+<p class="p">uchar*</p>
+<p class="p">d</p>
+<p class="p">codeBook&amp;</p>
+<p class="p">－</p>
+<p class="p">C,</p>
+<p class="p">int</p>
+<p class="p">numChannels,</p>
+<p class="p">int*</p>
+<p class="p">minMod,</p>
+<p class="p">int*</p>
+<p class="p">maxMod</p>
+<p class="p">）｛</p>
+<p class="p">int matchChannel;</p>
+<p class="p">／／ SEE IF THIS FITS AN EXISTING CODEWORD</p>
+<p class="p">／／</p>
+<p class="p">for(int i=0; i&lt;c.numEntries; i++){</p>
+<p class="p">matchChannel =0;</p>
+<p class="p">for(int n=0; n&lt;numChannels; n++) {</p>
+<p class="p">if((c.cb[i]-&gt;min[n] - minMod[n]&lt;=*(p+n))&amp;&amp;</p>
+<p class="p">（＊（p+n) &lt;=c.cb[i]-&gt;max[n] + maxMod[n])) {</p>
+<p class="p">matchChannel++; //Found an entry for this channel</p>
+<p class="p">｝ else{</p>
+<p class="p">break;</p>
+<p class="p">if(matchChannel == numChannels) {</p>
+<p class="p">break; //Found an entry that matched all channels</p>
+<p class="p">｛</p>
+<p class="p">&nbsp;</p>
+<p class="p">if(i &gt;= c.numEntries) return(255);</p>
+<p class="p">return(0);</p>
+<p class="p">｛</p>
+<p class="p">背景差分函数有一个类似于学习程序 update_codebook 的内循环，但在这里，我</p>
+<p class="p">们给每个 codebook box 的已训练的最小和最大边界分别加上偏移量 maxMod 和</p>
+<p class="p">minMod.如果box中的像素在每个通道的高的部分加上maxMod或者在低的部分减</p>
+<p class="p">去 minMod,则 matchChannel 计数将增加。当 matchChannel 和通道数目相同</p>
+<p class="p">时，我们已经搜索了每一维，而且知道已经有了一个匹配。如果像素在一个训练的</p>
+<p class="p">box 内，则返回 255(一个正的检测的前景目标），否则返回0(背景）。</p>
+<p class="p">update_codebook(),clear_stale_entries(),和background_diff()这三个函</p>
+<p class="p">数构成了一个从训练背景中将前景分割出来的codebook.</p>
+<p class="p">【285~286】</p>
+<p class="p">使用 codebook背景模型</p>
+<p class="p">使用 codebook背景分割技术，通常有以下步骤。</p>
+<p class="p">（1)使用函数 update_codebook()在几秒钟或几分钟时间内训练一个基本的背景</p>
+<p class="p">模型。</p>
+<p class="p">（2)调用函数．clear_stale_entries()清除stale索引。</p>
+<p class="p">（3)调整阈值 minMod 和maxMod对已知前景达到最好的分割。</p>
+<p class="p">（4)保持一个更高级别的场景模型（如以前讨论）</p>
+<p class="p">（5)通过函数 background_diff()使用训练好的模型将前景从背景中分割出来。</p>
+<p class="p">（6)定期更新学习的背景像素。</p>
+<p class="p">（7)在一个频率较慢的情况下，用函数 clear_stale_entries()定期清理 stale</p>
+<p class="p">的codebook索引。</p>
+<p class="p">关于 codebook的一些更多的思考</p>
+<p class="p">通常，codebook 在大多数条件下效果都很好，且训练和运行运行速度相对较快，</p>
+<p class="p">但它不能很好处理不同模式的光（如早晨、中午和傍晚的阳光，或在室内有人打开</p>
+<p class="p">和熄灭灯）。这种全局变化的类型可以考虑用几种不同的在每个条件下的 codebook</p>
+<p class="p">模型来处理，然后让这种模型是条件可控的。</p>
+<p class="p">&nbsp;</p>
+<p class="p">用于前景清除的连通部分</p>
+<p class="p">在比较均值法和codebook 之前，我们应该停下来讨论使用连通成分分析来清理原</p>
+<p class="p">始分割图像的方法。这种分析的方式包含噪声输入掩模图像；然后利用形态学</p>
+<p class="p">“开”操作将小的噪声缩小至0,紧接着用“闭”操作重建由于“开”操作丢失的</p>
+<p class="p">边缘部分。然后我们可以找到“足够大”存在的部分轮廓，并可以选择地对这些片</p>
+<p class="p">段进行统计。接着就可以恢复最大的轮廓或者大于设置阈值的所有轮廓。在如下程</p>
+<p class="p">序中，我们实现了尽可能多的功能来处理连通区域：</p>
+<p class="p">采用多边形拟合存在的轮廓部分，或凸包设置连通轮廓有多大</p>
+<p class="p">设置连通轮廓的大小以保证不被删除</p>
+<p class="p">设置返回的连通轮廓的最大数目</p>
+<p class="p">可选返回存活的连通轮廓的外接矩形</p>
+<p class="p">可选返回存活连通轮廓的中心</p>
+<p class="p">【287】</p>
+<p class="p">实现这些操作的连通成分的头文件定义如下。</p>
+<p class="p">11111/11/1//////1111111111111111111111111111111111/11//////////</p>
+<p class="p">／／／／</p>
+<p class="p">／／ void find_connected_components(IplImage *mask, int poly1_hu110,</p>
+<p class="p">／／</p>
+<p class="p">float perimScale, int *num,</p>
+<p class="p">／／</p>
+<p class="p">CvRect *bbs,CvPoint *centers)</p>
+<p class="p">／／ This cleans up the foreground segmentation mask derived from</p>
+<p class="p">／／ calls to backgroundDiff</p>
+<p class="p">／／</p>
+<p class="p">／／</p>
+<p class="p">mask</p>
+<p class="p">Is a grayscale (8-bit depth) "raw" mask image that</p>
+<p class="p">will be cleaned up</p>
+<p class="p">／／</p>
+<p class="p">／／</p>
+<p class="p">／／ OPTIONAL PARAMETERS:</p>
+<p class="p">／／ poly1_hull0 If set, approximate connected component by</p>
+<p class="p">／／</p>
+<p class="p">（DEFAULT) polygon, or else convex hull (0)</p>
+<p class="p">／／</p>
+<p class="p">perimScale</p>
+<p class="p">Len = image (width+height)/perimScale. If contour</p>
+<p class="p">／／</p>
+<p class="p">len &lt; this, delete that contour (DEFAULT:4)</p>
+<p class="p">／／</p>
+<p class="p">num</p>
+<p class="p">Maximum number of rectangles and/or centers to</p>
+<p class="p">／／</p>
+<p class="p">return; on return, will contain number filled</p>
+<p class="p">／／</p>
+<p class="p">（DEFAULT:NULL)</p>
+<p class="p">／／ bbs</p>
+<p class="p">Pointer to bounding box rectangle vector of</p>
+<p class="p">图像局部与分割</p>
+<p class="p">／／</p>
+<p class="p">length num. (DEFAULT SETTING:NULL)</p>
+<p class="p">centers</p>
+<p class="p">Pointer to contour centers vector of length</p>
+<p class="p">／／</p>
+<p class="p">num (DEFAULT:NULL)</p>
+<p class="p">／／</p>
+<p class="p">／／</p>
+<p class="p">void find_connected_components(</p>
+<p class="p">IplImage* mask,</p>
+<p class="p">int</p>
+<p class="p">poly1_hu110 =1,</p>
+<p class="p">float</p>
+<p class="p">perimScale</p>
+<p class="p">＝4,</p>
+<p class="p">int*</p>
+<p class="p">num</p>
+<p class="p">＝NULL,</p>
+<p class="p">CvRect*</p>
+<p class="p">bbs</p>
+<p class="p">＝NULL,</p>
+<p class="p">CvPoint*</p>
+<p class="p">centers</p>
+<p class="p">＝NULL</p>
+<p class="p">）；</p>
+<p class="p">函数体将在下面列出。首先，我们为连通域轮廓声明存储空间。然后利用形态学</p>
+<p class="p">“开”操作和“闭”操作来清除小的像素噪声，之后利用“开”操作来重建受到腐</p>
+<p class="p">蚀的区域。程序有两个额外的参数，它们是由＃define宏定义的固定值。定义的值</p>
+<p class="p">一般会得到不错的结果，通常不需要改变它们。这些额外的参数控制前景区域的边</p>
+<p class="p">界的简单程度（数目越大越简单），以及形态学运算应执行多少次。迭代次数越多，</p>
+<p class="p">则在“闭”操作膨胀之前，就会有越多的“开”操作腐蚀?.越多的腐蚀操作消除</p>
+<p class="p">越大的斑点，其代价是侵蚀了较大的边界地区。再强调一下，这个例子使用的参数</p>
+<p class="p">会取得不错的结果，但在试验中使用其他数值也没有坏处。</p>
+<p class="p">／／ For connected components:</p>
+<p class="p">／／Approx.threshold - the bigger it is,the simpler is the boundary</p>
+<p class="p">／／</p>
+<p class="p">＃define CVCONTOUR_APPROX_LEVEL 2</p>
+<p class="p">／／ How many iterations of erosion and/or dilation there should
+be</p>
+<p class="p">／／</p>
+<p class="p">＃define CVCLOSE_ITR 1</p>
+<p class="p">【288~289】</p>
+<p class="p">现在，我们讨论了连通区域算法本身。函数执行的第一部分就是形态上的开和闭</p>
+<p class="p">操作。</p>
+<p class="p">void find_connected_components(</p>
+<p class="p">IplImage *mask,</p>
+<p class="p">①</p>
+<p class="p">观察到的CVCLOSE_ITR 的值实际上取决于图像的分辨率。如果是一张极高分辨率的</p>
+<p class="p">图像把它设置为」不太可能产生令人满意的结果。</p>
+<p class="p">&nbsp;</p>
+<p class="p">&nbsp;</p>
+<p class="p">&nbsp;</p>
+<p class="p">int polyl_hu1l0,</p>
+<p class="p">float perimScale,</p>
+<p class="p">int *num,.</p>
+<p class="p">CvRect *bbs,</p>
+<p class="p">CvPoint *centers</p>
+<p class="p">）｛</p>
+<p class="p">static CvMemStorage*</p>
+<p class="p">mem_storage=NULL;</p>
+<p class="p">static CvSeq*</p>
+<p class="p">contours</p>
+<p class="p">＝NULL;</p>
+<p class="p">／／CLEAN UP RAW MASK</p>
+<p class="p">／／</p>
+<p class="p">cvMorphologyEx( mask, mask, 0, 0, CV_MOP_OPEN,CVCLOSE_ITR );</p>
+<p class="p">cvMorphologyEx( mask, mask, 0, 0, CV_MOP_CLOSE,CVCLOSE_ITR );</p>
+<p class="p">现在，噪声已经被从掩模图像上清除了，我们找到了所有的轮廓。</p>
+<p class="p">／／FIND CONTOURS AROUND ONLY BIGGER REGIONS</p>
+<p class="p">／／</p>
+<p class="p">if( mem_storage==NULL){</p>
+<p class="p">mem_storage =cvcreateMemStorage(0);</p>
+<p class="p">｝ else{</p>
+<p class="p">cvClearMemStorage(mem_storage);</p>
+<p class="p">｛</p>
+<p class="p">CvContourScanner scanner = cvStartFindContours (</p>
+<p class="p">mask,</p>
+<p class="p">mem_storage,</p>
+<p class="p">sizeof (CvContour),</p>
+<p class="p">CV_RETR_EXTERNAL,</p>
+<p class="p">CV_CHAIN_APPROX_SIMPLE</p>
+<p class="p">）；</p>
+<p class="p">下一步，我们丢弃太小的轮廓，用多边形或凸包拟合剩下的轮廓（它的复杂度由</p>
+<p class="p">CVCONTOUR_APPROX_LEVEL 设置）。</p>
+<p class="p">CvSeq* c;</p>
+<p class="p">int numCont =0;</p>
+<p class="p">while( (c = cvFindNextContour( scanner ))!=NULL ){</p>
+<p class="p">double len = cvContourPerimeter( c );</p>
+<p class="p">&nbsp;</p>
+<p class="p">／／ calculate perimeter len threshold:</p>
+<p class="p">／／</p>
+<p class="p">double q = (mask-&gt;height + mask-&gt;width)/perimScale;</p>
+<p class="p">／／Get rid of blob if its perimeter is too small:</p>
+<p class="p">／／</p>
+<p class="p">if(len&lt;q){</p>
+<p class="p">cvSubstituteContour( scanner,NULL);</p>
+<p class="p">｝ else {</p>
+<p class="p">／／Smooth its edges if its large enough</p>
+<p class="p">／／</p>
+<p class="p">CvSeg* c_new;</p>
+<p class="p">if( poly1_hu1l0){</p>
+<p class="p">／／＇Polygonal approximation</p>
+<p class="p">／／</p>
+<p class="p">c_new =cvApproxPoly(</p>
+<p class="p">C,</p>
+<p class="p">sizeof(CvContour),</p>
+<p class="p">mem_storage,</p>
+<p class="p">CV_POLY_APPROX_DP,</p>
+<p class="p">CVCONTOUR_APPROX_LEVEL,</p>
+<p class="p">0</p>
+<p class="p">）；</p>
+<p class="p">｝ else {</p>
+<p class="p">／／ Convex Hull of the segmentation</p>
+<p class="p">／／</p>
+<p class="p">c_new =cvConvexHu112(</p>
+<p class="p">C,</p>
+<p class="p">mem_storage,</p>
+<p class="p">CV_CLOCKWISE,</p>
+<p class="p">1</p>
+<p class="p">）；</p>
+<p class="p">cvSubstituteContour( scanner, c_new );</p>
+<p class="p">numCont++;</p>
+<p class="p">｛</p>
+<p class="p">｛</p>
+<p class="p">）</p>
+<p class="p">&nbsp;</p>
+<p class="p">contours = cvEndFindContours(&amp;scanner );</p>
+<p class="p">【289~290】</p>
+<p class="p">在前面的代码，CV_POLY_APPROX_DP使得 Douglas-Peucker 拟合算法被调用，并且</p>
+<p class="p">CV_CLOCKWISE 是默认的凸形轮廓方向。所有这些处理将产生一系列轮廓。在将轮</p>
+<p class="p">廓绘制到掩模图像之前，我们定义一些简单的绘制颜色：</p>
+<p class="p">／／ Just some convenience variables</p>
+<p class="p">const CvScalar CVX_WHITE</p>
+<p class="p">＝CV_RGB(Oxff,Oxff,Oxff)</p>
+<p class="p">const CvScalar CVX_BLACK</p>
+<p class="p">＝CV_RGB(0x00,0x00,0x00)</p>
+<p class="p">在下面的代码中，我们用这些定义，首先，把掩模外的部分剔除，然后在掩模图像</p>
+<p class="p">上绘出完整的轮廓。我们还要检查用户是否想收集轮廓的统计信息（外接矩形和</p>
+<p class="p">中心）。</p>
+<p class="p">／／ PAINT THE FOUND REGIONS BACK INTO THE IMAGE</p>
+<p class="p">／／</p>
+<p class="p">cvZero( mask );</p>
+<p class="p">IplImage *maskTemp;</p>
+<p class="p">／／CALC CENTER OF MASS AND/OR BOUNDING RECTANGLES</p>
+<p class="p">／／</p>
+<p class="p">if(num !=NULL){</p>
+<p class="p">／／User wants to collect statistics</p>
+<p class="p">／／</p>
+<p class="p">int N = *num, numFilled = 0, i=0;</p>
+<p class="p">CvMoments moments;</p>
+<p class="p">double MO0, M01,M10;</p>
+<p class="p">maskTemp = cvCloneImage(mask);</p>
+<p class="p">for(i=0, c=contours; c != NULL; c = c-&gt;h_next,i++){</p>
+<p class="p">if(i &lt;N){</p>
+<p class="p">／／ Only process up to *num of them</p>
+<p class="p">／／</p>
+<p class="p">cvDrawContours(</p>
+<p class="p">maskTemp,</p>
+<p class="p">C,</p>
+<p class="p">CVX_WHITE,</p>
+<p class="p">CVX_WHITE,</p>
+<p class="p">－1,</p>
+<p class="p">CV_FILLED,</p>
+<p class="p">8</p>
+<p class="p">&nbsp;</p>
+<p class="p">）；</p>
+<p class="p">／／ Find the center of each contour</p>
+<p class="p">／／</p>
+<p class="p">if(centers !=NULL){</p>
+<p class="p">CvMoments(maskTemp,&amp;moments,1);</p>
+<p class="p">M00 =.cvGetSpatialMoment(&amp;moments,0,0);</p>
+<p class="p">M10 = cvGetSpatialMoment(&amp;moments,1,0);</p>
+<p class="p">M01 = cvGetSpatialMoment(&amp;moments,0,1);</p>
+<p class="p">centers[i].x =(int)(M10/M00);</p>
+<p class="p">centers[i]-y = (int) (M01/M00);</p>
+<p class="p">／／Bounding rectangles around blobs</p>
+<p class="p">／／</p>
+<p class="p">if(bbs != NULL){</p>
+<p class="p">bbs[i] = cvoundingRect(c);</p>
+<p class="p">cvZero(maskTemp);</p>
+<p class="p">numFilled++;</p>
+<p class="p">）</p>
+<p class="p">／／Draw filled contours into mask</p>
+<p class="p">／／</p>
+<p class="p">cvDrawContours(</p>
+<p class="p">mask,</p>
+<p class="p">C,</p>
+<p class="p">CVX_WHITE,</p>
+<p class="p">CVX_WHITE,</p>
+<p class="p">－1,</p>
+<p class="p">CV_FILLED,</p>
+<p class="p">8</p>
+<p class="p">）；</p>
+<p class="p">／／end looping over contours</p>
+<p class="p">＊num = numFilled;</p>
+<p class="p">cvReleaseImage( &amp;maskTemp);</p>
+<p class="p">）</p>
+<p class="p">【290~292】</p>
+<p class="p">如果用户不需要掩模图像中生成区域的外接矩形和中心，我们只需要将代表背景中</p>
+<p class="p">足够大的连通部分的已处理的轮廓在掩模图像中画出来。</p>
+<p class="p">）</p>
+<p class="p">｛</p>
+<p class="p">）</p>
+<p class="p">&nbsp;</p>
+<p class="p">／／ ELSE JUST DRAW PROCESSED CONTOURS INTO THE MASK</p>
+<p class="p">／／</p>
+<p class="p">else {</p>
+<p class="p">／／ The user doesn't want statistics, just draw the contours</p>
+<p class="p">／／</p>
+<p class="p">for( c=contours; c !=NULL;c =c-&gt;h_next){</p>
+<p class="p">cvDrawContours(</p>
+<p class="p">mask,</p>
+<p class="p">C,</p>
+<p class="p">CVX_WHITE,</p>
+<p class="p">CVX_BLACK,</p>
+<p class="p">－1,</p>
+<p class="p">CV_FILLED,</p>
+<p class="p">8</p>
+<p class="p">）；</p>
+<p class="p">し</p>
+<p class="p">｛</p>
+<p class="p">到这儿我们已得到了一个很有用的程序，它能从原始噪声掩模图像创建出完整的掩</p>
+<p class="p">模图像。现在让我们看一下与背景减除法的简短比较。</p>
+<p class="p">一个快速测试</p>
+<p class="p">我们用一个例子来看看这个程序是如何处理实际视频的。让我们继续使用在窗口外</p>
+<p class="p">面的树的视频。回顾（图9-1)一只手穿过场景时的某些点。人们可能期望，我们可</p>
+<p class="p">以用相对容易的技术找出这只手，如帧差分（以前在讨论它自己的一节）。帧差的基</p>
+<p class="p">本思路是从前面的帧减去当前帧，然后再将该差值图像进行阈值化。在一段视频中</p>
+<p class="p">连续的帧中往往是相似的。</p>
+<p class="p">因此，人们可能预见，如果我们考虑到当前帧和滞后帧的简单的差异，除非有一些</p>
+<p class="p">前景目标经过场景，否则，将见不到太多的差异。但是，在这里，“见不到太</p>
+<p class="p">多”是什么含义呢？其实，它的意思就是“噪声”，当然，实际中的问题是当前景</p>
+<p class="p">目标出现时如何从信号中清理掉噪声。</p>
+<p class="p">【292】</p>
+<p class="p">为更好理解噪声，我们将首先看视频中没有任何前景目标的两帧，仅仅只是背景和</p>
+<p class="p">结果噪声。图9-5显示了视频（左上角）和前一帧（右上）。图像还显示在阈值为15</p>
+<p class="p">①</p>
+<p class="p">在帧差的相关内容里，一个目标主要是通过其速度被确定为“前景”。这在场景通常是</p>
+<p class="p">静态的或前景目标比背景目标更接近摄像机（从而根据摄像机的射影几何出现物移动的</p>
+<p class="p">速度更快）的情况下是合理的，</p>
+<p class="p">（左下）的帧差分的结果。可以看到树叶的移动导致大量的噪声，然而，连通成分法</p>
+<p class="p">可以相当不错清理这些离散噪声?(右下角）。这并不惊讶，因为没有任何理由相信</p>
+<p class="p">噪声有很大的空间相关性，这些信号有大量的非常小的区域来描述。</p>
+<p class="p">XC1.</p>
+<p class="p">Raw</p>
+<p class="p">Lag</p>
+<p class="p">口</p>
+<p class="p">口</p>
+<p class="p">DIff</p>
+<p class="p">－</p>
+<p class="p">x</p>
+<p class="p">口</p>
+<p class="p">Diff ConnectComp.</p>
+<p class="p">x</p>
+<p class="p">图9-5:帧差分。一棵当前（左上角）和以前（右上）帧图像中摇曳的树。通过连通</p>
+<p class="p">域法完全清理（右下角）不同的图像（左下）</p>
+<p class="p">现在考虑一个前景目标（我们无处不在的手）经过摄像机的场景情况。除了现在这只</p>
+<p class="p">手是从左移动到右，图9-6显示与图9-5相似的两帧。与以前一样，当前帧（左上</p>
+<p class="p">角）和前一帧（右上）的帧差分（左下）响应，且连通器法清理的结果（右下）相当不错。</p>
+<p class="p">【293~294】</p>
+<p class="p">我们还可以清楚地看到帧差的不足：它不能区分目标物体离开的位置（“空穴”）和</p>
+<p class="p">目标物体现在的位置。此外，因为“同物相减”是0(至少在阈值以下），在重叠的</p>
+<p class="p">区域往往出现一个缺口。</p>
+<p class="p">因此，我们看到，连通域法是一个功能强大的在背景减去中去除噪声的技术。通过</p>
+<p class="p">这个例子，我们还能够看到帧差分一些优点和缺点。</p>
+<p class="p">① 在这些空帧中，连通域的阅值的大小已调为0了。真正的问题是感兴趣的前景目标（手）</p>
+<p class="p">是否在这个阈值下能免予修剪。我们将看到它做的很精细（图9-6).</p>
+<p class="p">&nbsp;</p>
+<p class="p">Raw</p>
+<p class="p">Lag</p>
+<p class="p">Diff.ConnectComp</p>
+<p class="p">图9-6:检测手的帧差分方法，手作为前景物体从左移动到右（上面的两个图</p>
+<p class="p">像）；差别图像（左下）显示了朝向左的“空穴”（手以前在的位置）和朝向右的前</p>
+<p class="p">沿，连通域图像显示了清理的差异（右下）</p>
+<p class="p">背景比较法</p>
+<p class="p">本章我们已经讨论了两种背景建模技术：平均距离法和 codebook 法。您可能想知</p>
+<p class="p">道哪种方法更好，或者至少你想知道什么情况下，运用哪种方法更简单。在这种情</p>
+<p class="p">况下，最好就是直接对两种有用的方法进行食物烘烤竞赛bakeoff?.【294~295】</p>
+<p class="p">我们将继续讨论本章中我们一直讨论的有树的视频。除了移动的树以外，视频还有</p>
+<p class="p">大量从一个建筑物打到右侧的强光，在左边的内墙上剩下部分。对这样的背景建模</p>
+<p class="p">确实非常具有挑战性。</p>
+<p class="p">在图9-7中，我们比较平均差分法（上图）和 codebook法（下图）；左边的是原始前景</p>
+<p class="p">图像，右边的则是经处理后的连通部分。如所预料的，平均差分方法留下了一个的</p>
+<p class="p">不整洁的掩模图像，将手分成两部分。在图9-2,我们看到使用的平均差分法的均</p>
+<p class="p">①</p>
+<p class="p">对于不知情的人来说，“食物烘烤竞赛”，实际上是一个用来在预定义数据集上的多个</p>
+<p class="p">算法比较的习惯术语。</p>
+<p class="p">6九</p>
+<p class="p">&nbsp;</p>
+<p class="p">从一维到二维光流</p>
+<p class="p">公式</p>
+<p class="p">但是，只能求得一条直线，而不是一个点</p>
+<p class="p">Ixu+Iyv+I4=0</p>
+<p class="p">Ixu+Iyv=-14</p>
+<p class="p">I-=n IΔ</p>
+<p class="p">1,u+1,+1=0</p>
+<p class="p">＝1A=</p>
+<p class="p">＂Normal flow”</p>
+<p class="p">图10-7:单个像素的二维光流：单个像素的光流是无法求解的，最多只能求出</p>
+<p class="p">光流方向，因为光流方向与光流方程描述的线垂直（图由Michael Black提供）</p>
+<p class="p">（a)</p>
+<p class="p">孔经问题</p>
+<p class="p">（b)</p>
+<p class="p">图10-8:孔径问题：从aperture window(a)我们可以观测到边缘向右运动，但</p>
+<p class="p">是无法观察到边缘也在向下运动（b)</p>
+<p class="p">那么，如何解决单个像素不能求解整个运动的问题呢？这时需要利用光流的最后一</p>
+<p class="p">点假设。若一个局部区域的像素运动是一致的，则可以建立邻域像素的系统方程来</p>
+<p class="p">求解中心像素的运动。例如，如果用当前像素 5x5①邻域的像素的亮度值（彩色像素</p>
+<p class="p">的光流只需增加两倍）来计算此像素的运动，则可以建立如下的25个方程。</p>
+<p class="p">【326~327】</p>
+<p class="p">①</p>
+<p class="p">窗口可以是 3x3、7x7 或者任何被指定的值。若窗口太大则会由于违背运动一致的假</p>
+<p class="p">设而不能进行较好的跟踪。若窗口太小，则又会产生孔径问题。</p>
+<p class="p">跟踪与运动</p>
+<p class="p">361</p>
+<p class="p">&nbsp;</p>
+<p class="p">值作为背景模型通常包括与手相关的像素值（图中虚线所示）。图9-4给出了对</p>
+<p class="p">比，codebook 法能更准确地模拟波动的枝叶和更准确地从背景像素中将前景手（虚</p>
+<p class="p">线）识别出来。从图9-7可以看出不仅仅是背景建模产生少量的噪声，连通部分也</p>
+<p class="p">能够生成一个相对精确的目标轮廓。</p>
+<p class="p">ForegroundA</p>
+<p class="p">GConnectComp</p>
+<p class="p">X</p>
+<p class="p">A号</p>
+<p class="p">图9-7:运用平均法（第一行），区域连接消除法，手指部分缺失（上右）；codebook</p>
+<p class="p">法（第二排）的分割效果更好些，且产生一个清晰地连通部分掩模（下右）</p>
+<p class="p">分水岭算法</p>
+<p class="p">在许多实际情况下，我们要分割图像，但无法从背景图像中获得有用信息。分水岭</p>
+<p class="p">算法（watershed algorithm)在这方面往往是有效的［Meyer92].该算法可以将图像中</p>
+<p class="p">的边缘转化成“山脉”，将均匀区域转化为“山谷”，这样有助于分隔目标。分水</p>
+<p class="p">岭算法首先计算灰度图像的梯度；这对山谷或没有纹理的盆地（亮度值低的点）的形</p>
+<p class="p">成有效，也对山头或图像中有主导线段的山脉（山脊对应的边缘）的形成有效。然后</p>
+<p class="p">开始从用户指定点（或者算法得到点）开始持续“灌注”盆地直到这些区域连在一</p>
+<p class="p">起。基于这样产生的标记就可以把区域合并到一起，合并后的区域又通过聚集的方</p>
+<p class="p">式进行分割，好像图像被“填充”起来一样。通过这种方式，与指示点相连的盆地</p>
+<p class="p">就为指示点“所拥有”。最终我们把图像分割成相应的标记区域。</p>
+<p class="p">更确切地说，分水岭算法允许用户（或其他算法！）来标记目标的某个部分为目标，</p>
+<p class="p">或背景的某个部分为背景。用户或算法可以通过画一条简单的线，有效地告知分水</p>
+<p class="p">岭算法把这些点像这样组合起来。接着分水岭算法通过允许在梯度图像中和片段连</p>
+<p class="p">接的标识区域“拥有”边沿定义的山谷来分割图像。图9-8描述了这一算法。分水</p>
+<p class="p">岭算法的函数定义如下：</p>
+<p class="p">void cvwatershed(</p>
+<p class="p">const CvArr* image,</p>
+<p class="p">CvArr* markers</p>
+<p class="p">）；</p>
+<p class="p">&nbsp;</p>
+<p class="p">图9-8:分水岭算法。在用户标记物体上的区域（左图）以后，算法将标记区域</p>
+<p class="p">合成到了分割片段中（右图）</p>
+<p class="p">这里 image 是一个8位（三通道）的彩色图像，而 markers 是单通道整型</p>
+<p class="p">（IPL_DEPTH_32S),具有相同维数（x,y)的图像。除非用户（或算法）用正整数标记属</p>
+<p class="p">于同一部分的区域，markers的值都是0.例如，在图9-8中的左边部分，橙子被</p>
+<p class="p">标记为1,柠檬为2,柳橙为3,上边的前景为4等等。这样的理，生成了右侧</p>
+<p class="p">同样效果的分割。</p>
+<p class="p">【295~297】</p>
+<p class="p">用 Inpainting 修补图像</p>
+<p class="p">图像常常被噪声腐蚀。这些噪声也许是镜头上的灰尘或水滴造成的，也可能是旧照。</p>
+<p class="p">片上的划痕，或者图像的部分已经被破坏了。Inpainting[Telea04]是修复这些损害的一种有效方法，它可以利用这些已被破坏区域的边缘的颜色和结构，繁殖和混合到损坏的图像里面。如图9-9就是它的一个应用，它将图像中的字迹移除。</p>
+<p class="p">&nbsp;</p>
+<p class="p">[[[]]]</p>
+<p class="p">&nbsp;</p>
+<p class="p">图9-9：Inpainting。被字迹破坏的图（左图）和修复后重建的图（右图）</p>
+<p class="p">&nbsp;</p>
+<p class="p">如果被破坏区域并不是太大，并且在被破坏区域边缘包含足够多的纹理和颜色，那么 Inpainting 可以很好地恢复图像。图9-10显示当破坏区域过大时会发生什么情况。</p>
+<p class="p">&nbsp;</p>
+<p class="p">[[[]]]</p>
+<p class="p">&nbsp;</p>
+<p class="p">图9-10：Inpaintig并不能如魔法一样重建完全受损的纹理。橙子的中心已经被彻底污染（左图）；图像修补运用橙子类似其余大部分组织的颜色对其进行填充（右图）</p>
+<p class="p">&nbsp;</p>
+<p class="p">cvInpaint（）的原型如下：</p>
+<p class="p">void cvInpaint(</p>
+<p class="p">&nbsp; const CvArr* src,</p>
+<p class="p">&nbsp; const CvArr* mask,</p>
+<p class="p">&nbsp; CvArr*&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; dst,</p>
+<p class="p">&nbsp; double&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; inpaintRadius,</p>
+<p class="p">&nbsp; int&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+flags</p>
+<p class="p">);</p>
+<p class="p">&nbsp;</p>
+<p class="p">这里 src 是一个将要修复的8位单通道灰度或三通道彩色图像，mask 是一个和src 大小相同的8比特单通道图像，其中的损坏区域有非零的像素标记。mask
+中所有其他像素都置为零。输出图像用 dst 表示，必须与 src 同样大小，同样的通道数。修复半径是沿着各修复像素的区域，而这像素与影像输出像素颜色成比例关系。如图9-10中，在修复区域厚度范围内的内部像素，其所有颜色将根据区域边缘的颜色上色。大多数时候半径设置为
+3，因为半径太大将会产生一个显著的污点。最后，flags 参数使你能选择两种不同的图像修复方法CV＿INPAINT＿NS（Navier-Stokes
+法）和 CV＿INPAINT＿TELEA（Telea 法）。 </p>
+<p class="p">&nbsp;</p>
+<p class="p">均值漂移分割</p>
+<p class="p">&nbsp;</p>
+<p class="p">&nbsp;</p>
+<p class="p">在第5章，我们介绍了函数 cVPyrSegmentation（）。金字塔分割运用了颜色融合（根据依赖于颜色相互之间的相似性度量）来分割图像。这种方法是基于图像能量最小化的，这里能量被定义为连接强度，或进一步被定义为颜色相近性。在本节，我们将介绍
+cvPyrMeanShiftFiltering（），一个基于颜色的均值漂移（mean-shoft）聚类的相似算法［Comaniciu99］。在第10章讨论跟踪和运动的时候，我们将详细探讨均值漂移算法函数
+cvMeanShift（）。现在，我们所需要知道的是均值漂移能沿时间轴找出颜色空间的峰值分布（或其他特征）。这里均值漂移分割能找到在空间上颜色分布的峰值。基本主题是无论对运动跟踪还是颜色分割算法都依赖于均值漂移法找到分布模型（峰值）的能力。</p>
+<p class="p">&nbsp;</p>
+<p class="p">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+【298~299】</p>
+<p class="p">&nbsp;</p>
+<p class="p">通过给出一组多维数据点，其维数是（x，y，蓝，绿，红），均值漂移可以用?个窗口扫描空间来找到数据密度最高的“聚块”。注意，由于空间变量（x，y）的变化范围与颜色变化范围有极大的不同，所以，均值漂移对不同的维数要用不同的窗口半径。在这种情况下，我们要根据空间变量设定一个空间半径（spatialRadius），根据颜色变量设定一个颜色半径（colorRadius）。当均值漂移窗口移动时，经过窗口变换后收敛到数据峰值的所有点都会连通起来，并且属于该峰值。这种所属关系，是从密集的尖峰辐射，形成了图像的分割。分割实际上由比例金字塔（cvPyrUp（），cvPyrDown（））完成的，像第5章所描述的那样，金字塔中高层的颜色簇，拥有自己的边界，这些边界在金字塔中被精确定义在金字塔的低一层。调用cvPyrMeanShiftFiltering（）如下：</p>
+<p class="p">void cvPyrMeanShiftFiltering(</p>
+<p class="p">&nbsp; const CvArr*&nbsp;&nbsp; src,</p>
+<p class="p">&nbsp; CvArr*&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; dst,</p>
+<p class="p">&nbsp; double&nbsp;&nbsp; &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;spatialRadius,</p>
+<p class="p">&nbsp; double&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; colorRadius,</p>
+<p class="p">&nbsp; int&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+max_level&nbsp;&nbsp;&nbsp; = 1,</p>
+<p class="p">&nbsp; CvTermCriteria termcrit&nbsp;&nbsp;&nbsp;&nbsp; = cvTermCriteria(</p>
+<p class="p">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; CV_TERMCRIT_ITER | CV_TERMCRIT_EPS,</p>
+<p class="p">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 5,</p>
+<p class="p">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 1</p>
+<p class="p">&nbsp;&nbsp;&nbsp; )</p>
+<p class="p">&nbsp; );</p>
+<p class="p">&nbsp;</p>
+<p class="p">在cvPyrMeanShiftFiltering()里，我们拥有一个输入图像 src和一个输出图像</p>
+<p class="p">dst.均为8位，三通道，且大小相等的彩色图像。spatialRadius 和</p>
+<p class="p">colorRadius 定义了均值漂移算法如何均衡颜色和空间以分割图像。对于一个分</p>
+<p class="p">辨率为640x480的彩色图像，将 spatialRadius设为2,colorRadius设为40,</p>
+<p class="p">效果很好。而算法的下一个参数则是 max_leve1,表示在分割中使用多少级金字</p>
+<p class="p">塔。同样对于一个分辨率为640x480的彩色图像，max_level 设置为2或3效果</p>
+<p class="p">很好。</p>
+<p class="p">最后一个参数是我们在第八章所见到的 CvTermCriteria.CvTermCriteria 在所</p>
+<p class="p">有的 OpenCV 迭代算法中都会被使用。当参数默认时，均值漂移分割函数有很好</p>
+<p class="p">的默认值。否则cvTermCriteria将有如下构造器：</p>
+<p class="p">&nbsp;</p>
+<p class="p">cvTermCriteria(</p>
+<p class="p">&nbsp;&nbsp;&nbsp; int&nbsp;&nbsp;&nbsp; type; // CV_TERMCRIT_ITER,
+CV_TERMCRIT_EPS,</p>
+<p class="p">&nbsp;&nbsp;&nbsp; int&nbsp;&nbsp;&nbsp; max_iter,</p>
+<p class="p">&nbsp;&nbsp;&nbsp; double epsilon</p>
+<p class="p">);</p>
+<p class="p">&nbsp;</p>
+<p class="p">cvTermCriteria()函数的典型运用是产生所需要的 CvTermCriteria 结构。第一</p>
+<p class="p">个参数是CV_TERMCRIT_ITER 或者CV_TERMCRIT_EPS,它们告诉算法在一定的迭</p>
+<p class="p">代次数之后或当收敛矩阵达到某个很小的值（各自）时，终止计算。接下来的两个参</p>
+<p class="p">数设定了其中一个或者两个终止算法的准则。我们之所以有两种选择，是因为可以</p>
+<p class="p">设置CV_TERMCRIT_ITER的类型。参数max_iter限制了所设CV_TERMCRIT_ITER</p>
+<p class="p">的重复次数。当然epsilon的精确意义依赖于算法。</p>
+<p class="p">【299~300】</p>
+<p class="p">图9-11显示了使用下面参数值的均值漂移分割的结果：</p>
+<p class="p">cvPyrMeanShiftFiltering( src, dst,20,40,2);</p>
+<p class="p">&nbsp;</p>
+<p class="p">图9-11:均值漂移分割 通过比例运用cvPyrMeanShiftFiltering(),参数</p>
+<p class="p">max_level=2, spatialRadius=20 和 colorRadius=40;;相似区域具有相近值，</p>
+<p class="p">因此可以视为超像素，能显著增加随后的处理速度</p>
+<p class="p">Delaunay 三角剖分和Voronoi</p>
+<p class="p">划分</p>
+<p class="p">Delauay 三角剖分是 1934年发明的将空间点连接为三角形，使得所有三角形中最</p>
+<p class="p">小的角最大的一个技术。这意味着 Delaunay 三角剖分力图避免出现痩长三角形。</p>
+<p class="p">如图9-12可以看到三角剖分的要点，那就是任何三角形的外接圆都不包含任何其</p>
+<p class="p">他顶点，这叫外接圆性质（图C).</p>
+<p class="p">从计算效率讲，Delaunay 算法从一个远离三角形边界的外轮廓开始运行。图 9-12(b)</p>
+<p class="p">代表虚构的外三角的由虚线引至最高点。图9-12(c)表明一些外接圆性质的例子，</p>
+<p class="p">包括一个连接两个界外点的实时数据的一个顶点虚拟外部三角形。</p>
+<p class="p">【300】</p>
+<p class="p">现在有很多种算法计算delaunay 三角剖分，其中一些很有效，但内部描述却很难</p>
+<p class="p">描述。其中一个较简单算法的要点如下。</p>
+<p class="p">（1)添加外部三角形，并从它的一个顶点（在这里会产生一个确定的外部起点）处</p>
+<p class="p">开始。</p>
+<p class="p">（2)加入一个内部点；在三角形的外接圆内搜寻该点，去掉包含该点的三角剖分。</p>
+<p class="p">（3)重新构造三角图，在刚刚去掉的三角形外接圆内包括新的点。</p>
+<p class="p">（4)返回第二步，直到没有新的点加入。</p>
+<p class="p">外部三角形</p>
+<p class="p">外部三角形</p>
+<p class="p">的顶点</p>
+<p class="p">的顶点</p>
+<p class="p">（b)</p>
+<p class="p">（c)</p>
+<p class="p">外部三角形</p>
+<p class="p">的顶点</p>
+<p class="p">图9-12:delaunay三角剖分。（a)点集合；（b)外面边界三角形带有尾巴的点集</p>
+<p class="p">的 delaunay 三角剖分；（c)演示外接圆效应的特征圆</p>
+<p class="p">该算法的复杂度是O(n).最好的算法的复杂度是O(n log log n)(平均值）。</p>
+<p class="p">很好，但是它究竟有什么用处呢？算法是开始于一个虚拟的外部三角形，所以事实</p>
+<p class="p">上，所有的外部实点都连接着两个三角的顶点。现在，让我们回顾一下外接圆特</p>
+<p class="p">点：经过任意两个外部点和虚拟顶点的圆不包含任何内部点。这就意味着，通过检</p>
+<p class="p">查哪个点与外部的三个虚拟凸顶点相连接，计算机可以直接找出哪些点在点集中构</p>
+<p class="p">成外部轮廓。换句话说，通过Delaunay 三角剖分，我们可以直接找到一组点的外</p>
+<p class="p">部轮廓。</p>
+<p class="p">我们也同样可以找到，在点与点之间的空间被谁“拥有”，也就是说哪个坐标是距</p>
+<p class="p">离 Delaunay 顶点最近的。因此，运用原始点的Delaunay三角测量，你可以快速搜</p>
+<p class="p">索新点的最近邻居。这种划分叫Voronoi Tesselation(见图 9-13).划分是 Delaunay</p>
+<p class="p">三角剖分的对偶图像，因为Delaunay线定义了已存在点之间的距离，这样 Voronoi</p>
+<p class="p">线就“知道”在哪里要插入Delaunay 线以保证点和点之间的等距离。利用这两种</p>
+<p class="p">方法，可以计算出凸形外界和最近的外部轮廓，而这对于点的聚类和分类操作是非</p>
+<p class="p">常重要的！</p>
+<p class="p">【301~302】</p>
+<p class="p">如果你熟悉计算机图形学，你便会知道 Delaunay 三角剖分是表现三维形状的基</p>
+<p class="p">础。如果我们在三维空间渲染一个，我们可以通过这个物体的投影来建立二维视觉</p>
+<p class="p">图，并用二维Delaunay 三角剖分来分析识别该物体，或者将它与实物相比较。</p>
+<p class="p">Delaunay 三角剖分就是连接计算机视觉与计算机图形学的桥梁。然而，使用</p>
+<p class="p">OpenCV 实现 Delaunay三角的一个不足之处（我们希望以后的版本会更正，见第14</p>
+<p class="p">章）就是OpenCV仅实现了二维的Delaunay 剖分。如果我们能够对三维点云进行三</p>
+<p class="p">角剖分，也就是说构成立体视觉（见第11章），那么我们可以在三维的计算机图形</p>
+<p class="p">&nbsp;</p>
+<p class="p">和计算机视觉之间进行无缝的转换。然而，二维三角剖分通常用于计算机视觉中标</p>
+<p class="p">记空间目标的排列特征或运动场景跟踪，目标识别，或两个不同的摄像机的场景匹</p>
+<p class="p">配（如同从立体图像中获得深度信息）。图9-14 显示 Delaunay 三角剖分</p>
+<p class="p">［Gokturk01;Gokturk02]在跟踪和识别中的应用，其中关键的面部特征点根据它</p>
+<p class="p">们的三角空间分布。</p>
+<p class="p">（b)</p>
+<p class="p">（e)</p>
+<p class="p">图9-13:Voronoi 划分，任何包含在Voronoi单元中的点都比其他 Delaunay</p>
+<p class="p">点更接近于它们自己的Delaunay点：（a)粗线Delaunay三角剖分以及与细线</p>
+<p class="p">表示Voronoi划分；（b)围绕着每一个Delaunay点的 Voronoi孢子</p>
+<p class="p">现在一旦给出一组点，我们就确定了 Delaunay 的有用性，那么如何得到三角形</p>
+<p class="p">呢？OpenCV 在。。。／opencv/samples/c/delaunay.c 文件中有这些代码例子。OpenCV</p>
+<p class="p">把 Delauray 三角的函数归为 Delaunay的一部分，我们接下来将会讨论这些关键性</p>
+<p class="p">的可重复使用的部分。</p>
+<p class="p">【302】</p>
+<p class="p">图9-14:Delaunay点可用于追踪目标，这里，面部通过有意义的点的实现跟</p>
+<p class="p">踪，由此可以识别表情</p>
+<p class="p">&nbsp;</p>
+<p class="p">创立一个Delaunay或Voronoi细分</p>
+<p class="p">首先，我们需要储存Delaunay的内存空间。还需要一个外接矩形（记住为了要加速</p>
+<p class="p">计算，算法需要用由一个外接矩形盒子所确定的虚拟三角形），为了设置这些参</p>
+<p class="p">数，假设点都位于600x600的图像中。</p>
+<p class="p">／／ STORAGE AND STRUCTURE FOR DELAUNAY SUBDIVISION</p>
+<p class="p">／／</p>
+<p class="p">CvRect</p>
+<p class="p">rect ={ 0,0,600, 600 }; //Our outer bounding box</p>
+<p class="p">CvMemStorage* storage; //Storage for the Delaunay subdivsion</p>
+<p class="p">storage =cvCreateMemStorage(0); //Initialize the storage</p>
+<p class="p">CvSubdiv2D*</p>
+<p class="p">subdiv;</p>
+<p class="p">／／The subdivision itself</p>
+<p class="p">subdiv = init_delaunay ( storage, rect);</p>
+<p class="p">／／See this function</p>
+<p class="p">／／below</p>
+<p class="p">代码调用init_delaunay()函数，它不仅是一个OpenCV 函数，更是一个包含一</p>
+<p class="p">些OpenCV函数的函数包。</p>
+<p class="p">／／INITIALIZATION CONVENIENCE FUNCTION FOR DELAUNAY SUBDIVISION</p>
+<p class="p">／／</p>
+<p class="p">CvSubdiv2D* init_delaunay(</p>
+<p class="p">CvMemStorage* storage,</p>
+<p class="p">CvRect rect</p>
+<p class="p">｝ (</p>
+<p class="p">CvSubdiv2D*&nbsp; subdiv;</p>
+<p class="p">subdiv = cvCreateSubdiv2D(</p>
+<p class="p">CV_SEQ_KIND_SUBDIV2D,</p>
+<p class="p">sizeof (*subdiv) ,</p>
+<p class="p">sizeof(CvSubdiv2DPoint),</p>
+<p class="p">sizeof(CvQuadEdge2D),</p>
+<p class="p">storage</p>
+<p class="p">）；</p>
+<p class="p">cvInitSubdív Delaunay2D(subdiv, rect); //rect sets the bounds</p>
+<p class="p">return subdiv;</p>
+<p class="p">【303~304】</p>
+<p class="p">｛</p>
+<p class="p">接下来，我们需要知道如何插入点。这些点必须是32位浮点型的</p>
+<p class="p">CvPoint2D32f fp;</p>
+<p class="p">／／This is our point holder</p>
+<p class="p">&nbsp;</p>
+<p class="p">for( i=0;i&lt;as_many_points_as_you_want; i++){</p>
+<p class="p">／／However you want to set points</p>
+<p class="p">／／</p>
+<p class="p">fp =your_32f_point_list[i];</p>
+<p class="p">cvSubdivDelaunay2DInsert ( subdiv, fp);</p>
+<p class="p">｛</p>
+<p class="p">可以通过宏cvPoint2D32f(double x,double y)或者 cxtypes.h.源里的</p>
+<p class="p">cvPointTo32f(CvPoint point)函数将整型点方便地转换为32位浮点数。当可以</p>
+<p class="p">输入点来得到 Delaunay 三角剖分后，接下来我们用以下两个函数设置和清除相关</p>
+<p class="p">的Voronoi划分。</p>
+<p class="p">cvCalcSubdiv Voronoi2D( subdiv ); // Fill out Voronoi data in</p>
+<p class="p">／／ subdiv</p>
+<p class="p">cvClearSubdivVoronoi2D(subdiv);//,Clear the Voronoi from</p>
+<p class="p">／／ subdiv</p>
+<p class="p">在两个函数中，subdiv的类型是 CvSubdiv2D*.现在我们可以创立二维点集的</p>
+<p class="p">Delaunay细分，然后加入和清除Voronoi划分。但是，怎样做才能获得这些结构里</p>
+<p class="p">面的有用信息呢？我们可以在分解中逐步由边缘到点，或由边缘到边缘来完成这个</p>
+<p class="p">步骤；见图9-15,从给定边缘及其原始点开始基本操作。接下来我们以两种不同</p>
+<p class="p">的方式发现细分中的边缘或点：（1)通过利用外部点来定位一个边缘或顶点；（2)逐</p>
+<p class="p">步遍历一系列点或边缘。我们将首先描述如何遍历图像中的边缘和点，接下来遍历</p>
+<p class="p">整个图像。</p>
+<p class="p">Delaunay 细分遍历</p>
+<p class="p">图9-15结合了我们用于遍历整个细分图的两种数据结构。cvQuadEdge2D结构包含</p>
+<p class="p">了两个Delaunay点和两个 Voronoi 点以及连接它们的边缘（假设 Voronoi 点和边缘</p>
+<p class="p">已经由函数计算出来），如图9-16所示。CvSubdiv2DPoint 结构包含．Delaunay 边</p>
+<p class="p">缘及其相连的顶点，如图9-17所示。quad-edge结构的定义代码在图下面。【304】</p>
+<p class="p">／／ Edges themselves are encoded in long integers. The lower two</p>
+<p class="p">／／ bits are its index (0..3) and upper bits are the quad-edge</p>
+<p class="p">／／ pointer.</p>
+<p class="p">／／</p>
+<p class="p">typedef long CvSubdiv2DEdge;</p>
+<p class="p">&nbsp;</p>
+<p class="p">／／ quad-edge structure fields:</p>
+<p class="p">／／</p>
+<p class="p">＃define CV_QUADEDGE2D_FIELDS()</p>
+<p class="p">／</p>
+<p class="p">／</p>
+<p class="p">int flags;</p>
+<p class="p">struct CvSubdiv2DPoint* pt[4];</p>
+<p class="p">／</p>
+<p class="p">CvSubdiv2DEdge next[4];</p>
+<p class="p">typedef struct CvQuadEdge2D{</p>
+<p class="p">CV_QUADEDGE2D_FIELDS()</p>
+<p class="p">｝CvQuadEdge2D;</p>
+<p class="p">eRnext</p>
+<p class="p">eOnext</p>
+<p class="p">图9-15:给定一个边缘的相关边，标为e,其顶点（标记为一个正方形）</p>
+<p class="p">Delaunay 细分的点和相关的边缘结构定义如下：</p>
+<p class="p">＃define CV_SUBDIV2D_POINT_FIELDS() /</p>
+<p class="p">int</p>
+<p class="p">flags;</p>
+<p class="p">／</p>
+<p class="p">CvSubdiv2Dedge first;</p>
+<p class="p">／／＊The edge "e" in the figures.*/</p>
+<p class="p">CvPoint2D32f</p>
+<p class="p">pt;</p>
+<p class="p">＃define CV_SUBDIV2D_VIRTUAL_POINT_FLAG (1 &lt;&lt; 30)</p>
+<p class="p">typedef struct CvSubdiv2DPoint</p>
+<p class="p">&nbsp;</p>
+<p class="p">｛</p>
+<p class="p">CV_SUBDIV2D_POINT_FIELDS()</p>
+<p class="p">）</p>
+<p class="p">CvSubdiv2DPoint;</p>
+<p class="p">10</p>
+<p class="p">图9-16:用包含Delaunay边缘，其对边（连同相关的顶点）以及相关的</p>
+<p class="p">Voronoi 边和点 cvSubdiv2DRotateEdge()获得的四边形</p>
+<p class="p">利用这些已知结构，我们可以检查移动的不同方式。</p>
+<p class="p">【305~306】</p>
+<p class="p">边缘遍历</p>
+<p class="p">如图9-16所示，我们可通过使用下面的函数遍历四边形：</p>
+<p class="p">CvSubdiv2DEdge cvSubdiv2DRotateEdge(</p>
+<p class="p">CvSubdiv2DEdge edge,</p>
+<p class="p">int</p>
+<p class="p">type</p>
+<p class="p">）；</p>
+<p class="p">&nbsp;</p>
+<p class="p">e</p>
+<p class="p">eOnext</p>
+<p class="p">eRnext</p>
+<p class="p">图9-17:一个CvSubdiv2DPoint顶点及其连接边e连同其他连的边缘，可由</p>
+<p class="p">cvSubdiv2DGetEdge()来求取</p>
+<p class="p">给定一个边，我们可以使用type 变量得到下一个边缘，其中type 可以采用如下</p>
+<p class="p">参数：</p>
+<p class="p">?输入边（e,如果e是输入边，它必须在图像中）</p>
+<p class="p">?旋转边缘（eRot)</p>
+<p class="p">相对边缘（reversed e)</p>
+<p class="p">颠倒的旋转边缘（reversed eRot)</p>
+<p class="p">参照图9-17,我们也可以使用CvSubdiv2Dedge遍历 Delaunay图。</p>
+<p class="p">CvSubdiv2DEdge cvSubdiv2DGetEdge(</p>
+<p class="p">CvSubdiv2DEdge edge,</p>
+<p class="p">CVNextEdgeType type</p>
+<p class="p">）；</p>
+<p class="p">&nbsp;</p>
+<p class="p">&nbsp;</p>
+<p class="p">＃define cvSubdiv2DNextEdge( edge )/</p>
+<p class="p">cvSubdiv2DGetEdge(</p>
+<p class="p">／</p>
+<p class="p">edge,</p>
+<p class="p">／</p>
+<p class="p">CV_NEXT_AROUND_ORG</p>
+<p class="p">／</p>
+<p class="p">）</p>
+<p class="p">【307】</p>
+<p class="p">这里详细介绍以下遍历的类型：</p>
+<p class="p">CV_NEXT_AROUND_ORG</p>
+<p class="p">下一个边缘原点（图9-17中 eOnext,如果e是输</p>
+<p class="p">入边）</p>
+<p class="p">?CV_NEXT_AROUND_DST 下一个边缘顶点</p>
+<p class="p">CV_PREV_AROUND_ORG 前一个边缘起点（反向 eRnext)</p>
+<p class="p">?CV_PREV_AROUND_DST 前一个边缘终点（反向 eLnext)</p>
+<p class="p">?CV_NEXT_AROUND_LEFT 下一个左平面（eLnext)</p>
+<p class="p">?CV_NEXT_AROUND_RIGT 下一个右平面（eRnext)</p>
+<p class="p">?CV PREV AROUND_LEFT 前一个左平面（反向eOnext)</p>
+<p class="p">?CV_PREV_AROUND_RIGHT 前一个右平面（反向 eDnext)</p>
+<p class="p">请注意，给定一个与顶点连接的边缘，我们可以利用宏 cvSubdiv2DnextEdge</p>
+<p class="p">（edge)找到连接该顶点的所有其他边缘。这有助于从外接三角的顶点（虚线）开始寻</p>
+<p class="p">找类似凸包的东西。</p>
+<p class="p">其他重要的遍历类型是CV_NEXT_AROUND_LEFT 和 CV_NEXT_AROUND_RIGHT.我如</p>
+<p class="p">果我们在一个Delaunay 边缘上就可以使用这些类型遍历Delaunay三角形，或者在</p>
+<p class="p">Voronoi边缘上遍历Voronoi单元。</p>
+<p class="p">来自边缘的点</p>
+<p class="p">我们还需要知道如何从Delaunay或 Voronoi 顶点中获得实际点。每个Delaunay或</p>
+<p class="p">Voronoi 边缘有两个与之相连的点：org为原始点，dst 为终点。可以轻易地通过</p>
+<p class="p">如下函数得到：</p>
+<p class="p">CvSubdiv2DPoint* cvSubdiv2DEdgeOrg ( CvSubdiv2DEdge edge ) ;</p>
+<p class="p">CvSubdiv2DPoint* cvSubdiv2DEdgeDst ( CvSubdiv2DEdge edge );</p>
+<p class="p">这里是几个将CvSubdiv2DPoint转化为更熟悉的方法：</p>
+<p class="p">&nbsp;</p>
+<p class="p">CvSubdiv2DpointptSub;</p>
+<p class="p">／／Subdivision vertex point</p>
+<p class="p">CvPoint2D32f</p>
+<p class="p">pt32f =ptSub-&gt;pt; // to 32f point</p>
+<p class="p">CvPoint</p>
+<p class="p">pt</p>
+<p class="p">＝cvPointFrom32f(pt32f);</p>
+<p class="p">／／ to an integer point</p>
+<p class="p">我们现在知道细分结构是什么样的了，也知道了如何遍历它的点和边缘。再回到从</p>
+<p class="p">Delaunay/Voronoi细分得到的第一条边或点的两种方法。</p>
+<p class="p">方法1:使用一个外部点定位边缘或顶点</p>
+<p class="p">第一种方法是取任意一点，然后在细分中定位该点。该点不一定是三角剖分中的</p>
+<p class="p">点，而可以为任意点。cvSubdiv2DLocate()函数填充三角形的边缘和顶点（如果必</p>
+<p class="p">要）或者填充该点所处在的Voronoi面。</p>
+<p class="p">CvSubdiv2DPointLocation&nbsp; cvSubdiv2DLocate(</p>
+<p class="p">CvSubdiv2D*</p>
+<p class="p">subdiv,</p>
+<p class="p">CvPoint2D32f</p>
+<p class="p">pt,</p>
+<p class="p">CvSubdiv2DEdge*</p>
+<p class="p">edge,</p>
+<p class="p">CvSubdiv2DPoint**</p>
+<p class="p">vertex = NULL</p>
+<p class="p">）；</p>
+<p class="p">请注意，这些不必是最接近的边缘或顶点，它们只需要在三角形或表面上。此函数</p>
+<p class="p">的返回值按下列方式说明点的位置。</p>
+<p class="p">?CV_PTLOC_INSIDE 点落入某些面；＊edge将包含该面的一个边缘。</p>
+<p class="p">?CV_PTLOC_ON_EDGE</p>
+<p class="p">点落于边缘；＊edge含有这个边缘。</p>
+<p class="p">?CV_PTLOC_VERTEX 该点符合一个细分顶点重合；＊vertex将包含该顶点指针。</p>
+<p class="p">?CV_PTLOC_OUTSIDE_RECT</p>
+<p class="p">点处于细分参考矩形之外；该函数返回后不</p>
+<p class="p">填补点。</p>
+<p class="p">?CV_PTLOC_ERROR 输入变量无效</p>
+<p class="p">方法2:遍历一系列点或边缘</p>
+<p class="p">为方便起见，当创建点集的Delaunay 细分时，开始的三点和边缘构成了假定外接</p>
+<p class="p">三角形的顶点和三个边。由此，我们可以直接访问来自实际数据点凸包的外点和边</p>
+<p class="p">缘。一旦我们建立了一个Delaunay 细分（称为 subdiv),我们还将需要调用</p>
+<p class="p">cvCalcSubdivVoronoi2D( subdiv)函数计算相关的Voronoi划分。然后，我们就</p>
+<p class="p">能用CvSubdiv2DPoint* outer_vtx[3]得到所用的外接三角形的三个顶点。</p>
+<p class="p">CvSubdiv2DPoint* outer_vtx[3];</p>
+<p class="p">for(i=0;i&lt;3;i++) {</p>
+<p class="p">outer_vtx[i] =</p>
+<p class="p">（CvSubdiv2DPoint*) cvGetSegElem( (CvSeg*)subdiv, I );</p>
+<p class="p">【309】</p>
+<p class="p">（</p>
+<p class="p">同样可以得到外界三角形的三个边：</p>
+<p class="p">CvQuadEdge2D* outer_qedges[3];</p>
+<p class="p">for( i =0; i &lt;3; i++){</p>
+<p class="p">outer_qedges[i] =</p>
+<p class="p">（CvQuadEdge2D*)cvGetSeqElem ( (CvSeg*)(my_subdiv-&gt;edges), I );</p>
+<p class="p">｝</p>
+<p class="p">一旦知道如何遍历图形，我们也能知道何时处于外部边缘或点的边界。</p>
+<p class="p">确定凸包的外接三角形或边缘并遍历凸包</p>
+<p class="p">回想一下我们通过调用cvInitSubdivDelaunay2D( subdiv, rect)来初始化</p>
+<p class="p">Delaunay三角剖分。在这种情况下，下面的论述成立。</p>
+<p class="p">（1)如果边缘的起点和终点都在矩形之外，那么此边缘也在细分的外接三角形上。</p>
+<p class="p">（2)如果边缘的一端在矩形内，一端在矩形边界外，那么矩形边界上的点落在凸集</p>
+<p class="p">上，凸集上的每个点与虚外接三角形的两顶点相连，这两边相继出现。</p>
+<p class="p">从第二个条件可知，可以使用宏cvSubdiv2DNextEdge()移到第一条边上，这条边</p>
+<p class="p">的 dst 在边界内。两端点都在边界上的第一条边在凸集点上，记下该点或边。一</p>
+<p class="p">旦它在凸集上，就可以如下遍历所有顶点。</p>
+<p class="p">（1)将凸包遍历一周后，通过cvSubdiv2DRotateEdge(CvSubdiv2DEdge edge,</p>
+<p class="p">0)函数移动到凸包的下一条边。</p>
+<p class="p">（2)接着，两次调用宏 cvSubdiv2DNextEdge()就到了凸包的下一条边。跳转到第</p>
+<p class="p">一步。</p>
+<p class="p">我们现在知道如何初始化Delaunay 和 Voronoi 细分，如何找到初始边缘，以及如</p>
+<p class="p">何遍历图形中的边和点。下一节将阐述一些实际应用。</p>
+<p class="p">&nbsp;</p>
+<p class="p">使用实例</p>
+<p class="p">&nbsp;</p>
+<p class="p">&nbsp;</p>
+<p class="p">我们可以用函数cvSubdiv2DLocate()遍历Delaunay三角剖分的边。</p>
+<p class="p">void locate_point(</p>
+<p class="p">CvSubdiv2D*</p>
+<p class="p">subdiv,</p>
+<p class="p">CvPoint2D32f</p>
+<p class="p">fp、</p>
+<p class="p">IplImage*</p>
+<p class="p">img,</p>
+<p class="p">CvScalar</p>
+<p class="p">active_color</p>
+<p class="p">）｛</p>
+<p class="p">CvSubdiv2DEdge e;</p>
+<p class="p">CvSubdiv2DEdge e0 =0;</p>
+<p class="p">CvSubdiv2DPoint* p =0;</p>
+<p class="p">cvSubdiv2DLocate( subdiv, fp, &amp;e0,&amp;p);</p>
+<p class="p">if( e0){</p>
+<p class="p">e=e0;</p>
+<p class="p">do // Always 3 edges -- this is a triangulation, after all.</p>
+<p class="p">｛</p>
+<p class="p">／／［Insert your code here]</p>
+<p class="p">／／</p>
+<p class="p">／／ Do something with e...</p>
+<p class="p">e=cvSubdiv2DGetEdge(e,CV_NEXT_AROUND_LEFT);</p>
+<p class="p">｛</p>
+<p class="p">while( e != e0 );</p>
+<p class="p">（</p>
+<p class="p">【310~311】</p>
+<p class="p">（</p>
+<p class="p">也可能通过下面函数找到距离输入点最近的点：</p>
+<p class="p">CvSubdiv2DPoint* cvFindNearestPoint2D(</p>
+<p class="p">CvSubdiv2D* subdiv,</p>
+<p class="p">CvPoint2D32f pt</p>
+<p class="p">）；</p>
+<p class="p">与cvSubdiv2DLocate()函数不同，cvFindNearestPoint2D()返回 Delaunay 细分</p>
+<p class="p">的最近顶点。该点不一定落在该点所在的面或三角形内。</p>
+<p class="p">同样地，我们能够通过使用如下语句逐步遍历（本例中也绘出了）Voronoi面。</p>
+<p class="p">void draw_subdiv_facet(</p>
+<p class="p">&nbsp;</p>
+<p class="p">&nbsp;</p>
+<p class="p">&nbsp;</p>
+<p class="p">IplImage *img,</p>
+<p class="p">CvSubdiv2DEdge edge</p>
+<p class="p">）｛</p>
+<p class="p">CvSubdiv2DEdge t = edge;</p>
+<p class="p">int i, count =0;</p>
+<p class="p">CvPoint* buf =0;</p>
+<p class="p">／／ Count number of edges in facet</p>
+<p class="p">do{</p>
+<p class="p">count++;</p>
+<p class="p">t = cvSubdiv2DGetEdge( t, CV_NEXT_AROUND_LEFT );</p>
+<p class="p">｝ while (t != edge );</p>
+<p class="p">／／ Gather points</p>
+<p class="p">／／</p>
+<p class="p">buf =(CvPoint*)malloc( count * sizeof(buf[0]))</p>
+<p class="p">t =edge;</p>
+<p class="p">for( i =0;i &lt;count; i++){</p>
+<p class="p">CvSubdiv2DPoint* pt = cvSubdiv2DEdgeorg( t );</p>
+<p class="p">if(!pt ) break;</p>
+<p class="p">buf[i] = cvPoint ( cvRound(pt-&gt;pt.x), cvRound(pt-&gt;pt.y));</p>
+<p class="p">t =cvSubdiv2DGetEdge( t,CV_NEXT_AROUND_LEFT);</p>
+<p class="p">）</p>
+<p class="p">／／ Around we go</p>
+<p class="p">／／</p>
+<p class="p">if( i == count ){</p>
+<p class="p">CvSubdiv2DPoint* pt = cvSubdiv2DEdgeDst (</p>
+<p class="p">cvSubdiv2DRotateEdge( edge, 1));</p>
+<p class="p">cVFillConvexPoly( img, buf, count,</p>
+<p class="p">CV_RGB(rand()&amp;255,rand()&amp;255,rand()&amp;255), CV_AA, 0);</p>
+<p class="p">cvPolyLine( img, &amp;buf, &amp;count, 1,1,CV_RGB(0,0,0),</p>
+<p class="p">1,CV_AA,0);</p>
+<p class="p">draw_subdiv_point ( img, pt-&gt;pt, CV_RGB(0,0;0));</p>
+<p class="p">（</p>
+<p class="p">free( buf );</p>
+<p class="p">【311~312】</p>
+<p class="p">｛</p>
+<p class="p">最后，获得细分结构的另一种方法是使用 CvSeqReader 逐步遍历边。这里介绍如</p>
+<p class="p">&nbsp;</p>
+<p class="p">&nbsp;</p>
+<p class="p">何遍历所有Delaunay 或者 Voronoi边：</p>
+<p class="p">void visit_edges ( CvSubdiv2D* subdiv) {</p>
+<p class="p">CvSeqReader reader;</p>
+<p class="p">／／Sequence reader</p>
+<p class="p">int i, total =subdiv-&gt;edges-&gt;total;</p>
+<p class="p">／／edge cont</p>
+<p class="p">int elem_size = subdiv-&gt;edges-&gt;elem_size;</p>
+<p class="p">／／edge size</p>
+<p class="p">cvStartReadSeq((CvSeq*)(subdiv-&gt;edges), &amp;reader, 0 );</p>
+<p class="p">cvCalcSubdiv Voronoi2D( subdiv );//Make.sure Voronoi exists</p>
+<p class="p">for(i=0;i &lt;total; i++){</p>
+<p class="p">CvQuadEdge2D* edge =(CvQuadEdge2D*)(reader.ptr);</p>
+<p class="p">if( CV_IS_SET_ELEM(edge )){</p>
+<p class="p">／／ Do something with Voronoi and Delaunay edges ...</p>
+<p class="p">／／</p>
+<p class="p">CvSubdiv2DEdge voronoi_edge = (CvSubdiv2DEdge) edge + 1;</p>
+<p class="p">CvSubdiv2DEdge delaunay_edge = (CvSubdiv2DEdge)edge;</p>
+<p class="p">／／。。。OR WE COULD FOCUS EXCLUSIVELY ON VORONOI...</p>
+<p class="p">／／left</p>
+<p class="p">／／</p>
+<p class="p">voronoi_edge = cvSubdiv2DRotateEdge ( edge, 1);</p>
+<p class="p">／／ right</p>
+<p class="p">／／</p>
+<p class="p">voronoi_edge = cvSubdiv2DRotateEdge( edge, 3 );</p>
+<p class="p">｛</p>
+<p class="p">CV_NEXT_SEQ_ELEM( elem_size, reader );</p>
+<p class="p">｛</p>
+<p class="p">｝</p>
+<p class="p">最后，我们以一个方便的内联宏指令结束：只要我们找到了 Delaunay 三角的剖分</p>
+<p class="p">顶点，就可以使用如下函数计算它的面积。</p>
+<p class="p">double cvTriangleArea (</p>
+<p class="p">CvPoint2D32f a,</p>
+<p class="p">CvPoint2D32f b,</p>
+<p class="p">CvPoint2D32f.c</p>
+<p class="p">）</p>
+<p class="p">【312】</p>
+<p class="p">练习</p>
+<p class="p">1.使用cvRunningAvg()函数，再次实现背景去除的平均法。为了实现这一方</p>
+<p class="p">法，需要知道场景中像素的均值漂移值从而得出绝对差分的均值和均值漂移，</p>
+<p class="p">该均值漂移代替图像的标准偏差。</p>
+<p class="p">2.</p>
+<p class="p">阴影是背景减除中经常遇到的一个问题，因为它们常像前景目标一样现。使</p>
+<p class="p">用平均或背景去除的codebook 方法学习背景。让一个人走进前景，这样阴影</p>
+<p class="p">就从前景目标的底部映射出来。</p>
+<p class="p">a.户外场景中，阴影比它周围更暗更蓝一些，可以利用这个事实来消除</p>
+<p class="p">阴影。</p>
+<p class="p">b.室内场景，阴影比它周围更暗一些，可以利用这个事实来消除阴影。</p>
+<p class="p">3. 本章介绍的简单背景模型对阈值参数很敏感。在第十章，我们将看到如何追踪</p>
+<p class="p">运动轨迹，这可以作为“真实值”用来对背景模型及其阈值进行检查。当知道</p>
+<p class="p">有人在摄像机前做“标定游走”时，也可以使用它来寻找运动目标，调整参数</p>
+<p class="p">直到前景目标符合运动边界。已知背景的一部分遮挡时，我们可以使用标定物</p>
+<p class="p">体本身的特定模式（或在背景上）做实际检测并且做参数调谐指导。</p>
+<p class="p">a. 更改代码，包含自动校准模型。学习背景模型，然后在场景中放置一个明</p>
+<p class="p">亮颜色的目标。利用颜色特征找出目标，然后在背景程序中利用该目标自</p>
+<p class="p">动设定阈值，以此分割目标。注意：可以将目标留在场景中以对阈值作连</p>
+<p class="p">续调整。</p>
+<p class="p">b. 使用已修正的代码解答练习2阴影去除的问题。</p>
+<p class="p">4.利用背景分割法分割一个开双臂的人，研究在 find_connected_</p>
+<p class="p">components()函数中使用不同参数和默认值时的影响。对如下参数设置不用</p>
+<p class="p">的值，给出你的结果：</p>
+<p class="p">a. poly1_hu110</p>
+<p class="p">b. perimScale</p>
+<p class="p">C. CVCONTOUR_APPROX_LEVEL</p>
+<p class="p">d. CVCLOSE_ITR</p>
+<p class="p">5.</p>
+<p class="p">在2005年DARPA 机器人挑战竞赛中，斯坦福队的队员们用一种颜色聚类算</p>
+<p class="p">法将公路与不是公路的区域分离开来。这些颜色从车前面的小片公路的激光探</p>
+<p class="p">测的梯形里采样出来。图像中其他接近这小片颜色的颜色区域－以及原来梯</p>
+<p class="p">形连接的部分颜色区域－被认为是公路。如图9-18所示，图中先用梯形标</p>
+<p class="p">记公路，用倒“U”字标记公路的外边部分，然后用分水岭算法分割公路。假</p>
+<p class="p">设我们能够自动产生这些标记，那么用这个方法分割公路会出现什么错误呢？</p>
+<p class="p">提示：请认真观察图 9-8,然后思考在梯形中用一个像什么的东西来扩展公路</p>
+<p class="p">梯形。</p>
+<p class="p">图9-18:使用分水岭算法来识别路面。将标记置于原图（左图），算法分割出</p>
+<p class="p">了路面（右图）</p>
+<p class="p">6. Inpainting 对修复纹理区域的划痕效果很好。如果图像中划痕使实际目标边缘</p>
+<p class="p">模糊，那么将会是什么样的结果？试试看。</p>
+<p class="p">7. 虽然可能有点慢，但是当使用 cvPyrMeanShiftFiltering()将视频输入预先</p>
+<p class="p">分割时，试试使用背景分割。也就是说，输入视频先进行均值漂移分割，然后</p>
+<p class="p">用codebook背景分割程序进行背景学习，之后测试前景。</p>
+<p class="p">a. 与没有进行均值漂移分割的结果进行比较。</p>
+<p class="p">b. 系统地改变均值移动分割的</p>
+<p class="p">ax_level,spatialRadius,和 colorRadius</p>
+<p class="p">等参数，比较结果。</p>
+<p class="p">8. Inpainting 以固定的笔迹对经过均值漂移分割的图像效果如何？试试不同的设</p>
+<p class="p">置，给出结果。</p>
+<p class="p">9.</p>
+<p class="p">修改代码。。。／opencv/samples/delaunay.c,加入点击鼠标选择点的位置（而不是通</p>
+<p class="p">过现有的随机选中点的方法），用三角化法对结果进行实验。</p>
+<p class="p">10.再次修改delaunay.c代码，使之可以用键盘画点集的凸包。</p>
+<p class="p">11.同一直线上的三点是否有Delaunay三角剖分？</p>
+<p class="p">12.图9-19(a)所示的三角形是一个Delaunay三角剖分吗？如果是，说明原因。如</p>
+<p class="p">果不是，你怎么改变图形使它成为De:aunay三角剖分？</p>
+<p class="p">13.对图9-19(b)中的点手工实现 Delaunay三角化，通过这个练习，你不用另外增</p>
+<p class="p">加一个虚拟外接三角。</p>
+<p class="p">O</p>
+<p class="p">（a)</p>
+<p class="p">（b)</p>
+<p class="p">O</p>
+<p class="p">O</p>
+<p class="p">O</p>
+<p class="p">O</p>
+<p class="p">O</p>
+<p class="p">?</p>
+<p class="p">O</p>
+<p class="p">图9-19:练习12和练习13</p>
+<section class="section"><h2 class="title sectiontitle">局部与分割</h2> <p class="p">本章重点讲述如何从图像中将目标或部分目标分割出来。这样做的原因很明显，比如在视频安全应用中，摄像机经常观测一个不变的背景，而实际上我们对这些背景并不感兴趣。我们所感兴趣的只是当行人或车辆进入场景时或者当某些东西被遗留在场景中时。我们希望分离出这些事件而忽略没有任何事件发生的时间段。</p><p class="p">我们可以把图像预处理成有意义的超像素所组成的诸如包含类似四肢、头发、脸、躯干、树叶、湖泊、道路、草坪等物体的图像区域。这些超像素的使用节省了计算量。比如，对一幅图像做目标分类器处理的时候，我们只需要在包含每个超像素的一个区域进行搜索。这样可能只需要跟踪这些大的区域，而不是区域中的每一个像素点。</p><p class="p">在第5章介绍图像处理时我们已经讨论了几个图像分割的算法。这些程序涵盖了图像形态学、种子填充法、阔值算法以及金字塔分割法等方面。本章将研究其他用于查找、填充和分离一幅图像中的目标以及部分目标物体的算法。先从已知背景的场景中分割出前景目标开始。这些背景的建模函数并设有内置在OpenCV函数中，更确切地说，它们仅仅用来说明如何利用OpenCV国数实现更加复杂的例子。</p> </section>
+<section class="section"><h2 class="title sectiontitle">背景减除</h2> <p class="p">由于背景减除简单而去摄像机在很多情况下是固定的，在视频安全应用领域，背景减除（又名背景差分）也许是最基本的图像处理操作。要实现背景减除，我们必须首先“学习”背景模型。</p><p class="p">一旦背景模型建立，将背景模型和当前的图像进行比较，然后减去这些已知的背景信息，则剩下的目标物大致就是所求的前进目标了。</p><p class="p">当然，“背景”在不同的应用场合下是一个很难定义的问题。通常情况下，背景被认为是在任何所感兴趣的时期内，场景中保持静止或周期运动的目标。整个场景可以包含随时间变动的单元。</p><p class="p">接下来，我们提出一个快速的背景建模方法，该方法对于光照条件变化不大的室内的静止背景的场景效果很好。然后将介绍codebook方法，该方法虽然速度稍慢，但在室内外环境下都能工作的很好。也能适应周期性运动（比如树在风中摇曳）以及灯光缓慢变化或有规律的变化，并且对偶尔有前景目标移动的背景学习有很好的适应性。我们将随后在清除前景物体检测的内容中另行讨论连通物体(首次见于第
+5 章)的相关内容。最后将会比较快速背景建模方法和codebook 背景方法。</p> </section>
+<section class="section"><h2 class="title sectiontitle">背景减除的缺点</h2><p class="p">虽然背景建模方法在简单的场景中能够达到较好的效果，但该方法受累于一个不常成立的假设：所有像素点是独立的。我们所描述的这种建模方法在计算像素变化时并没有考虑它相邻的像素。为了考虑它相邻的像素，我们需要建立一个多元模型，它把基本的像素独立模型扩展为包含了相邻像素的亮度的基本场景。在这种情况下，我们用相邻像素的亮度来区别相邻像素值的相对明暗。然后对单个像素的两种模型进行有效的学习：一个其周围像素是明亮的，另一个则是周围像素是暗淡的。但是，这样需要消耗两倍的内存和更多的计算量，因为当周围的像素是亮或暗的时，需要用不同的亮度值来表示，而且还要两倍的数据来填充这个双状态模型。</p><p class="p">由于这些额外的开销，通常会避免使用复杂的模型。我们可以更有效地把精力投入到清楚那些错误的检测结果中。清除采用图像处理的方式（主要是cvErode(),
+cvDilate()和cvFloodFill()等）去掉那些孤立的像素。</p></section>
+<section class="section"><h2 class="title sectiontitle">场景建模</h2><p class="p">以时间为基础将不变的前景模块缓慢转换为背景模块。当场景完全发生变化时我们还必须检测并建立一个新的模型。通常，一个场景模型可能包含许多层次，从“新的前景”到旧的前景再到背景，还可能有一些运动检测，这样，当一个目标移动时，我们可以识别其“真的”的前景（新位置）和“假的”的前景（其旧的位置，“空洞”）。</p><p class="p">这样，一个新的前景目标就会放进“新前景”目标级别，标识为一个真目标或一个空洞。在没有任何前景物体的地方，我们将继续更新我们的背景模型。如果一个前景物体在给定的时间内没有发生移动，就将它降级为“旧的前景”，这里它的像素统计特性还将暂时学习直到它的学习模型融合进学习背景模型之中。</p></section>
+<section class="section"><h2 class="title sectiontitle">像素片段</h2><p class="p">在转到为像素变化建模之前，先要对图像中的像素点在一段时间内如何变化有个概念。opencv有这样的函数，能够很容易对任意直线上的像素进行采样。线采样函数cvInitLineIterator()和CV_NEXT_LINE_POINT().</p><p class="p">数据结构：CvLineIterator iter; &nbsp; //采样迭代器 方法： cvCreateFileCapture
+初始化从文件中获取视频&nbsp; CvCapture* cvCreateFileCapture( const char* filename
+); filename&nbsp; 视频文件名。&nbsp; 函数cvCreateFileCapture给指定文件中的视频流分配和初始化CvCapture结构。&nbsp;
+当分配的结构不再使用的时候，它应该使用cvReleaseCapture函数释放掉。  cvGrabFrame&nbsp; 从摄像头或者视频文件中抓取帧&nbsp;
+int cvGrabFrame( CvCapture* capture ); capture&nbsp; 视频获取结构指针。&nbsp;
+函数cvGrabFrame从摄像头或者文件中抓取帧。被抓取的帧在内部被存储。这个函数的目的是快速的抓取帧，这一点对同时从几个摄像头读取数据的同步是很重要的。被抓取的帧可能是压缩的格式（由摄像头／驱动定义），所以没有被公开出来。如果要取回获取的帧，请使用cvRetrieveFrame。
+ cvRetrieveFrame&nbsp; 取回由函数cvGrabFrame抓取的图像 IplImage* cvRetrieveFrame(
+CvCapture* capture ); capture&nbsp; 视频获取结构。&nbsp; 函数cvRetrieveFrame返回由函数cvGrabFrame抓取的图像的指针。返回的图像不可以被用户释放或者修改。
+ InitLineIterator 初始化直线迭代器  int cvInitLineIterator( const CvArr* image,
+CvPoint pt1, CvPoint pt2, CvLineIterator* line_iterator, int connectivity=8,
+int left_to_right=0 ); img 用以获取直线的图像。 pt1 线段的第一个端点。 pt2 线段的第二个端点。
+line_iterator 指向直线迭代状态结构体的指针。 connectivity 直线的邻接方式，4邻接或者8邻接。 left_to_right
+标志值，指出扫描直线是从pt1和pt2外面最左边的点扫描到最右边的点(left_to_right≠0)，还是按照指定的顺序，从pt1到pt2(left_to_right=0)。
+函数cvInitLineIterator初始化直线迭代器并返回两个端点间点的数目。两个端点都必须在图像内部。在迭代器初始化以后，所有的在连接两个终点的栅栏线上的点，可以通过访问CV_NEXT_LINE_POINT点的方式获得。在线上的这些点使用4-邻接或者8-邻接的Bresenham算法计算得到。</p></section>
+<section class="section"></section>
+<section class="section"><h2 class="title sectiontitle">分水岭算法</h2>  </section>
+<section class="section"><h2 class="title sectiontitle">用Inpainting修补图像</h2>  </section>
+<section class="section"><h2 class="title sectiontitle">均值漂移分割</h2>  </section>
+<section class="section"><h2 class="title sectiontitle">Delaunay三角剖分和Voronoi 划分</h2>  </section>
+<section class="section"><h2 class="title sectiontitle">练习</h2>  </section>
+</div>
+<nav role="navigation" class="related-links"><div class="familylinks"><div class="parentlink"><strong>父主题：</strong> <a class="link" href="%E6%96%B9%E6%B3%95%E5%B7%A5%E5%85%B7.html">方法工具</a></div></div></nav></article></main></body></html>

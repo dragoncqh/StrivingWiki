@@ -1,0 +1,476 @@
+<!DOCTYPE html
+  SYSTEM "about:legacy-compat">
+<html lang="zh-cn"><head><meta charset="UTF-8"><meta name="copyright" content="(C) 版权 2024"><meta name="generator" content="DITA-OT"><meta name="description" content=""><title>使用Senparc.Weixin.WxOpen开发高可用的微信小程序</title><link rel="stylesheet" type="text/css" href="../../commonltr.css">
+<link rel="stylesheet" type="text/css" href="../../common-extended.css"></head><body id="使用Senparc.Weixin.WxOpen开发高可用的微信小程序-8CDB7B16"><main role="main"><article role="article" aria-labelledby="ariaid-title1">
+<h1 class="title topictitle1" id="ariaid-title1">使用Senparc.Weixin.WxOpen开发高可用的微信小程序</h1>
+
+
+<div class="body conbody"><p class="shortdesc"></p>
+<p class="p"></p>
+<p class="p">Senparc.Weixin SDK介绍 </p>
+<p class="p">Senparc.Weixin SDk是目前.net平台上使用率最高的微信SDK，除硬件平台暂未发布以外覆盖了所有微信平台模块，自2013年免费开源起已经持续更新了4年，是GitHub上目前Star和Fork数最多的中国C#开源项目。</p>
+<p class="p">目前大多数模块都支持了.net 4.0 / .net 4.5 / .net core 三个版本，Senparc官方计划在2017年将新增.net
+4.6.2版本，并着力强化.net core版本，在7月左右会停止对.net 4.0版本的更新。</p>
+<p class="p">其中，小程序的模块命名为Senparc.Weixin.WxOpen，Nuget地址：</p>
+<p class="p">https://www.nuget.org/packages/Senparc.Weixin.WxOpen</p>
+<p class="p">v1.0版本已于2017年1月9日凌晨同步上线！</p>
+<p class="p">Senparc.Wexin SDK系列库：</p>
+<p class="p"><img class="image" src="http://mmbiz.qpic.cn/mmbiz_jpg/gak2lhVxV6JiaLeGt22Yoau5vjpvcuia9rIFwNIqPVZXqCyPaomQuqxnm67RfvxKRwXueP1hzqOULAbONodiaZoeA/640?wx_fmt=jpeg&amp;tp=webp&amp;wxfrom=5&amp;wx_lazy=1">&nbsp;</p>
+<p class="p">过去的4年时间，Senparc团队总共迭代发布了100多个稳定版本，目前总体框架已经比较完善，可以应对超高并发在内的各种系统环境。</p>
+<p class="p">以下是官方提供的一些资源：</p>
+<p class="p">官网：http://weixin.senparc.com/</p>
+<p class="p">源代码（包含Demo）：https://github.com/JeffreySu/WeiXinMPSDK</p>
+<p class="p">在线Demo（包含Nuget项目入口）：http://sdk.weixin.senparc.com/</p>
+<p class="p">Demo公众号：盛派网络小助手</p>
+
+<p class="p">公众号开发系列教程：http://www.cnblogs.com/szw/p/weixin-course-index.html#160;</p>
+<p class="p">下载类库chm帮助文档：http://sdk.weixin.senparc.com/Document</p>
+<p class="p">在线类库帮助文档：http://doc.weixin.senparc.com/</p>
+<p class="p">微信开发资源汇总项目：https://github.com/JeffreySu/WeixinResource</p>
+<p class="p">Senparc.Weixin SDK交流QQ群：342319110</p>
+<p class="p">小程序开发交流QQ群：108830388#160; </p>
+<p class="p">微信平台生态关系</p>
+<p class="p">加上小程序之后，整个公众号的平台生态又多了一环，根据开发代码体量和包含关系（尤其是核心重叠部分），目前大概是下面这样的场景：</p>
+
+<p class="p">整个2016年，开发者们被微信小程序吊足了胃口，每每微信官方有小程序的动态发布，都会被刷屏，大众对微信小程序的关注程度可见一斑。</p>
+<p class="p">对于开发者来说，无论微信小程序的实际商业应用广度或是被接受度如何，这都将是一块熟悉又陌生的广阔的处女地。</p>
+<p class="p">由于小程序的多数规则和微信公众号基本一致，因此我们的小程序模块（Senparc.Weixin.WxOpen.dll）多数代码是从公众号模块（Senparc.Weixin.MP.dll）移植过来的。</p>
+<p class="p">微信官方为小程序准备了比较细致的文档和教程（这一点和当初公众号相比简直不在一个级别上），以下是一些重要的线上资源：</p>
+<ul class="ul">
+<li class="li"><p class="p">小程序开发文：https://mp.weixin.qq.com/debug/wxadoc/dev/</p></li>
+<li class="li"><p class="p">小程序设计指南：https://mp.weixin.qq.com/debug/wxadoc/design/</p></li>
+<li class="li"><p class="p">开发工具下载： https://mp.weixin.qq.com/debug/wxadoc/dev/devtools/download.html</p></li>
+</ul>
+<p class="p">下文将整理目前为止对小程序后端开发最为重要的知识点、注意点进行介绍，或给出对应资源的地址，并就和微信公众号相关的技能给出相关的索引。</p>
+<p class="p">对于一个在高并发场景下保持高可用性的小程序来说，这几个方面的处理细节是不可忽视的：</p>
+<ul class="ul">
+<li class="li"><p class="p">消息处理</p></li>
+<li class="li"><p class="p">上下文</p></li>
+<li class="li"><p class="p">消息加密</p></li>
+<li class="li"><p class="p">AccessToken令牌处理</p></li>
+<li class="li"><p class="p">高级接口</p></li>
+<li class="li"><p class="p">异步开发</p></li>
+<li class="li"><p class="p">分布式缓存</p></li>
+<li class="li"><p class="p">同步锁</p></li>
+<li class="li"><p class="p">WebSocket</p></li>
+<li class="li"><p class="p">跟踪日志及异常处理</p></li>
+</ul>
+<p class="p">消息处理</p>
+<p class="p">微信小程序在进入客服会话状态之后，即可与客服进行对话，可以发送文字或图片信息，和公众号不同的是，目前小程序的消息系统是不能进行直接回复的，必须使用异步的方式调用“客服接口”推送消息（下文会讲到），为此我们优化了Senparc.Weixin
+SDK中的消息处理流程：MessageHandler。</p>
+<p class="p">MessageHandler是一个信消息的处理模块，也是整个微信开发过程中不可缺少的一部分。在MessageHandler中，开发者可以非常轻松地处理所有类型的微信消息。小程序的MessageHandler类叫做WxOpenMessageHandler。</p>
+<p class="p">在ASP.NET MVC我们只需要如下几步就可实现对消息的处理（和微信公众号一致）。</p>
+<p class="p">第一步：创建上上下文类，CustomWxOpenMessageContext.cs：</p>
+<p class="p">有关WxOpenMessageContext（上下文）的内容下文会讲到。</p>
+<p class="p">CustomWxOpenMessageContext.cs 代码如下：</p>
+<p class="p">using Senparc.Weixin.Context;</p>
+<p class="p">using Senparc.Weixin.WxOpen.Entities;</p>
+<p class="p">namespace Senparc.Weixin.MP.Sample.CommonService.WxOpenMessageHandler</p>
+<p class="p">{</p>
+<p class="p">public class CustomWxOpenMessageContext : MessageContext&lt;IRequestMessageBase,IResponseMessageBase&gt;</p>
+<p class="p">{</p>
+<p class="p">public CustomWxOpenMessageContext()</p>
+<p class="p">{</p>
+<p class="p">base.MessageContextRemoved += CustomMessageContext_MessageContextRemoved;</p>
+<p class="p">}</p>
+<p class="p">/// &lt;summary&gt;</p>
+<p class="p">/// 当上下文过期，被移除时触发的时间</p>
+<p class="p">/// &lt;/summary&gt;</p>
+<p class="p">/// &lt;param name="sender"&gt;&lt;/param&gt;</p>
+<p class="p">/// &lt;param name="e"&gt;&lt;/param&gt;</p>
+<p class="p">void CustomMessageContext_MessageContextRemoved(object sender,
+Senparc.Weixin.Context.WeixinContextRemovedEventArgs&lt;IRequestMessageBase,IResponseMessageBase&gt;
+e)</p>
+<p class="p">{</p>
+<p class="p">/* 注意，这个事件不是实时触发的（当然你也可以专门写一个线程监控）</p>
+<p class="p">* 为了提高效率，根据WeixinContext中的算法，这里的过期消息会在过期后下一条请求执行之前被清除</p>
+<p class="p">*/</p>
+<p class="p">var messageContext = e.MessageContext as CustomWxOpenMessageContext;</p>
+<p class="p">if (messageContext == null)</p>
+<p class="p">{</p>
+<p class="p">return;//如果是正常的调用，messageContext不会为null</p>
+<p class="p">}</p>
+<p class="p">//TODO:这里根据需要执行消息过期时候的逻辑，下面的代码仅供参考</p>
+<p class="p">//Log.InfoFormat("{0}的消息上下文已过期",e.OpenId);</p>
+<p class="p">//api.SendMessage(e.OpenId, "由于长时间未搭理客服，您的客服状态已退出！");</p>
+<p class="p">}</p>
+<p class="p">}</p>
+<p class="p">}</p>
+<p class="p">源码：</p>
+
+<p class="p">第二步：创建自定义 CustomWxOpenMessageHandler.cs：</p>
+<p class="p">CustomWxOpenMessageHandler.cs 代码如下：</p>
+<p class="p">using System.IO;</p>
+<p class="p">using System.Web.Configuration;</p>
+<p class="p">using Senparc.Weixin.MP.Entities;</p>
+<p class="p">using Senparc.Weixin.MP.Entities.Request;</p>
+<p class="p">using Senparc.Weixin.MP.MessageHandlers;</p>
+<p class="p">using IRequestMessageBase = Senparc.Weixin.MP.Entities.IRequestMessageBase;</p>
+<p class="p">using IResponseMessageBase = Senparc.Weixin.MP.Entities.IResponseMessageBase;</p>
+<p class="p">namespace Senparc.Weixin.MP.Sample.CommonService.WxOpenMessageHandler</p>
+<p class="p">{</p>
+<p class="p">/// &lt;summary&gt;</p>
+<p class="p">/// 自定义MessageHandler</p>
+<p class="p">/// 把MessageHandler作为基类，重写对应请求的处理方法</p>
+<p class="p">/// &lt;/summary&gt;</p>
+<p class="p">public partial class CustomWxOpenMessageHandler : MessageHandler&lt;CustomWxOpenMessageContext&gt;</p>
+<p class="p">{</p>
+<p class="p">private string appId = WebConfigurationManager.AppSettings["WxOpenAppId"];</p>
+<p class="p">private string appSecret = WebConfigurationManager.AppSettings["WxOpenAppSecret"];</p>
+<p class="p">public CustomWxOpenMessageHandler(Stream inputStream, PostModel
+postModel, int maxRecordCount = 0)</p>
+<p class="p">: base(inputStream, postModel, maxRecordCount)</p>
+<p class="p">{</p>
+<p class="p">//这里设置仅用于测试，实际开发可以在外部更全局的地方设置，</p>
+<p class="p">//比如MessageHandler&lt;MessageContext&gt;.GlobalWeixinContext.ExpireMinutes
+= 3。</p>
+<p class="p">WeixinContext.ExpireMinutes = 3;</p>
+<p class="p">if (!string.IsNullOrEmpty(postModel.AppId))</p>
+<p class="p">{</p>
+<p class="p">appId = postModel.AppId;//通过第三方开放平台发送过来的请求</p>
+<p class="p">}</p>
+<p class="p">//在指定条件下，不使用消息去重</p>
+<p class="p">base.OmitRepeatedMessageFunc = requestMessage =&gt;</p>
+<p class="p">{</p>
+<p class="p">var textRequestMessage = requestMessage as RequestMessageText;</p>
+<p class="p">if (textRequestMessage != null &amp;&amp; textRequestMessage.Content
+== "容错")</p>
+<p class="p">{</p>
+<p class="p">return false;</p>
+<p class="p">}</p>
+<p class="p">return true;</p>
+<p class="p">};</p>
+<p class="p">}</p>
+<p class="p">public override void OnExecuting()</p>
+<p class="p">{</p>
+<p class="p">//测试MessageContext.StorageData</p>
+<p class="p">if (CurrentMessageContext.StorageData == null)</p>
+<p class="p">{</p>
+<p class="p">CurrentMessageContext.StorageData = 0;</p>
+<p class="p">}</p>
+<p class="p">base.OnExecuting();</p>
+<p class="p">}</p>
+<p class="p">public override void OnExecuted()</p>
+<p class="p">{</p>
+<p class="p">base.OnExecuted();</p>
+<p class="p">CurrentMessageContext.StorageData = ((int)CurrentMessageContext.StorageData)
++ 1;</p>
+<p class="p">}</p>
+<p class="p">/// &lt;summary&gt;</p>
+<p class="p">/// 处理文字请求</p>
+<p class="p">/// &lt;/summary&gt;</p>
+<p class="p">/// &lt;returns&gt;&lt;/returns&gt;</p>
+<p class="p">public override IResponseMessageBase OnTextRequest(RequestMessageText
+requestMessage)</p>
+<p class="p">{</p>
+<p class="p">//TODO:这里的逻辑可以交给Service处理具体信息，参考OnLocationRequest方法或/Service/LocationSercice.cs</p>
+<p class="p">//这里可以进行数据库记录或处理</p>
+<p class="p">return new SuccessResponseMessage();</p>
+<p class="p">}</p>
+<p class="p">public override IResponseMessageBase OnImageRequest(RequestMessageImage
+requestMessage)</p>
+<p class="p">{</p>
+<p class="p">//发来图片，进行处理</p>
+<p class="p">return DefaultResponseMessage(requestMessage);</p>
+<p class="p">}</p>
+<p class="p">public override IResponseMessageBase DefaultResponseMessage(IRequestMessageBase
+requestMessage)</p>
+<p class="p">{</p>
+<p class="p">//所有没有被处理的消息会默认返回这里的结果</p>
+<p class="p">return new SuccessResponseMessage();</p>
+<p class="p">//return new SuccessResponseMessage();等效于：</p>
+<p class="p">//base.TextResponseMessage = "success";</p>
+<p class="p">//return null;</p>
+<p class="p">}</p>
+<p class="p">}</p>
+<p class="p">}</p>
+<p class="p">源码：</p>
+
+<p class="p">微信小程序的MessageHandler和微信公众号的MessageHandler的一些区别见下表，这也是微信小程序和微信公众号在消息处理上的一些差别，务必须要注意！ </p>
+<table class="table"><caption></caption><colgroup><col><col><col></colgroup><tbody class="tbody">
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">微信公众号</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">微信小程序</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"><p class="p">请求消息类型</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">众多</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1、 文本消息</p><p class="p">2、 图片消息</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"><p class="p">请求事件类型</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">众多</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">进入会话（客服）事件</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"><p class="p">返回类型</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1、基于</p><p class="p">Senparc.Weixin.MP.</p><p class="p">ResponseMessageBase</p><p class="p">的子类</p><p class="p">2、返回空字符串或"success"</p><p class="p">（也可以使用SuccessResponseMessage）</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">只返回空字符串或"success"</p><p class="p">（也可以使用SuccessResponseMessage）</p></td>
+</tr>
+</tbody></table>
+<p class="p">注意：微信小程序的文本及图片类型请求消息，是在“客服对话”的状态下转发到开发者服务器的。</p>
+<p class="p">第三步：创建Conntroller，为使用MessageHandler做准备：</p>
+<p class="p">using System;</p>
+<p class="p">using System.IO;</p>
+<p class="p">using System.Web.Configuration;</p>
+<p class="p">using System.Web.Mvc;</p>
+<p class="p">using Senparc.Weixin.MP.Entities.Request;</p>
+<p class="p">using Senparc.Weixin.MP.MvcExtension;</p>
+<p class="p">using Senparc.Weixin.MP.Sample.CommonService. WxOpenMessageHandler;</p>
+<p class="p">namespace Senparc.Weixin.MP.Sample.Controllers.WxOpen</p>
+<p class="p">{</p>
+<p class="p">/// &lt;summary&gt;</p>
+<p class="p">/// 微信小程序Controller</p>
+<p class="p">/// &lt;/summary&gt;</p>
+<p class="p">public partial class WxOpenController : Controller</p>
+<p class="p">{</p>
+<p class="p">public static readonly string Token = WebConfigurationManager.AppSettings["WxOpenToken"];//与微信公众账号后台的Token设置保持一致，区分大小写。</p>
+<p class="p">public static readonly string EncodingAESKey = WebConfigurationManager.AppSettings["WxOpenEncodingAESKey"];//与微信公众账号后台的EncodingAESKey设置保持一致，区分大小写。</p>
+<p class="p">public static readonly string AppId = WebConfigurationManager.AppSettings["WxOpenAppId"];//与微信公众账号后台的AppId设置保持一致，区分大小写。</p>
+<p class="p">}</p>
+<p class="p">}</p>
+<p class="p">源码：</p>
+<p class="p">第四步：添加Action，使用MessageHandler</p>
+<p class="p">微信小程序的Url验证逻辑和微信公众号是一致的，为此我们需要添加2个Action来分别处理验证（GET）的请求和微信转发的消息请求（POST）。</p>
+<p class="p">GET<strong class="ph b">请求：</strong></p>
+<p class="p">/// &lt;summary&gt;</p>
+<p class="p">/// GET请求用于处理微信小程序后台的URL验证</p>
+<p class="p">/// &lt;/summary&gt;</p>
+<p class="p">/// &lt;returns&gt;&lt;/returns&gt;</p>
+<p class="p">[HttpGet]</p>
+<p class="p">[ActionName("Index")]</p>
+<p class="p">public ActionResult Get(PostModel postModel, string echostr)</p>
+<p class="p">{</p>
+<p class="p">if (CheckSignature.Check(postModel.Signature, postModel.Timestamp,
+postModel.Nonce, Token))</p>
+<p class="p">{</p>
+<p class="p">return Content(echostr); //返回随机字符串则表示验证通过</p>
+<p class="p">}</p>
+<p class="p">else</p>
+<p class="p">{</p>
+<p class="p">return Content("failed:" + postModel.Signature + "," + MP.CheckSignature.GetSignature(postModel.Timestamp,
+postModel.Nonce, Token) + "。" +</p>
+<p class="p">"如果你在浏览器中看到这句话，说明此地址可以被作为微信小程序后台的Url，请注意保持Token一致。");</p>
+<p class="p">}</p>
+<p class="p">}</p>
+<p class="p">GET请求部署完毕之后，我们直接使用浏览器打开，可以看到一条提示，表明此Action已经可以被访问：</p>
+
+<p class="p">POST<strong class="ph b">请求：</strong></p>
+<p class="p">/// &lt;summary&gt;</p>
+<p class="p">/// 用户发送消息后，微信平台自动Post一个请求到这里，并等待响应XML。</p>
+<p class="p">/// &lt;/summary&gt;</p>
+<p class="p">[HttpPost]</p>
+<p class="p">[ActionName("Index")]</p>
+<p class="p">public ActionResult Post(PostModel postModel)</p>
+<p class="p">{</p>
+<p class="p">if (!CheckSignature.Check(postModel.Signature, postModel.Timestamp,
+postModel.Nonce, Token))</p>
+<p class="p">{</p>
+<p class="p">return Content("参数错误！");</p>
+<p class="p">}</p>
+<p class="p">postModel.Token = Token;//根据自己后台的设置保持一致</p>
+<p class="p">postModel.EncodingAESKey = EncodingAESKey;//根据自己后台的设置保持一致</p>
+<p class="p">postModel.AppId = AppId;//根据自己后台的设置保持一致</p>
+<p class="p">var maxRecordCount = 50;</p>
+<p class="p">//第一步：MessageHandler，对微信请求的详细判断操作都在这里面。</p>
+<p class="p">var messageHandler = new CustomMessageHandler(Request.InputStream,
+postModel, maxRecordCount);</p>
+<p class="p">//第二步：执行微信处理过程</p>
+<p class="p">messageHandler.Execute();</p>
+<p class="p">//第三步：返回结果</p>
+<p class="p">return new FixWeixinBugWeixinResult(messageHandler);</p>
+<p class="p">}</p>
+<p class="p">核心的“三部曲”和微信公众号保持了完全的一致。</p>
+<p class="p">现在，只需要在Web.config中配置正确的AppId等信息，就可以在小程序后台完成“消息推送”接口的配置：</p>
+
+<p class="p">随后，我们就能在微信小程序的预览状态或正式发布之后，测试消息处理能力，下文中的“高级接口”部分我们会丰富消息处理过程，并进行发布。</p>
+<p class="p">上下文</p>
+<p class="p">在CustomWxOpenMessageHandler的基类设置的时候，我们看到使用了一个叫MessageContext的泛型（MessageHandler&lt;MessageContext&gt;），这个MessageContext是Senparc.Weixin
+SDK提供的一个默认的消息上下文处理类。</p>
+<p class="p">MessageContext主要用于消息由微信服务器统一转发的情况下，无法针对单个用户对话使用Session的情况，同时也具有消息去重等方法。这个默认的类已经能够处理最基础的情况，如果您的应用不是很复杂，那么直接用这个类就行了。如果项目比较复杂，您也可以根据自己的需要创建一个自己的类（实现IMessageContext接口），或继承这个类之后，再扩展更多的属性（例如工作流和比较特殊的分布式缓存，等等）。</p>
+<p class="p">上下文除了弥补Session的作用存储个人数据以外，还提供了完整对话记录的保存，对于机器人回复等场景都具有非常重要的作用。</p>
+<p class="p">Senparc.Weixin SDk已经对上下文功能进行了比较充分的解耦，使之成为一个独立的模块，可以进行自由的重写和扩展。开发者可以自由设置上下文保存的时间及条数。</p>
+<p class="p">微信服务器在没有迅速收到应用程序服务器回应的情况下，在5秒有效等待时间内，内会连续发送共计3条相同的消息，这会给程序带来一些困扰，因此，消息去重在MessageHandler里面是一个非常重要的“标配”。</p>
+<p class="p">消息去重已经在Senparc.Weixin.MP.MessageHandlers.MessageHandler.cs的OnExecuting()方法中实现，默认为开启，如果在某些特殊需求下需要关闭，可以将OmitRepeatedMessage参数设置为false。</p>
+<p class="p">由于去重方法是在OnExecuting()方法中优先执行，因此OmitRepeatedMessage的设置必须早于OnExecuting()，可以在MessageHandler的构造函数中，也可以在MessageHandler实例化之后进行设置，例如：</p>
+<p class="p">var messageHandler = new CustomMessageHandler(Request.InputStream,
+postModel);//接收消息（第一步）</p>
+<p class="p">messageHandler. OmitRepeatedMessage = false;</p>
+<p class="p">messageHandler.Execute();//执行微信处理过程</p>
+<p class="p">消息加密</p>
+<p class="p">出于消息安全考虑，微信提供了消息加密的方法，并且推荐使用。微信公众号的后台会要求开发者填写EncodingAESKey，或自动生成，如下图：</p>
+
+<p class="p">消息加密的状态在MessageHandler内部已经进行了自动判断及相关解码、编码的处理，因此开发者无因为消息加密的类型编写任何代码，只需要在微信后台按需设置即可。</p>
+<p class="p">在数据格式方面，微信小程序比微信公众号多提供了一个可选的JSON数据格式， Senparc.Weixin.WxOpen.dll将在v1.2版本提供对JSON格式的支持，目前请使用和微信公众号相同的XML格式。</p>
+<p class="p">AccessToken令牌处理</p>
+<p class="p">AccessToken是用于提供高级接口请求身份验证的令牌，由AppId及Secret通过API获得。AppId及Secret可以在微信小程序后台的【设置】&gt;【开发设置】中找到或生成。</p>
+<p class="p">微信小程序的AccessToken令牌规则及使用方式与公众号完全兼容，因此我们在小程序模块中，共享了公众号的AccessToken处理模块：AccessTokenContainer。</p>
+<p class="p">AccessTokenContainer的作用是自动处理AccessToken的过期、储存（包括分布式缓存）等问题，让开发者可以专注到逻辑开发中，从而彻底忽略由于AccessToken延伸出来的一堆麻烦事。</p>
+<p class="p">AccessTokenContainer的使用要求开发者在Global或App_Start中对AppId及Secret进行注册（当然也可以在需要用到AccessToken之前的任意程序位置进行），例如：</p>
+<p class="p">protected void Application_Start()</p>
+<p class="p">{</p>
+<p class="p">/* 微信配置开始</p>
+<p class="p">*</p>
+<p class="p">* 建议按照以下顺序进行注册，尤其须将缓存放在第一位！</p>
+<p class="p">*/</p>
+<p class="p">RegisterWeixinCache(); //注册分布式缓存（按需，如果需要，必须放在第一个）</p>
+<p class="p">RegisterWeixinThreads(); //激活微信缓存及队列线程（必须）</p>
+<p class="p">RegisterSenparcWeixin(); //注册Demo所用微信公众号的账号信息（按需）</p>
+<p class="p">RegisterSenparcQyWeixin(); //注册Demo所用微信企业号的账号信息（按需）</p>
+<p class="p">RegisterWeixinPay(); //注册微信支付（按需）</p>
+<p class="p">RegisterWeixinThirdParty(); //注册微信第三方平台（按需）</p>
+<p class="p">ConfigWeixinTraceLog(); //配置微信跟踪日志（按需）</p>
+<p class="p">/* 微信配置结束 */</p>
+<p class="p">}</p>
+<p class="p">/// &lt;summary&gt;</p>
+<p class="p">/// 注册Demo所用微信公众号的账号信息</p>
+<p class="p">/// &lt;/summary&gt;</p>
+<p class="p">private void RegisterSenparcWeixin()</p>
+<p class="p">{</p>
+<p class="p">//注册公众号</p>
+<p class="p">AccessTokenContainer.Register(</p>
+<p class="p">System.Configuration.ConfigurationManager.AppSettings["WeixinAppId"],</p>
+<p class="p">System.Configuration.ConfigurationManager.AppSettings["WeixinAppSecret"],</p>
+<p class="p">"【盛派网络小助手】公众号");</p>
+<p class="p">//注册小程序（完美兼容）</p>
+<p class="p">AccessTokenContainer.Register(</p>
+<p class="p">System.Configuration.ConfigurationManager.AppSettings["WxOpenAppId"],</p>
+<p class="p">System.Configuration.ConfigurationManager.AppSettings["WxOpenAppSecret"],</p>
+<p class="p">"【盛派互动】小程序");</p>
+<p class="p">}</p>
+<p class="p">上述红色的代码是和注册AccessTokenContainer有关的，实际上只需要添加3行代码，即可完全忘掉AccessToken这回事。</p>
+<p class="p">高级接口</p>
+<p class="p">小程序目前提供了包括二维码、Code换取、模板消息等少量的高级接口，并且兼容了微信公众号的文本及图片类型的客服接口（48小时内主动推送）。</p>
+<p class="p">Senparc.Weixin SDK为高级接口提供了非常高效、便捷的处理方式，用户如果已经注册了AppId及Secret，那么在调用高级接口的时候无需再提供AccessToken，只需提供AppId即可，AccessTokenContainer会自动识别传入的字符串属于AppId或是Secret，并对令牌过期等问题进行自动处理，确保在最大的可能性下面，开发者可以一次性得到期望的响应结果。</p>
+<p class="p">例如上文介绍的消息处理过程中，我们可以使用高级接口来即时回复用户：</p>
+<p class="p">/// &lt;summary&gt;</p>
+<p class="p">/// 处理文字请求</p>
+<p class="p">/// &lt;/summary&gt;</p>
+<p class="p">/// &lt;returns&gt;&lt;/returns&gt;</p>
+<p class="p">public override IResponseMessageBase OnTextRequest(RequestMessageText
+requestMessage)</p>
+<p class="p">{</p>
+<p class="p">//TODO:这里的逻辑可以交给Service处理具体信息，参考OnLocationRequest方法或/Service/LocationSercice.cs</p>
+<p class="p">//这里可以进行数据库记录或处理</p>
+<p class="p">//发送一条客服消息回复用户</p>
+<p class="p">var result = new StringBuilder();</p>
+<p class="p">result.AppendFormat("您刚才发送了文字信息：{0}\r\n\r\n", requestMessage.Content);</p>
+<p class="p">if (CurrentMessageContext.RequestMessages.Count &gt; 1)</p>
+<p class="p">{</p>
+<p class="p">result.AppendFormat("您刚才还发送了如下消息（{0}/{1}）：\r\n", CurrentMessageContext.RequestMessages.Count,</p>
+<p class="p">CurrentMessageContext.StorageData);</p>
+<p class="p">for (int i = CurrentMessageContext.RequestMessages.Count - 2; i
+&gt;= 0; i--)</p>
+<p class="p">{</p>
+<p class="p">var historyMessage = CurrentMessageContext.RequestMessages[i];</p>
+<p class="p">string content = null;</p>
+<p class="p">if (historyMessage is RequestMessageText)</p>
+<p class="p">{</p>
+<p class="p">content = (historyMessage as RequestMessageText).Content;</p>
+<p class="p">}</p>
+<p class="p">else if (historyMessage is RequestMessageEvent_UserEnterTempSession)</p>
+<p class="p">{</p>
+<p class="p">content = "[进入客服]";</p>
+<p class="p">}</p>
+<p class="p">else</p>
+<p class="p">{</p>
+<p class="p">content = string.Format("[非文字信息:{0}]", historyMessage.GetType().Name);</p>
+<p class="p">}</p>
+<p class="p">result.AppendFormat("{0} 【{1}】{2}\r\n",</p>
+<p class="p">historyMessage.CreateTime.ToShortTimeString(),</p>
+<p class="p">historyMessage.MsgType.ToString(),</p>
+<p class="p">content</p>
+<p class="p">);</p>
+<p class="p">}</p>
+<p class="p">result.AppendLine("\r\n");</p>
+<p class="p">}</p>
+<p class="p">//处理微信换行符识别问题</p>
+<p class="p">var msg = result.ToString().Replace("\r\n", "\n");</p>
+<p class="p">//使用微信公众号的接口，完美兼容</p>
+<p class="p">Senparc.Weixin.MP.AdvancedAPIs.CustomApi.SendText(appId, WeixinOpenId,
+msg);</p>
+<p class="p">return new SuccessResponseMessage();</p>
+<p class="p">//和公众号一样回复XML是无效的：</p>
+<p class="p">// return new SuccessResponseMessage()</p>
+<p class="p">// {</p>
+<p class="p">// ReturnText = string.Format(@"&lt;?xml version=""1.0"" encoding=""utf-8""?&gt;</p>
+<p class="p">//&lt;xml&gt;</p>
+<p class="p">// &lt;ToUserName&gt;&lt;![CDATA[{0}]]&gt;&lt;/ToUserName&gt;</p>
+<p class="p">// &lt;FromUserName&gt;&lt;![CDATA[{1}]]&gt;&lt;/FromUserName&gt;</p>
+<p class="p">// &lt;CreateTime&gt;1357986928&lt;/CreateTime&gt;</p>
+<p class="p">// &lt;MsgType&gt;&lt;![CDATA[text]]&gt;&lt;/MsgType&gt;</p>
+<p class="p">// &lt;Content&gt;&lt;![CDATA[TNT2]]&gt;&lt;/Content&gt;</p>
+<p class="p">//&lt;/xml&gt;",requestMessage.FromUserName,requestMessage.ToUserName)</p>
+<p class="p">// };</p>
+<p class="p">}</p>
+<p class="p">其中高级接口调用代码只需要一行：</p>
+<p class="p">Senparc.Weixin.MP.AdvancedAPIs.CustomApi.SendText(appId, WeixinOpenId,
+msg);</p>
+<p class="p">进入客服的状态也用同样的方式处理：</p>
+<p class="p">public override IResponseMessageBase OnEvent_UserEnterTempSessionRequest(RequestMessageEvent_UserEnterTempSession
+requestMessage)</p>
+<p class="p">{</p>
+<p class="p">//进入客服</p>
+<p class="p">var msg = "欢迎您！这条消息来自Senparc.Weixin进入客服事件。";</p>
+<p class="p">Senparc.Weixin.MP.AdvancedAPIs.CustomApi.SendText(appId, WeixinOpenId,
+msg);</p>
+<p class="p">return DefaultResponseMessage(requestMessage);</p>
+<p class="p">}</p>
+<p class="p">我们再来改写图片处理方式（注意，这次我们会使用异步模式）：</p>
+<p class="p">public override IResponseMessageBase OnImageRequest(RequestMessageImage
+requestMessage)</p>
+<p class="p">{</p>
+<p class="p">//发来图片，进行处理</p>
+<p class="p">Task.Factory.StartNew(async () =&gt;</p>
+<p class="p">{</p>
+<p class="p">await Senparc.Weixin.MP.AdvancedAPIs.CustomApi.SendTextAsync(appId,
+WeixinOpenId, "刚才您发送了这张图片：");</p>
+<p class="p">await Senparc.Weixin.MP.AdvancedAPIs.CustomApi.SendImageAsync(appId,
+WeixinOpenId, requestMessage.MediaId);</p>
+<p class="p">});</p>
+<p class="p">return DefaultResponseMessage(requestMessage);</p>
+<p class="p">}</p>
+<p class="p">上述代码中，使用了和微信公众号兼容的图片高级接口。</p>
+<p class="p">在微信小程序的预览或发布状态下，用户可以收到如下回复：</p>
+
+<p class="p">进入客服状态及发送文字及回复</p>
+
+<p class="p">发送图片及回复</p>
+<p class="p">异步开发</p>
+<p class="p">在高并发的场景下，异步编程可以说是入门级的一个必备。</p>
+<p class="p">在Senparc.Weixin SDK中，我们总共提供了400多个异步方法，除可能的个别遗漏以外，已经覆盖了所有的高级接口，方法命名规则为同步方法名后加Async。我们的目标是覆盖所有并发场景下会成为瓶颈的接口，其中MessageHandler的异步版本也已经计划在Senparc.Weixin.dll
+v4.11中上线。</p>
+<p class="p">异步方法的使用在.NET 4.5之后已经变得非常简单，例如下面的是文字消息的同步方法调用：</p>
+<p class="p">AdvancedAPIs.CustomApi.SendText(appId, WeixinOpenId, "这是一条文字信息");</p>
+<p class="p">使用异步方法：</p>
+<p class="p">Task.Factory.StartNew(async () =&gt;</p>
+<p class="p">{</p>
+<p class="p">await AdvancedAPIs.CustomApi.SendTextAsync(appId, WeixinOpenId,
+"这是一条文字信息");</p>
+<p class="p">});</p>
+<p class="p">分布式缓存</p>
+<p class="p">在需要考虑缓存生命周期、并发量等诸多因素的情况下，我们通常都会采用负载均衡来环节服务器压力，这种情况下几乎都会用到分布式缓存。</p>
+<p class="p">尤其对于微信的公众号的AccessToken，同一时间内真正有效的AccessToken只有一个（当然也存在一段时间的有效缓存，企业号是没有这个问题的），如果多台服务器各自管理自己内存中的AccessToken数据，必然会导致一场不会停止的“令牌争夺战”：各自判断AccessToken失效之后，刷新私有的AccessToken，直到当天的AccessToken获取次数被用完，系统无法提供高级接口服务。</p>
+<p class="p">这种情况下就需要一个统一的“数据中心”来储存AccessToken等独一份的信息，实现的方法有很多：分布式缓存、数据库、文件、数据交换模块等等，通常我们会首选分布式缓存。</p>
+<p class="p">Senparc.Weixin SDK为分布式缓存做了比较细致的架构，可以适应许多复杂情况下微信对于缓存的需求，并且提供了Memcached（Senparc.Weixin.Cache.Memcached.dll）和Redis（Senparc.Weixin.Cache.Redis.dll）两种缓存的实现。相比之下我们更推荐Redis，也在Redis模块上花了更多的精力进行优化。</p>
+<p class="p">Senparc.Weixin SDK已经实现了缓存策略的热切换，开发者可以在任意时候切换缓存状态（本地缓存、Reids、Memcached或自己扩展的任何缓存策略），并且不会影响到AccessTokenContainner等模块的稳定性。</p>
+<p class="p">Senparc.Weixin SDK默认缓存采用单机的本地内存，缓存生命周期和应用程序紧密联系，如果要突破这样的限制，或是在分布式环境中使用，就需要引入外部的缓存，以Redis缓存为例，我们只需要3行代码即可完成切换：</p>
+<p class="p">//定义Redis连接字符串</p>
+<p class="p">var redisConfiguration = System.Configuration.ConfigurationManager.AppSettings["Cache_Redis_Configuration"];</p>
+<p class="p">//设置Redis连接字符串</p>
+<p class="p">RedisManager.ConfigurationOption = redisConfiguration;</p>
+<p class="p">//指定缓存策略实例</p>
+<p class="p">CacheStrategyFactory.RegisterObjectCacheStrategy(() =&gt; RedisObjectCacheStrategy.Instance);</p>
+<p class="p">只要配置正确，接下来的存取、序列化、储存格式、key管理等问题开发者都不必关心，无论使用什么缓存从策略，逻辑代码都无需做任何修改，Senparc.Weixin
+SDK的缓存策略接口已经对行为进行了严格规范，实现类会针对不同的缓存进行差别化的处理。</p>
+<p class="p">同步锁、WebSocket、跟踪日志及异常处理</p>
+<p class="p">请期待下一篇。</p>
+<p class="p">本文的Demo已经发布到GitHub的开源项目中，位于：https://github.com/JeffreySu/WeiXinMPSDK/tree/master/src/Senparc.Weixin.MP.Sample</p>
+<section class="section"><h2 class="title sectiontitle">参考</h2><ol class="ol">
+<li class="li"><a class="xref" href="https://www.google.com/url?sa=t&amp;rct=j&amp;q=&amp;esrc=s&amp;source=web&amp;cd=&amp;cad=rja&amp;uact=8&amp;ved=2ahUKEwiVvdW2r_uEAxWoTEEAHX0sDokQFnoECA0QAQ&amp;url=https%3A%2F%2Fblog.csdn.net%2Fsenparc%2Farticle%2Fdetails%2F131325392&amp;usg=AOvVaw0G5IfMLAYJ5alWvqhfFQIl&amp;opi=89978449" target="_blank" rel="external noopener">Senparc.Weixin SDK 微信公众号.NET 开发教程索引原创</a></li>
+<li class="li"><a class="xref" href="https://www.google.com/url?sa=t&amp;rct=j&amp;q=&amp;esrc=s&amp;source=web&amp;cd=&amp;cad=rja&amp;uact=8&amp;ved=2ahUKEwiVvdW2r_uEAxWoTEEAHX0sDokQFnoECA4QAQ&amp;url=https%3A%2F%2Fwww.cnblogs.com%2FAlex80%2Fp%2F14726504.html&amp;usg=AOvVaw16BPrWwh1aAeYVnV5Flrvf&amp;opi=89978449" target="_blank" rel="external noopener">使用Senparc.Weixin.WxOpen开发高可用的微信小程序</a></li>
+<li class="li"><a class="xref" href="https://www.google.com/url?sa=t&amp;rct=j&amp;q=&amp;esrc=s&amp;source=web&amp;cd=&amp;cad=rja&amp;uact=8&amp;ved=2ahUKEwiVvdW2r_uEAxWoTEEAHX0sDokQFnoECB8QAQ&amp;url=https%3A%2F%2Fsdk.weixin.senparc.com%2FDocs%2FWxOpen%2F&amp;usg=AOvVaw3xvBmv5OzJb_8OlwR1M_Cm&amp;opi=89978449" target="_blank" rel="external noopener">Senparc.Weixin.WxOpen 微信小程序模块</a></li>
+</ol></section>
+</div>
+<nav role="navigation" class="related-links"><div class="familylinks"><div class="parentlink"><strong>父主题：</strong> <a class="link" href="%E5%BE%AE%E4%BF%A1.html">微信</a></div></div></nav></article></main></body></html>

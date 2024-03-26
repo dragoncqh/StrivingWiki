@@ -1,0 +1,128 @@
+<!DOCTYPE html
+  SYSTEM "about:legacy-compat">
+<html lang="zh-cn"><head><meta charset="UTF-8"><meta name="copyright" content="(C) 版权 2024"><meta name="generator" content="DITA-OT"><meta name="description" content=""><title>Auto编程语言使用Pcomm库的串口通讯例子</title><link rel="stylesheet" type="text/css" href="../../commonltr.css">
+<link rel="stylesheet" type="text/css" href="../../common-extended.css"></head><body id="Auto编程语言使用Pcomm库的串口通讯例子-BF99B3FA"><main role="main"><article role="article" aria-labelledby="ariaid-title1">
+<h1 class="title topictitle1" id="ariaid-title1">Auto编程语言使用Pcomm库的串口通讯例子</h1>
+
+
+<div class="body conbody"><p class="shortdesc"></p>
+<p class="p"></p>
+<p class="p">受<a class="xref" href="http://bbs.aau.cn/space-uid-7294.html" target="_blank" rel="external noopener"><strong class="ph b">锦州思华年</strong></a> 兄影响，也写了一个串口通讯程序，只是实现了最简单的发送接收功能...</p>
+<p class="p">import win;</p>
+<p class="p">import string;</p>
+<p class="p">&nbsp;</p>
+<p class="p">//加载dll,声明函数</p>
+<p class="p">Pcom = raw.loadDll("\Pcomm.dll");</p>
+<p class="p">//打开串口,正确返回0;C代码int WINAPI sio_open(int port);</p>
+<p class="p">sio_open = Pcom.api("sio_open","int(int port)");</p>
+<p class="p">//关闭串口,正确返回0;C代码int WINAPI sio_close(int port);</p>
+<p class="p">sio_close = Pcom.api("sio_close","int(int port)" );</p>
+<p class="p">//设置串口参数,正确返回0;C代码int WINAPI sio_ioctl(int port, int baud, int
+mode);</p>
+<p class="p">sio_ioctl = Pcom.api("sio_ioctl","int(int port, int baud, int mode)"
+);</p>
+<p class="p">//读取缓冲区数据,返回数据长度,为0表示没有读到数据;C代码int WINAPI sio_read(int port, char
+*buf, int len);</p>
+<p class="p">sio_read = Pcom.api("sio_read","int(int port, pointer buf, int
+len)");</p>
+<p class="p">//写入缓冲区数据,返回数据长度;C代码int WINAPI sio_write(int port, char *buf, int
+len);</p>
+<p class="p">sio_write = Pcom.api("sio_write","int(int port, pointer buf, int
+len)");</p>
+<p class="p">//设置中断函数,用来在接收大量数据的时候产生中断;C代码int WINAPI sio_cnt_irq(int port,VOID
+(CALLBACK *func)(int port), int count);</p>
+<p class="p">sio_cnt_irq = Pcom.api("sio_cnt_irq","int(int port, func(int port),
+int count)");</p>
+<p class="p">&nbsp;</p>
+<p class="p">&nbsp;</p>
+<p class="p">//串口打开函数</p>
+<p class="p">comopen = function(port,baud,parity,stopbits,wordlength){</p>
+<p class="p">var ret = 0;</p>
+<p class="p">var i = 0;</p>
+<p class="p">&nbsp;</p>
+<p class="p">ret = sio_open(port);//打开串口</p>
+<p class="p">if(ret != 0){</p>
+<p class="p">win.msgboxTimeout("错误码："+ret,"串口打开错误");</p>
+<p class="p">return 0; </p>
+<p class="p">}</p>
+<p class="p">&nbsp;</p>
+<p class="p">ret = sio_ioctl (port, baud, parity| stopbits | wordlength );//设置串口参数：波特率、奇偶校验、停止位、数据位</p>
+<p class="p">if(ret != 0){</p>
+<p class="p">win.msgboxTimeout("错误码："+ret,"串口设置错误");</p>
+<p class="p">return 0; </p>
+<p class="p">} </p>
+<p class="p">}</p>
+<p class="p">&nbsp;</p>
+<p class="p">// 串口发送数据函数</p>
+<p class="p">&nbsp;</p>
+<p class="p">comwrite = function(port,str,buf){</p>
+<p class="p">str = string.replace(str,"\s","");//去除空格及换行符 </p>
+<p class="p">for(i=1;#str;2){</p>
+<p class="p">buf[(i+1)/2] = eval("0X"+string.sub(str,i,i+1));</p>
+<p class="p">}</p>
+<p class="p">var len = sio_write(port,buf,#str/2) </p>
+<p class="p">return len;</p>
+<p class="p">}</p>
+<p class="p">&nbsp;</p>
+<p class="p">&nbsp;</p>
+<p class="p">//串口接收数据函数</p>
+<p class="p">&nbsp;</p>
+<p class="p">comread = function(port,buf){</p>
+<p class="p">var len = sio_read(port,buf,#buf);</p>
+<p class="p">var str = ""</p>
+<p class="p">for(i=1;len;1){</p>
+<p class="p">str = str++" "++string.right(string.format("%02X", buf[ i ]),2);//默认转换成有符号字节，因此取最右边两位</p>
+<p class="p">}</p>
+<p class="p">return str,len;</p>
+<p class="p">}</p>
+<p class="p">&nbsp;</p>
+<p class="p">&nbsp;</p>
+<p class="p">io.open();</p>
+<p class="p">var port = 1;</p>
+<p class="p">var baud = 0x0c;//波特率9600</p>
+<p class="p">/*baud = (bits/sec)</p>
+<p class="p">0 = 50 6 = 600 12 = 9600 18 = 460800</p>
+<p class="p">1 = 75 7 = 1200 13 = 19200 19 = 921600</p>
+<p class="p">2 = 110 8 = 1800 14 = 38400</p>
+<p class="p">3 = 134.5 9 = 2400 15 = 57600</p>
+<p class="p">4 = 150 10 = 4800 16 = 115200</p>
+<p class="p">5 = 300 11 = 7200 17 = 230400</p>
+<p class="p">*/</p>
+<p class="p">var wordlength = 0x03;//数据位bit_8</p>
+<p class="p">/*bit_cnt (bit 0, 1) = 0x00 = bit_5</p>
+<p class="p">0x01 = bit_6</p>
+<p class="p">0x02 = bit_7</p>
+<p class="p">0x03 = bit_8</p>
+<p class="p">*/ </p>
+<p class="p">var parity = 0x18; //奇偶校验EVEN</p>
+<p class="p">/*parity (bit 3,4 5) = 0x00 = none</p>
+<p class="p">0x08 = odd</p>
+<p class="p">0x18 = even</p>
+<p class="p">0x28 = mark</p>
+<p class="p">0x38 = space</p>
+<p class="p">*/ </p>
+<p class="p">var stopbits = 0x00;//停止位stop_1</p>
+<p class="p">/*stop_bit (bit 2) = 0x00 = stop_1</p>
+<p class="p">0x04 = stop_2</p>
+<p class="p">*/</p>
+<p class="p">&nbsp;</p>
+<p class="p">&nbsp;</p>
+<p class="p">comopen(port,baud,parity,stopbits,wordlength);//打开串口并设置串口参数</p>
+<p class="p">var cdata = raw.malloc(256); //分配内存</p>
+<p class="p">&nbsp;</p>
+<p class="p">io.print("请输入发送指令，然后回车")</p>
+<p class="p">var str = io.getText();</p>
+<p class="p">len = comwrite(port,str,cdata); //发送</p>
+<p class="p">io.print("发送"+len+"字节："+str);</p>
+<p class="p">win.delay(80);</p>
+<p class="p">str1, len1 = comread(port,cdata) //接收</p>
+<p class="p">io.print("接收"+len1+"字节："+str1); </p>
+<p class="p">win.delay(80);</p>
+<p class="p">&nbsp;</p>
+<p class="p">sio_close(port); //关闭串口</p>
+<p class="p">&nbsp;</p>
+<p class="p">execute("pause") //按任意键继续</p>
+<p class="p">io.close();//关闭控制台</p>
+<p class="p">&nbsp;</p>
+</div>
+<nav role="navigation" class="related-links"><div class="familylinks"><div class="parentlink"><strong>父主题：</strong> <a class="link" href="Pcomm%E4%B8%B2%E5%8F%A3%E5%BA%93.html">Pcomm串口库</a></div></div></nav></article></main></body></html>

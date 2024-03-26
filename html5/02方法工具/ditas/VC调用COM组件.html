@@ -1,0 +1,158 @@
+<!DOCTYPE html
+  SYSTEM "about:legacy-compat">
+<html lang="zh-cn"><head><meta charset="UTF-8"><meta name="copyright" content="(C) 版权 2024"><meta name="generator" content="DITA-OT"><meta name="description" content=""><title>VC调用COM组件实例</title><link rel="stylesheet" type="text/css" href="../../commonltr.css">
+<link rel="stylesheet" type="text/css" href="../../common-extended.css"></head><body id="VC调用COM组件-31CCC912"><main role="main"><article role="article" aria-labelledby="ariaid-title1">
+<h1 class="title topictitle1" id="ariaid-title1">VC调用COM组件实例</h1>
+
+
+<div class="body conbody"><p class="shortdesc"></p>
+<p class="p"></p>
+<section class="section"><h2 class="title sectiontitle">项目需求与文件清单</h2><p class="p">项目需求：使用通信接口模块从免疫助手客户端获取接种登记信息的相关信息</p><ol class="ol">
+<li class="li"><p class="p">EpiDBServiceV4.dll</p></li>
+<li class="li"><p class="p">EpiDBServiceV4.tlb</p></li>
+<li class="li"><p class="p">金苗免疫助手接种登记信息获取接口.doc</p></li>
+</ol></section>
+<section class="section"><h2 class="title sectiontitle">操作流程与COM接口</h2><p class="p">操作流程简述：</p><p class="p">1 调用接口中ConnectDB函数。连接数据库。</p><p class="p">2 连接数据库成功后，调用接口中 QueryBatchShotInfo 函数。获取受种者接种信息。</p><p class="p">3 获取信息后，调用接口中Disconnect函数。断开数据库连接。</p><p class="p">模块CLSID参数：</p><p class="p">Class ID (CLSID):EpiDBServiceV4.TEpiDBServiceV4</p><p class="p">三个接口：</p><ol class="ol">
+<li class="li"><p class="p">连接数据库：ConnectDB(ADatabaseFile);</p><p class="p">输入参数ADatabaseFile为数据库连接字符串。示例：127.0.0.1:E:\MyData\EpiDB.fdb</p></li>
+<li class="li"><p class="p">获取受种者接种信息：QueryBatchShotInfo(AUpdateID, ATokenID, AResult);</p><p class="p">输入参数：AUpdateID, 前次调用时数据包中提供的最大UpdateID值。第一次调用时，值为-1。</p><p class="p">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp;&nbsp;&nbsp;ATokenID, 8C92806D-604A-4332-91B3-1351535D8E83</p><p class="p">输出参数：AResult，数据包格式见 3.1。</p></li>
+<li class="li"><p class="p">断开数据库连接：Disconnect();</p></li>
+</ol></section>
+<section class="section"><h2 class="title sectiontitle">COM组件注册</h2><p class="p"></p><p class="p">通信接口模块EpiDBServiceV4.DLL
+使用 COM 接口，使用 regsvr32 命令注册。</p><p class="p">注册指令：</p><pre class="pre codeblock"><code>regsvr32 D:\Lnhoo.Device.Driver\01_build\COMClient\EpiDBServiceV4.dll
+</code></pre><p class="p">注销指令：</p><p class="p">regsvr32 EpiDBServiceV4.dll /u</p><p class="p">.NET平台注册指令：</p><pre class="pre codeblock"><code>cd C:\Windows\Microsoft.NET\Framework\v4.0.30319\
+C:
+regasm E:\user\desktop\现场文档\客户端服务接口\CSCOM\debug\EpiDBServiceV4.dll
+</code></pre><p class="p">注销指令：</p><p class="p">regasm E:\user\desktop\现场文档\客户端服务接口\CSCOM\debug\EpiDBServiceV4.dll
+&nbsp;/u</p></section>
+<section class="section"><h2 class="title sectiontitle">启动FB数据库</h2>启动FB： D:\Lnhoo.Device.Driver\01_build\COMClient\firebird\bin\EpiJMLoader.exe</section>
+<section class="section"><h2 class="title sectiontitle">预备动作</h2><div class="p">在工程中导入组件或类型库：<pre class="pre codeblock"><code>#include "stdafx.h"
+#include "COM_CCOMPTR.h"
+#include &lt;stdlib.h&gt;
+#include "objbase.h"
+#include "atlbase.h"
+
+#import "EpiDBServiceV4.dll" named_guids raw_interfaces_only
+using namespace  EpiDBServiceV4;
+//或: #import "组件所在目录/myCom.dll" no_namespace</code></pre></div><p class="p"></p></section>
+<section class="section"><h2 class="title sectiontitle">方法1</h2><p class="p"></p><div class="p"><pre class="pre codeblock"><code>CoInitialize(NULL);
+CLSID clsid;
+CLSIDFromProgID(OLESTR("EpiDBServiceV4.TEpiDBServiceV4"),&amp;clsid);
+CComPtr&lt;IEpiDBServiceV4&gt; pCComPtr;//智能指针
+pCComPtr.CoCreateInstance(clsid);
+pCComPtr-&gt;ConnectDB("");
+pCComPtr.Release();//小心哦!!请看最后的“注意”
+CoUninitialize();</code></pre></div><p class="p">COM中的智能指针实际上是重载了-&gt;的类,目的是为了简化引用记数,几不需要程序员显示的调用AddRef()和Release(),但是为什么我们在Method
+1中pGetRes.Release(),问题在与,我们的智能指针pGetRes生命周期的结束是在CoUninitialize()之后,CoInitialize所开的套间在CoUninitialize()后已经被关闭,而pGetRes此时发生析构,导致了程序的崩溃,解决这个问题的另一个方法是
+ </p><pre class="pre codeblock"><code>CoInitialize(NULL);
+CLSID clsid;
+CLSIDFromProgID(OLESTR("myCom.GetRes"),&amp;clsid);
+{
+	CComPtr&lt;IGetRes&gt; pGetRes;//智能指针
+	pGetRes.CoCreateInstance(clsid);
+	pGetRes-&gt;Hello();
+}
+CoUninitialize();</code></pre></section>
+<section class="section"><h2 class="title sectiontitle">方法2</h2><p class="p"></p><div class="p"><pre class="pre codeblock"><code>CoInitialize(NULL);
+CLSID clsid;
+HRESULT hr=CLSIDFromProgID(OLESTR("EpiDBServiceV4.TEpiDBServiceV4"),&amp;clsid);
+IEpiDBServiceV4 *ptr;
+hr=CoCreateInstance(clsid,NULL,CLSCTX_INPROC_SERVER,
+			  __uuidof(IEpiDBServiceV4),(LPVOID*)&amp;ptr);
+ptr-&gt;ConnectDB("");
+CoUninitialize();</code></pre></div></section>
+<section class="section"><h2 class="title sectiontitle">方法3</h2><p class="p"></p><div class="p"><pre class="pre codeblock"><code>CoInitialize(NULL);
+HRESULT hr;
+CLSID clsid;
+hr=CLSIDFromProgID(OLESTR("EpiDBServiceV4.TEpiDBServiceV4"),&amp;clsid);
+IEpiDBServiceV4* ptr;
+//使用CoCreateClassObject创建一个组件(特别是mutilThreads)的多个对象的时候，效率更高.
+IClassFactory* p_classfactory;
+hr=CoGetClassObject(clsid,CLSCTX_INPROC_SERVER,
+                  NULL,IID_IClassFactory, 
+                  (LPVOID*)&amp;p_classfactory);
+p_classfactory-&gt;CreateInstance(NULL,__uuidof(IEpiDBServiceV4), (LPVOID*)&amp;ptr);
+ptr-&gt;ConnectDB("");
+//IEpiDBServiceV4Ex* ptrEx;
+//p_classfactory-&gt;CreateInstance(NULL,__uuidof(IEpiDBServiceV4Ex), (LPVOID*)&amp;ptrEx);
+//ptrEx-&gt;HelloEx();
+CoUninitialize();</code></pre></div></section>
+<section class="section"><h2 class="title sectiontitle">方法4</h2><p class="p"></p><pre class="pre codeblock"><code>extern "C" const GUID __declspec(selectany) LIBID_EpiDBServiceV4 =
+    {0xf6fc6833,0x1e8e,0x4b65,{0x92,0xf4,0x12,0x46,0x1d,0x91,0x4f,0xf9}};
+extern "C" const GUID __declspec(selectany) IID_IEpiDBServiceV4 =
+    {0x559cce40,0x22c5,0x4e98,{0xb1,0x3e,0x2f,0x82,0xf9,0x7c,0xcf,0x17}};
+extern "C" const GUID __declspec(selectany) CLSID_TEpiDBServiceV4 =
+    {0xe86c7e26,0x9590,0x4549,{0xa1,0xf1,0xc3,0x7b,0xc4,0x48,0xba,0xa0}};
+ </code></pre><div class="p"><pre class="pre codeblock"><code>typedef HRESULT (__stdcall * pfnFun1)(REFCLSID,REFIID,void**);
+pfnFun1 fnFun1= NULL;
+HINSTANCE hdllInst = LoadLibrary("EpiDBServiceV4.dll");
+fnFun1=(pfnFun1)GetProcAddress(hdllInst,"DllGetClassObject");
+if (fnFun1 != 0)
+{
+	IClassFactory* pcf = NULL;
+	HRESULT hr=(fnFun1)(CLSID_TEpiDBServiceV4, IID_IClassFactory,(void**)&amp;pcf);
+	if (SUCCEEDED(hr) &amp;&amp; (pcf != NULL))
+	{
+		IEpiDBServiceV4* pEpiDBServiceV4 = NULL;
+		hr = pcf-&gt;CreateInstance(NULL, IID_IEpiDBServiceV4, (void**)&amp;pEpiDBServiceV4);
+		if (SUCCEEDED(hr)   &amp;&amp; (pEpiDBServiceV4 != NULL))
+		{
+			pEpiDBServiceV4-&gt;ConnectDB("");
+			pEpiDBServiceV4-&gt;Release();
+		}
+			pcf-&gt;Release();
+	}
+} 
+FreeLibrary(hdllInst);</code></pre></div></section>
+<section class="section"><h2 class="title sectiontitle">方法5</h2><p class="p">通过ClassWizard利用类型库生成包装类，不过前提是com组件的接口必须是派生自IDispatch,具体方法：调出添加类向导(.NET中)，选择类型库中MFC类，打开，选择"文件"，选择"EpiDBServiceV4.dll"或"EpiDBServiceV4.tlb",接下来会出来该EpiDBServiceV4.dll中的所有接口，选择你想生成的接口包装类后，向导会自动生成相应的.h文件.这样你就可以在你的MFC中像使用普通类那样使用组件了.（CreateDispatch("EpiDBServiceV4.TEpiDBServiceV4")
+中的参数就是ProgID通过Clsid在注册表中可以查询的到：</p><div class="p"><pre class="pre codeblock"><code>CoInitialize(NULL);
+IEpiDBServiceV4imp m_episerverimp;
+if (m_episerverimp.CreateDispatch("EpiDBServiceV4.TEpiDBServiceV4") == 0)
+{		   
+ MessageBox("CreateDispatch失败！Exiting.\n","异常");
+ return 1;
+}
+
+char szDBPath[MAX_PATH] = "127.0.0.1:D:\Lnhoo.Device.Driver\01_build\COMClient\EpiDB.FDB";
+_bstr_t DBPath = _bstr_t(szDBPath);
+m_episerverimp.ConnectDB(DBPath); 
+
+VARIANT v;
+V_VT(&amp;v) = VT_UNKNOWN;
+VariantInit(&amp;v);
+_bstr_t ATokenID = _bstr_t("8C92806D-604A-4332-91B3-1351535D8E83");	
+char szATokenID [MAX_PATH] = {0};
+strcpy(szATokenID,static_cast&lt;char*&gt;(ATokenID));  
+
+char szAUpdateID[MAX_PATH] = "-1";	 
+int nAUpdateID = atoi(szAUpdateID);
+
+//调用COM组件
+m_episerverimp.QueryBatchShotInfo(nAUpdateID, ATokenID,  &amp;v);
+_bstr_t bs(v);
+//static_cast( (_bstr_t)v )
+_bstr_t bstr = v; 
+strcpy(szContent,static_cast&lt;char*&gt;(bstr)); 	//	strcpy(szResult,static_cast&lt;char*&gt;(bs));   
+int iFileSize = strlen(szContent);
+szContent[iFileSize] = 0x00;
+
+m_episerverimp.ReleaseDispatch();
+CoUninitialize();</code></pre></div></section>
+<section class="section"></section>
+<section class="section"><p class="p">以上就是COM的5中方法,当然具体怎么使用还是在于程序的环境,加以琢磨</p></section>
+<section class="section"><ul class="ul">
+<li class="li"><p class="p"><a class="xref" href="https://www.google.com/url?sa=t&amp;rct=j&amp;q=&amp;esrc=s&amp;source=web&amp;cd=1&amp;cad=rja&amp;uact=8&amp;ved=0ahUKEwiO28THxtnXAhVGUrwKHfPsDOQQFggmMAA&amp;url=%68%74%74%70%73%3a%2f%2f%77%77%77%2e%63%6f%64%65%70%72%6f%6a%65%63%74%2e%63%6f%6d%2f%41%72%74%69%63%6c%65%73%2f%33%31%37%33%2f%41%2d%73%69%6d%70%6c%65%2d%79%65%74%2d%64%65%62%75%67%67%61%62%6c%65%2d%43%4f%4d%2d%73%6b%65%6c%65%74%6f%6e%2d%63%6f%64%65&amp;usg=AOvVaw3JMZtwHdId9OATZq19oPwK" target="_blank" rel="external noopener">A simple yet debuggable COM skeleton code - CodeProject</a></p></li>
+<li class="li"><p class="p"><a class="xref" href="https://www.google.com/url?sa=t&amp;rct=j&amp;q=&amp;esrc=s&amp;source=web&amp;cd=2&amp;cad=rja&amp;uact=8&amp;ved=0ahUKEwio7dTBl9nXAhWFvrwKHcqqBTMQFggsMAE&amp;url=%68%74%74%70%73%3a%2f%2f%77%77%77%2e%63%6f%64%65%70%72%6f%6a%65%63%74%2e%63%6f%6d%2f%41%72%74%69%63%6c%65%73%2f%31%32%36%38%2f%54%68%65%2d%43%4f%4d%2d%4d%61%63%72%6f%2d%41%72%63%68%69%74%65%63%74%75%72%65%2d%54%6f%70%6f%6c%6f%67%79&amp;usg=AOvVaw2MKXXIzfNiRp_2fFf4WDFz" target="_blank" rel="external noopener">The COM Macro-Architecture Topology - CodeProject</a>&nbsp;<a class="xref" href="https://www.codeproject.com/KB/COM/macrotoposervers.asp" target="_blank" rel="external noopener">"COM Macro-Architecture Topology (Servers)"</a>.&nbsp;<a class="xref" href="https://www.codeproject.com/KB/COM/macrotopoclient.asp" target="_blank" rel="external noopener">"COM Macro-Architecture Topology (Client)"</a>.<a class="xref" href="https://www.codeproject.com/KB/COM/mmtopo_comid.asp" target="_blank" rel="external noopener">COM IDs &amp; Registry keys in a nutshell</a>.&nbsp;</p></li>
+<li class="li"><p class="p"><a class="xref" href="https://www.codeproject.com/Articles/633/Introduction-to-COM-What-It-Is-and-How-to-Use-It" target="_blank" rel="external noopener">Introduction to COM - What It Is and How to Use It.</a></p></li>
+<li class="li"><p class="p"><a class="xref" href="https://www.codeproject.com/Articles/901/Introduction-to-COM-Part-II-Behind-the-Scenes-of-a" target="_blank" rel="external noopener">Introduction to COM Part II - Behind the Scenes of
+a COM Server</a> </p></li>
+<li class="li"><p class="p"><a class="xref" href="http://www.cppblog.com/woaidongmao/archive/2011/01/10/138250.html" target="_blank" rel="external noopener">vc中调用Com组件的方法详解</a></p></li>
+<li class="li"><p class="p"><a class="xref" href="https://www.codeproject.com/Articles/8679/Building-a-LOCAL-COM-Server-and-Client-A-Step-by-S" target="_blank" rel="external noopener">Building a LOCAL COM Server and Client: A Step by
+Step Example</a></p></li>
+<li class="li"><p class="p"><a class="xref" href="https://www.codeproject.com/Articles/7707/Inside-COM" target="_blank" rel="external noopener">Inside COM - CodeProject</a></p></li>
+<li class="li"><p class="p"><a class="xref" href="https://nachtimwald.com/2012/04/08/wrapping-a-c-library-in-comactivex/" target="_blank" rel="external noopener">Wrapping a C library in COM/ActiveX – John's Blog</a></p></li>
+<li class="li"><p class="p"><a class="xref" href="http://www.cnblogs.com/oyjj/archive/2011/03/08/2132889.html" target="_blank" rel="external noopener">生成COM Dll的tlb文件的两种方法</a></p></li>
+<li class="li"><p class="p"><a class="xref" href="http://blog.csdn.net/embededvc/article/details/18863471" target="_blank" rel="external noopener">总结一下在VC中调用COM组件的方法+++VC调用远程COM+组件</a></p></li>
+</ul></section>
+</div>
+<nav role="navigation" class="related-links"><ul class="ullinks"><li class="link ulchildlink"><strong><a href="%E7%BC%96%E5%86%99COM%E7%BB%84%E4%BB%B6%E7%9A%84IDL%E6%8C%87%E4%BB%A4.html">编写COM组件的IDL指令</a></strong><br></li><li class="link ulchildlink"><strong><a href="%E4%BD%BF%E7%94%A8MIDL%E5%AF%BC%E5%87%BACOM%E7%BB%84%E4%BB%B6%E7%9A%84%E6%8E%A5%E5%8F%A3%E5%92%8CTLB%E7%B1%BB%E5%9E%8B%E5%BA%93.html">使用MIDL导出COM组件的接口和TLB类型库</a></strong><br></li></ul><div class="familylinks"><div class="parentlink"><strong>父主题：</strong> <a class="link" href="CPP%E5%BC%80%E5%8F%91.html">C++开发</a></div></div></nav></article></main></body></html>

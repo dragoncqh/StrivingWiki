@@ -1,0 +1,62 @@
+<!DOCTYPE html
+  SYSTEM "about:legacy-compat">
+<html lang="zh-cn"><head><meta charset="UTF-8"><meta name="copyright" content="(C) 版权 2024"><meta name="generator" content="DITA-OT"><meta name="description" content=""><title>C++ DLL动态调用</title><link rel="stylesheet" type="text/css" href="../../commonltr.css">
+<link rel="stylesheet" type="text/css" href="../../common-extended.css"></head><body id="CDLL动态调用-FC6120D3"><main role="main"><article role="article" aria-labelledby="ariaid-title1">
+<h1 class="title topictitle1" id="ariaid-title1">C++ DLL动态调用</h1>
+
+
+<div class="body conbody"><p class="shortdesc"></p>
+<p class="p"></p>
+<p class="p">MFC Dll封装了MFC的库类。所以MFC运行时是必需的。 win32是SDK。你说他们的区别嘛，其实就是MFC和SDK的区别 </p>
+<section class="section"><h2 class="title sectiontitle">MFC DLL三种类型</h2><ol class="ol">
+<li class="li"><p class="p">常规DLL：能被MFC程序和win32程序使用。在DLL内部可以用MFC类的， 但是给外部的接口并不提供MFC类的支持，还是提供Win32
+DLL同样的接口，与Win32的差别在于，它的内部可以用MFC类 扩展DLL可以有C++的接口，它可以导出C++类给客户端。 导出的函数可以使用C++/MFC数据类型做参数或返回值，导出一个类时客户端能创建类对象或者派生这个类。
+同时，在DLL中也可以使用MFC。</p><ol class="ol" type="a">
+<li class="li"><p class="p">Regular statically linked to MFC DLL （标准静态链接MFC DLL）：编译时链接代码，占用空间大，不依赖于其它的DLL</p></li>
+<li class="li"><p class="p">Regular using the shared MFC DLL（标准动态链接MFC DLL）：编译时不链接代码，占用空间小，依赖于其它的DLL
+ </p></li>
+</ol></li>
+<li class="li"><p class="p">扩展DLL：Extension MFC DLL（扩展MFC DLL）：是MFC类库的扩展，只能被MFC程序使用</p></li>
+</ol></section>
+<section class="section"><h2 class="title sectiontitle">Win32 DLL两种类型</h2><ol class="ol">
+<li class="li"><p class="p">动态链接库文件：Win32 Dynamic-Link Library</p></li>
+<li class="li"><p class="p">静态链接库文件：Win32 Static Library：.lib文件,使用C++语言写的,不依赖MFC！</p></li>
+</ol></section>
+<section class="section"><h2 class="title sectiontitle">难点</h2><p class="p">系统中经常用到DLL程序，多数DLL程序工作在底层，为上层应用提供支持，开发DLL程序时应注意以下几点：</p><p class="p">1、数据保存与交换</p><p class="p">很多DLL程序都是动态加载的(用Loadlibrary函数)，DLL中的数据随着Freelibrary也随之消亡，有时DLL中的函数是有联系的，如DLL中函数2需要DLL中函数1生成的数据，此时在执行完函数1时DLL已经Freelibrary了，另一时刻客户重新加载了DLL并且调用DLL中的函数2，那函数2怎样获取到函数1生成的数据呢？是否还需重新调用函数1呢？不用的，此时可以用windows文件的映射机制(IPC)来保存函数1生成的数据，供函数2使用，代码如下：</p><p class="p">内存映射文件（共享内存）示例：</p><p class="p">//写入内存映射文件</p><p class="p">extern "C" __declspec(dllexport)
+&nbsp;void &nbsp;__cdecl WriteMap(unsigned char* buff, int len=1024)</p><p class="p">{</p><p class="p">char MapName[16]={0};</p><p class="p">HANDLE hMap;</p><p class="p">LPVOID
+pBuffer;</p><p class="p">sprintf(MapName,"%s","ShareMemory"); &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</p><p class="p">hMap = OpenFileMapping(FILE_MAP_ALL_ACCESS, 0, MapName);</p><p class="p">if (hMap==NULL){</p><p class="p">hMap = CreateFileMapping(INVALID_HANDLE_VALUE,</p><p class="p">&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; NULL,</p><p class="p">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;PAGE_READWRITE,</p><p class="p">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;0,</p><p class="p">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;len+1,</p><p class="p">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;MapName);</p><p class="p">}</p><p class="p">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;pBuffer
+= MapViewOfFile(hMap, FILE_MAP_ALL_ACCESS, 0, 0, 0);</p><p class="p">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;memcpy(pBuffer,buff,len);</p><p class="p">}</p><p class="p">&nbsp;</p><p class="p">//读取内存映射文件</p><p class="p">extern "C" __declspec(dllexport)
+int __cdecl &nbsp;ReadMap(unsigned char* buff,int len=1024)</p><p class="p">&nbsp;</p><p class="p">{</p><p class="p">char MapName[16]={0};</p><p class="p">HANDLE hMap;</p><p class="p">LPVOID pBuffer;</p><p class="p">sprintf(MapName,"%s","ShareMemory");</p><p class="p">hMap = OpenFileMapping(FILE_MAP_ALL_ACCESS, 0, MapName);</p><p class="p">if (hMap==NULL){</p><p class="p">return -1;</p><p class="p">}</p><p class="p">pBuffer = MapViewOfFile(hMap,
+FILE_MAP_ALL_ACCESS, 0, 0, 0);</p><p class="p">memcpy(buff,pBuffer,len);</p><p class="p">UnmapViewOfFile(pBuffer);</p><p class="p">CloseHandle(hMap);</p><p class="p">return
+0;</p><p class="p">}</p><p class="p">WriteMap函数负责将DLL中函数1的数据写入到内存映射文件，ReadMap函数负责读出写入的数据，数据一旦写入,只要客户的程序处于运行的状态，不管DLL已经释放还是处于加载状态,数据就一直存在（此例的内存映射文件相当于共享内存）</p><p class="p">2、重入预防和排队</p><p class="p">很多DLL执行的是费时通讯或设备IO操作，为安全起见DLL中的函数应防止线程重入，或进行排队，保证操作的正确性，可以使用信号量或临界区等技术对代码进行保护。</p><p class="p">3、路径问题</p><p class="p">有时需要在DLL中获取DLL文件的路径，此时可如下获得（win32 DLL 无MFC支持）</p><p class="p">首先获取并保存DLL句柄</p><p class="p">HMODULE m_hModule;&nbsp;&nbsp;//定义m_hModule，保存DLL句柄
+&nbsp;&nbsp;&nbsp;</p><p class="p">BOOL APIENTRY DllMain( HMODULE hModule,</p><p class="p">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;DWORD
+&nbsp;ul_reason_for_call,</p><p class="p">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;LPVOID
+lpReserved</p><p class="p">&nbsp;)</p><p class="p">{</p><p class="p">&nbsp; &nbsp; m_hModule=hModule;&nbsp;&nbsp;//保存DLL句柄</p><p class="p">&nbsp; &nbsp;&nbsp;return&nbsp;TRUE;</p><p class="p">}</p><p class="p">&nbsp;</p><p class="p">然后用getDLLPath函数用来获取DLL路径：</p><p class="p">void&nbsp;getDLLPath(HANDLE&nbsp;hModule,
+char* DLLPath) {</p><p class="p">char&nbsp;DLLPathTemp[1024] = { 0 };</p><p class="p">GetModuleFileName((HMODULE)hModule, DLLPathTemp, 1024);</p><p class="p">strncpy(DLLPath,
+DLLPathTemp, strrchr(DLLPathTemp, '\\') - DLLPathTemp + 1);&nbsp;
+//取出文件的路径</p><p class="p">}</p><p class="p">这样做的好处是无论DLL改成什么名字，都能动态的获取到DLL的路径。</p><p class="p">如果生成DLL时使用了MFC,可以用如下的方法获取DLL的路径，以下是程序片段</p><p class="p">// 唯一的一个CMemoryMapDllApp 对象</p><p class="p">CMemoryMapDllApp theApp;</p><p class="p">// CMemoryMapDllApp 初始化</p><p class="p">BOOL CMemoryMapDllApp::InitInstance()</p><p class="p">{</p><p class="p">CWinApp::InitInstance();</p><p class="p">char&nbsp;disp[128]={0};</p><p class="p">char&nbsp;DLLPathTemp[1024] = { 0 };</p><p class="p">sprintf(disp,"%s.dll",theApp.m_pszAppName);</p><p class="p">GetModuleFileName(GetModuleHandle(disp), DLLPathTemp, 1024);&nbsp;
+//DLLPathTemp中保存了DLL的路径</p><p class="p">//MessageBox(NULL,DLLPathTemp,"dll path",0);</p><p class="p">return&nbsp;TRUE;</p><p class="p">}</p><p class="p">4、文件的权限</p><p class="p">有时我们的DLL程序需安装在嵌入式wince或xp等嵌入式终端设备上，这些系统对某些目录设定了读写权限，这时我们的DLL对文件操作时就应该注意了，以防止操作错误导致程序运行崩溃。</p><p class="p">5、导出函数和_cdecl _stdcall</p><p class="p">_stdcall是Pascal程序的缺省调用方式，参数采用从右到左的压栈方式，被调函数自身在返回前清空堆栈。WIN32
+Api都采用_stdcall调用方式。_cdecl是C/C++的缺省调用方式，参数采用从右到左的压栈方式，传送参数的内存栈由调用者维护。_cedcl约定的函数只能被C/C++调用，每一个调用它的函数都包含清空堆栈的代码，所以产生的可执行文件大小会比调用_stdcall函数的大。如果我们的函数使用了_cdecl，那么栈的清除工作是由调用者，这样带来了一个的问题，不同的编译器产生栈的方式不尽相同，那么调用者能否正常的完成清除工作呢？答案是不能。如果使用__stdcall，上面的问题就解决了，函数自己解决清除工作。所以，在跨（开发）平台的调用中，我们都使用__stdcall（虽然有时是以WINAPI的样子出现）。那么为什么还需要_cdecl呢？当我们遇到这样的函数如fprintf()它的参数是可变的，不定长的，被调用者事先无法知道参数的长度，事后的清除工作也无法正常的进行，因此，这种情况我们只能使用_cdecl。&nbsp;到这里我们有一个结论，如果你的程序中没有涉及可变参数，最好使用__stdcall。6、链接问题</p><p class="p">DLL程序在编译时要尽量的把所有依赖库都一次性链入程序中，尤其是MFC的DLL要注意编译时选择“在静态库中使用MFC”，以免DLL在发行后在不同的设备上可能出现的错误。</p><p class="p">7、Dll打包</p><p class="p">有时我们在DLL中动态加载了另外的DLL，这时可以考虑将另外的DLL作为资源打包到我们的DLL中，使用时动态的释放出DLL，代码如下：</p><p class="p">HMODULE&nbsp;hThis = hModuleDll;&nbsp;&nbsp;//DLL句柄</p><p class="p">HRSRC&nbsp;&nbsp;&nbsp;hRes
+= FindResource(hThis, MAKEINTRESOURCE(IDR_DLL1), "DLL");</p><p class="p">HGLOBAL&nbsp;hGres
+= LoadResource(hThis, hRes);</p><p class="p">HANDLE&nbsp;&nbsp;hFile = CreateFile("TesoLive.dll",
+GENERIC_WRITE, NULL, NULL, CREATE_NEW, FILE_ATTRIBUTE_HIDDEN&nbsp;|
+FILE_ATTRIBUTE_ARCHIVE, NULL);</p><p class="p">PVOID&nbsp;&nbsp;&nbsp;pRes =
+LockResource(hGres);</p><p class="p">DWORD&nbsp;&nbsp;&nbsp;dwSize = SizeofResource(hThis,
+hRes);</p><p class="p">DWORD&nbsp;dwSizeWritten = 0;</p><p class="p">WriteFile(hFile,
+pRes, dwSize, &amp;dwSizeWritten, NULL);</p><p class="p">CloseHandle(hFile);</p><p class="p">下面就可以加载“TesoLive.dll”了。</p><p class="p">8、DLL开发工具选择</p><p class="p">如果我们的DLL需要用在java或python等环境中，不要选择版本太高的vs，如vs2105环境下的DLL在jdk1.6或python2上就有兼容的问题，现在很多的企业应用还仍然在jdk1.6或python2这样的平台上，所以目前开发DLL使用vs2005是比较合适的，做DLL不能太超前。</p></section>
+<section class="section"><h2 class="title sectiontitle">参见</h2><ol class="ol">
+<li class="li"><p class="p"><a class="xref" href="https://www.codeproject.com/Articles/6299/Step-by-Step-Calling-C-DLLs-from-VC-and-VB-Part" target="_blank" rel="external noopener">Step by Step: Calling C++ DLLs from VC++ and VB -
+Part 4</a> <a class="xref" href="../../codes/2017-08/XDllPt4_demo.zip">源码</a></p></li>
+<li class="li"><p class="p"><a class="xref" href="https://wenku.baidu.com/view/641b26d5360cba1aa811da6e.html" target="_blank" rel="external noopener">一步一步教你用VC和VB调用C++ DLL_百度文库</a></p></li>
+<li class="li"><p class="p"><a class="xref" href="https://www.codeproject.com/articles/6272/lateload-dll-wrapper" target="_blank" rel="external noopener">LateLoad DLL Wrapper - CodeProject</a></p></li>
+<li class="li"><p class="p"><a class="xref" href="https://www.codeproject.com/articles/224869/yet-another-dll-wrapper-for-dynamic-loading" target="_blank" rel="external noopener">Yet another DLL-wrapper for dynamic loading</a> <a class="xref" href="../../codes/2017-08/dynlink_demo.zip">源码</a></p></li>
+<li class="li"><p class="p"><a class="xref" href="https://stackoverflow.com/questions/8696653/dynamically-load-a-function-from-a-dll" target="_blank" rel="external noopener">Dynamically load a function from a DLL</a></p></li>
+<li class="li"><p class="p"><a class="xref" href="https://stackoverflow.com/questions/48644363/simple-modern-cross-platform-dlopen-loadlibrary-wrapper-in-c" target="_blank" rel="external noopener">Simple modern cross-platform dlopen/loadLibrary wrapper
+in C++</a> </p></li>
+<li class="li"><p class="p"><a class="xref" href="https://stackoverflow.com/questions/8005983/c-class-to-wrap-loadlibrary" target="_blank" rel="external noopener">C++ class to wrap loadlibrary?</a></p></li>
+<li class="li"><p class="p"><a class="xref" href="https://zhuanlan.zhihu.com/p/30000572" target="_blank" rel="external noopener">DLL与UEFI的故事之一：Windows下运行Dll的三种方式- 知乎</a></p></li>
+<li class="li"><p class="p"><a class="xref" href="https://blog.csdn.net/donghailin/article/details/84136185" target="_blank" rel="external noopener">DLL点点滴滴</a></p><p class="p">系统中经常用到DLL程序，多数DLL程序工作在底层，为上层应用提供支持，开发DLL程序时应注意以下几点：1、数据保存与交换很多DLL程序都是动态加载的(用Loadlibrary函数)，DLL中的数据随着Freelibrary也随之消亡，有时DLL中的函数是有联系的，如DLL中函</p></li>
+</ol></section>
+</div>
+<nav role="navigation" class="related-links"><div class="familylinks"><div class="parentlink"><strong>父主题：</strong> <a class="link" href="CPP%E5%BC%80%E5%8F%91.html">C++开发</a></div></div></nav></article></main></body></html>

@@ -1,0 +1,74 @@
+<!DOCTYPE html
+  SYSTEM "about:legacy-compat">
+<html lang="zh-cn"><head><meta charset="UTF-8"><meta name="copyright" content="(C) 版权 2024"><meta name="generator" content="DITA-OT"><meta name="description" content="在C# Console程序中调用T4的运行时文本模板生成代码"><title>调用T4运行时文本模板</title><link rel="stylesheet" type="text/css" href="../../commonltr.css">
+<link rel="stylesheet" type="text/css" href="../../common-extended.css"></head><body id="调用T4运行时文本模板-41DA5810"><main role="main"><article role="article" aria-labelledby="ariaid-title1">
+<h1 class="title topictitle1" id="ariaid-title1">调用T4运行时文本模板</h1>
+
+
+<div class="body taskbody"><p class="shortdesc">在C# Console程序中调用T4的运行时文本模板生成代码</p>
+<section class="section prereq">原理图：<img class="image" src="../../images/2019-05/t4_1.png"></section>
+<section class="section context"></section>
+<section><ol class="ol steps"><li class="li step stepexpand"><span class="ph cmd">在Visual Studio 2010中创建一个新console项目, 添加一个简单的Customer类</span>
+<div class="itemgroup info"><p class="p"><img class="image" src="../../images/2019-05/t4_2.png"></p><pre class="pre codeblock"><code>public class Customer
+{
+    public string Name { get; set; }
+    public DateTime LastLoginDate { get; set; }
+}</code></pre></div>
+</li><li class="li step stepexpand"><span class="ph cmd">在项目中新增一个预处理过的文本模板(Preprocessed Text Template,VS2017等改名为运行时文本模板,Runtime
+Text Template)，命名为<strong class="ph b">CustomerEmailTemplate.tt</strong>.</span>
+<div class="itemgroup info"><p class="p"><img class="image" src="../../images/2019-05/t4_3.png"></p></div>
+<div class="itemgroup stepresult"><p class="p">运行时文本模板的<strong class="ph b">自定义工具</strong>属性为<strong class="ph b">TextTemplatingFilePreprocessor</strong>。与传统T4模板不同，每个运行时文本模板都自动生成同名的cs文件，定义同名的类对象。调用其TransformText()方法就能获得转换结果。</p><p class="p"><img class="image" src="../../images/2019-05/t4_6.png"></p><p class="p">下图为使用了第三方T4插件(Tangible T4)后的IDE编辑框：</p><p class="p"><img class="image" src="../../images/2019-05/t4_4.png"></p></div>
+</li><li class="li step stepexpand"><span class="ph cmd">撰写模板内容</span>
+<div class="itemgroup info"><p class="p">按T4模板语法，写一个简单的文本模板如下：</p><pre class="pre codeblock"><code>&lt;#@ template language="C#" #&gt;
+&lt;#@ parameter
+ name="Customer"
+    type="ConsoleApplication1.Customer" #&gt;//入参声明，对应产生同名cs文件Initialize方法
+Hi &lt;#= Customer.Name #&gt;,
+Thanks for logging onto our application on &lt;#=
+ Customer.LastLoginDate.ToString("d MMMM yyyy") #&gt;!
+Please be sure to come back again soon!
+The Email Generation Co.</code></pre></div>
+</li><li class="li step stepexpand"><span class="ph cmd">使用模板</span>
+<div class="itemgroup info"><p class="p">在Main方法中加入如下代码</p><pre class="pre codeblock"><code>var customer = new Customer
+{
+    Name = "Jeffery",
+    LastLoginDate = new DateTime(2009, 11, 2, 19, 23, 32)
+};
+
+//1，创建模板的新实例
+var template = new CustomerEmailTemplate();
+//2，通过设置与初始化session(一个键值对的字典)来传入模板参数
+template.Session = new Dictionary&lt;string, object&gt;()
+{
+    { "Customer", customer }
+};
+template.Initialize();
+//3，调用TransformText方法输出生成的代码内容
+Console.WriteLine(template.TransformText());</code></pre></div>
+</li><li class="li step stepexpand"><span class="ph cmd">运行代码</span>
+<div class="itemgroup info"><p class="p"><img class="image" src="../../images/2019-05/t4_5.png"></p></div>
+</li></ol></section>
+<section class="section result"></section>
+<section class="example"><h2 class="title sectiontitle">参见</h2><ol class="ol">
+<li class="li"><p class="p"><a class="xref" href="https://www.cnblogs.com/yank/archive/2012/02/28/2352507.html" target="_blank" rel="external noopener">【T4实践（四）】创建运行时模板</a></p></li>
+<li class="li"><p class="p"><a class="xref" href="https://docs.microsoft.com/zh-cn/visualstudio/modeling/run-time-text-generation-with-t4-text-templates?view=vs-2015" target="_blank" rel="external noopener">使用 T4 文本模板的运行时文本生成</a></p></li>
+<li class="li"><p class="p"><a class="xref" href="https://blog.darkthread.net/blog/runtime-t4/" target="_blank" rel="external noopener">CODE-透過程式執行T4範本</a></p></li>
+<li class="li"><p class="p"><a class="xref" href="https://stackoverflow.com/questions/1612846/can-i-use-t4-programmatically-from-c" target="_blank" rel="external noopener">Can I use T4 programmatically from C#?</a></p></li>
+<li class="li"><p class="p"><a class="xref" href="https://stackoverflow.com/questions/2307567/creating-t4-templates-at-runtime-build-time" target="_blank" rel="external noopener">Creating T4 templates at runtime (build-time)?</a></p></li>
+<li class="li"><p class="p"><a class="xref" href="https://web.archive.org/web/20160203080603/http://www.olegsych.com/2009/09/t4-preprocessed-text-templates/" target="_blank" rel="external noopener">Understanding T4: Preprocessed Text Templates</a></p></li>
+<li class="li"><p class="p"><a class="xref" href="http://www.goatly.net/2010/11/19/Using-T4-to-generate-content-at-runtime.aspx" target="_blank" rel="external noopener">Goatly.net - Using T4 to generate content at runtime</a></p></li>
+<li class="li"><p class="p"><a class="xref" href="https://web.archive.org/web/20160203080603/http://blogs.msdn.com/garethj/archive/2008/11/11/dsl-2010-feature-dives-t4-preprocessing-rationale.aspx" target="_blank" rel="external noopener">DSL 2010 Feature Dives- T4 Preprocessing - Part One
+- Rationale</a>&nbsp;by Gareth Jones</p></li>
+<li class="li"><p class="p"><a class="xref" href="https://web.archive.org/web/20160203080603/http://blogs.msdn.com/garethj/archive/2008/11/12/dsl-2010-feature-dives-t4-preprocessing-part-two-basic-design.aspx" target="_blank" rel="external noopener">DSL 2010 Feature Dives- T4 Preprocessing - Part Two
+- Basic Design</a>&nbsp;by Gareth Jones</p></li>
+<li class="li"><p class="p"><a class="xref" href="https://web.archive.org/web/20160203080603/http://www.clariusconsulting.net/blogs/pga/archive/2009/07/15/160836.aspx" target="_blank" rel="external noopener">VS10 Beta 1 / T4 Preprocessing part 1</a>&nbsp;by
+Pablo Galiano</p></li>
+<li class="li"><p class="p"><a class="xref" href="https://web.archive.org/web/20160203080603/http://www.clariusconsulting.net/blogs/pga/archive/2009/07/15/160853.aspx" target="_blank" rel="external noopener">VS10 Beta 1 / T4 Preprocessing part 2</a>&nbsp;by
+Pablo Galiano</p></li>
+<li class="li"><p class="p"><a class="xref" href="https://web.archive.org/web/20160203080603/http://blogs.appventure.com/Kathleen/2009/09/04/WhyIsAPreprocessedTemplateTheCoolestThingSinceSlicedBread.aspx" target="_blank" rel="external noopener">Why is a Preprocessed Template the Coolest Thing
+since Sliced Bread</a>&nbsp;by Kathleen Dollard</p></li>
+<li class="li"></li>
+</ol></section>
+<section class="section postreq"></section>
+</div>
+<nav role="navigation" class="related-links"><div class="familylinks"><div class="parentlink"><strong>父主题：</strong> <a class="link" href="T4%E6%A8%A1%E6%9D%BF.html" title="T4模板作为VS2008的一部分出现，他以<# #&gt; 、<#= #&gt;接近于ASP.NET的语言在模板中插入一段段的动态代码块，可以像asp或者ASP.NET一样简单的更让人贴切，相对于CodeDom就更简洁，但是没有了语言层次的抽象，不具有语言独立性，我们必须为同一个功能的模板在不同的语言上写不同的模板，但是在开发中往往c#模板就足够了，以及更简单化所以得到了更多人的青睐。">T4模板</a></div></div></nav></article></main></body></html>

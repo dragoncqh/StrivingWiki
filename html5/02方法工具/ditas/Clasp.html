@@ -1,0 +1,313 @@
+<!DOCTYPE html
+  SYSTEM "about:legacy-compat">
+<html lang="zh-cn"><head><meta charset="UTF-8"><meta name="copyright" content="(C) 版权 2024"><meta name="generator" content="DITA-OT"><meta name="description" content=""><title>clasp</title><link rel="stylesheet" type="text/css" href="../../commonltr.css">
+<link rel="stylesheet" type="text/css" href="../../common-extended.css"></head><body id="Clasp-350B92CF"><main role="main"><article role="article" aria-labelledby="ariaid-title1">
+<h1 class="title topictitle1" id="ariaid-title1">clasp</h1>
+
+
+<div class="body conbody"><p class="shortdesc"></p>
+<p class="p">一，概述</p>
+<p class="p">CLASP(Classic&nbsp;ASP&nbsp;Framework)是用VBScript开发的传统ASP应用的免费开源的事件驱动框架。它简化传统ASP编程，提供类似ASP.NET的AutoEventWireUp模型和VB应用一般丰富的可伸缩的事件驱动开发环境(支持视图状态，客户端库等,提供大量易懂易用的WEB控件)，这样新开发的ASP也可以很容易迁移到ASP.NET；它使代码可读性高，利于维护或扩展传统ASP程序。另外，可以使用安装软件(如Install
+Shield或Intorel Active Site Compiler)来打包安装包部署。</p>
+<p class="p">二，框架原理</p>
+<p class="p">1, 运行原理：CLASP框架非常简单且完全自动化处理。</p>
+<p class="p">WebControl.asp包含了核心的WebControl类和WebControlPage。所有的控件从WebControl和Page”派生”。当然VbScript无法实现真正意义上的继承和派生，只是通过在每个服务器端控件中包含WebControl的变量的方法模拟实现”继承”。</p>
+<p class="p">2, 框架构成：</p>
+<p class="p">1)，CLASP PostBackHandler: 这个花俏的名字指的却是一个很简单的JavaScript函数。该函数被WebControl.asp和所有包含clasp.form.doPostBack(action,object,instance,xmsg,frmaction,frameName)“签名”的对象所包含和引用。所有的CLASP的WebControl(web控件)直接使用该函数，或者触发CLASP框架去执行某服务器端事件。通过调用Page对象的GetEventScript方法可访问该”PostBack
+Handlers”函数脚本系列(根据要求有多个版本的函数脚本可供选择使用，如可以选择打开新窗口)。</p>
+<p class="p">例如，你想从浏览器向Page递交一个事件请求和传送参数值1，那么你可以执行clasp.form.doPostBack(“TheEvent”,”Page”,1),就可以使用CLASP框架提交到该Page并调用Page_TheEvent(e)，此处”e”是用于检验和接受输入数据(此处为1)的事件对象。</p>
+<p class="p">Web控件通常使用Page.GetEventScript函数。例如，按钮(假设该按钮名为cmdSave)总是使用如下事件脚本：Page.GetEventScript(“onclick”,Me,”OnClick”,””,””)，这就等价于：</p>
+<p class="p">onclick = 'doPostBack(“OnClick”,”cmdSave”)' ，该脚本使得CLASP框架提交页面到服务器端处理事件，上例中名为cmdSave的Web按钮控件，会自动被引导到一个实例，以执行运算并调用cmdSave_OnClick。这就是一个事件如何从客户浏览器端被正确地引导到服务器端的处理程序的过程。还有更复杂的情况，比如你创建了复杂的用户控件(该控件使用或者包含了其它控件)。CLASP支持事件的“冒泡”算法，这对创建复杂控件尤其有用。</p>
+<p class="p">2)，CLASP Response: 注意你必须使用Page.OpenForm 和Page.CloseForm来闭合表单。 因为CLASP的PostBackHandler会使用一些HTML中隐藏的表单域，而CLASP
+Response会把这些表单域(如果使用了客户端视图状态viewstate的话，还包括viewstate)加以解析渲染。</p>
+<p class="p">3)，CLASP Request: 又一个花俏的名字，表示CLASP PostBackHandler必须处理该页面所有的响应(所有的CLASP隐藏域都被包括在内,该页面由CLASP
+Response解析渲染)。</p>
+<p class="p">4), CLASP Framework: 这是整个框架及其机制的统称。在较高的层面上，你拥有Page对象组织所一切，当你提交一个CLASP请求时，框架自动创建一个cPage对象的实例，命名为Page。当该实例初始化时，它检验所有CLASP表单域是否都被包含进来，并决定响应模式(IsPostBack
+＝ True/False 和/或 IsRedirectedPostBack ＝ True/False)。然后根据响应模式，它会载入视图状态并运行其它功能。Page对象也包括一个名为Page.Execute的有神奇的功能(如载入viewstate，传送到Web控件，引导到对应事件等)的函数，详见Page对象介绍。</p>
+<p class="p">5)，CLASP Controler: 是框架的特殊的可选的部份。这个类为开发者提供一个使用CLASP框架的统一方法。它的主要目标是允许你编辑页面模板(支持基于角色的安全机制)。为在CLASP顶层增加更多的功能，它增加了如下事件:Page_Configure,
+Page_RenderHeaderTag, Page_RenderHeader, Page_RenderForm, Page_RenderFooter，还有被CurrentUser对象使用的的证书和授权的全局处理程序，详见PageContoller介绍。CLASP提供了PageContoller的一个模板供编辑使用。</p>
+<p class="p">6)，CLASP Server Controls: 服务器端控件是包含并揭示一个名为Control的web控件。通过一个典型Web控件对象的实例化，该Control类会自动注册自身(或者可以说是Web控件所为)，从而参与CLASP内部事件的处理，(如WriteProperties和ReadProperties,以保存信息入viewstate或者从viewstate恢复信息)。CLASP框架拥有广泛的服务器端控件，从简单的文本框、单选框到数据格data
+grid，数据遍历data repeater。详见WebControl介绍。</p>
+<p class="p">7)，CLASP Page Event Handlers: 框架是完全事件驱动的，只要编写事件相关代码就可以成功应用CLASP框架(HTML部份可嵌入一些用于渲染控件的代码)。页面事件的处理程序是核心处理程序，诸如主要用于页面之中的Page_Init,
+Page_Controls_Init, Page_Load。</p>
+<p class="p">8), Page-Specific Functions: 这是专用于支持页面的函数系列，包括载入一个记录的函数，执行计算和验证的函数等。</p>
+<p class="p">3, 事件执行顺序：以下是事件顺序图，CLASP框架事件为绿色，如果使用PageController则PageController指挥新的次序。</p>
+<p class="p">先从Page.Execute(WebControl.asp中的Sub Main())起，看CLASP如何处理每个请求。一个CLASP页面的生命周期概况如下：(你可以废止并处理用蓝色高亮显示部份):</p>
+<p class="p">* Page_Authenticate_Request &nbsp;     * Page_Authorize_Request
+&nbsp;     * Page_Init &nbsp;     *<strong class="ph b">If</strong> <strong class="ph b">Not</strong> Page.IsPostBack <strong class="ph b">Then</strong> Page_Controls_Init &nbsp;     * <strong class="ph b">If</strong> Page.IsPostBack <strong class="ph b">Then</strong> Page_LoadViewState &nbsp;     * <strong class="ph b">If</strong> Page.IsPostBack <strong class="ph b">Then</strong> ProcessPostBackData &nbsp;     * Page_Load &nbsp;     * <strong class="ph b">If</strong> Page.IstPostBack <strong class="ph b">Then</strong> Page.HandleServerEvent <strong class="ph b">"RaiseChangedEvents"</strong> &nbsp;     * <strong class="ph b">If</strong> Page.IsPostBack <strong class="ph b">Then</strong> Page.HandleClientEvent
+ &nbsp; (Handles the PostBack by executing the handler of the event)
+&nbsp;     * Page_PreRender &nbsp;     * Page_SaveViewState &nbsp;
+    * Page_Terminate</p>
+<p class="p">注意，如果你使用PageControler模式也会有如下事件：Page_Configure, Page_RenderHeader,
+Page_RendeForm, Page_RenderFooter，且它会自动处理Page_AuthenticateRequest
+and Page_AuthorizeRequest。详见样例。</p>
+<p class="p">一个控件的生命周期是(以下自动进行且透明化)：</p>
+<p class="p">* Class_Initialize &nbsp;     * OnInit - You need<strong class="ph b">to</strong> subscribe <strong class="ph b">to</strong> receive this event - &nbsp;     * ReadProperties(v) - Only <strong class="ph b">if</strong> EnableViewState = <strong class="ph b">True</strong> &nbsp;     * OnLoad - You need <strong class="ph b">to</strong> subscribe <strong class="ph b">to</strong> receive this event - &nbsp;     * ProcessPostBack
+- You need <strong class="ph b">to</strong> subscribe <strong class="ph b">to</strong> receive this event - &nbsp;
+    * HandleClientEvent(e) -Only <strong class="ph b">if</strong> Target of the postback
+event &nbsp;     * WriteProperties(v) -Only <strong class="ph b">if</strong> EnableViewState
+= <strong class="ph b">True</strong> &nbsp;     * Render &nbsp;     * Class_Terminate</p>
+<p class="p">三，页面结构</p>
+<p class="p">除非使用page controller，CLASP框架中的页面结构组成如下:</p>
+<p class="p">1, 包含文件并开始页面：</p>
+<p class="p">A，包含WebControl.asp文件: Include 文件 WebControl.asp &nbsp; B, 包含所用WebControl相应文件:Include
+WebControl (如Server_TextBox.asp)  &nbsp; C, 包含所用其他文件:Include 其他文件
+&nbsp; D, 调用程序主入口Main(): Page.Execute</p>
+<p class="p">2, 编写代码：</p>
+<p class="p">A, 编写CLASP表单：一个CLASP表单(WebForms)基本上就是一个使用WebControl.asp和包含CLASP域的ASP页面。必须使用Page.OpenForm和Page.CloseForm一前一后套住闭合所要渲染的HTML表单和服务器端控件(表单的隐藏域)。</p>
+<p class="p">Page.OpenForm &nbsp; 内嵌WebControl的HTML代码段， &nbsp; Page.CloseForm</p>
+<p class="p">B，写HTML代码，可与服务器端控件混合，如(i.e. &lt;TD&gt;&lt;%txtFirstName%&gt; &lt;/TD&gt;)</p>
+<p class="p">C, 然后编写你的Code-Behind或Server代码，可以写在页面底部，或者也可以写到一个单独的文件里。</p>
+<p class="p">&lt;/code&gt;</p>
+<p class="p">3，控件声明:Include 你的 WebControl 变量声明(如 Dim txtFirstName, txtLastName)</p>
+<p class="p">4, 包含页面级变量: Include 你的页面级别的变量(Dim mStatus)</p>
+<p class="p">5，添加公用函数Page_Init()：在里面初始化所有的模块级别变量(如mStatus＝ 0) 和WebControls (如Set
+txtFirstName ＝ New_ServerTextBox(“txtFirstName”)</p>
+<p class="p">6，添加页面事件:添加任何你想要override的页面事件，如Page_Controls_Init(只运行一次且最适合用来初始化那些启用了VIEWSTATE的控件，写在该事件中的代码只在非回应Not
+Page.IsPostBack时执行) ,Page_Load, Page_LoadViewState等。(注意，viewstate仅在Page_LoadViewState事件及其之后才生效)。</p>
+<p class="p">7，响应事件:编写你的事件处理程序(handler)，如 cmdSave_OnClick, txtFirstName_OnTextChange.</p>
+<p class="p">8，帮助导引:编写你的支持函数。</p>
+<p class="p">四，使用框架进行开发</p>
+<p class="p">只要include文件”WebControl.asp” 和引用每个需要用到的服务器端控件，使用Page.Execute执行页面。这样你就可以立即访问所有CLASP提供的服务器端事件,编写每个事件的代码了。这些事件可以帮助你如同在ASP.NET或VB应用中一样开发传统ASP应用。</p>
+<p class="p">1，页面默认支持的事件列表：(不需要再定义，只要出现就可执行)</p>
+<p class="p">* Page_Authenticate_Request &nbsp;     * Page_Authorize_Request
+&nbsp;     * Page_Init &nbsp;     * Page_Controls_Init - 只在页面首次载入是执行一次。
+&nbsp;     * Page_LoadViewState &nbsp;     * Page_Load &nbsp;    
+* Page_HandleClientEvent &nbsp;     * Page_PreRender &nbsp;     *
+Page_SaveViewState</p>
+<p class="p">2，以下是被自定义服务器端控件支持的事件。可以参见Server_CheckBox或Server_HyperLink就可知道编写自定义控件是很容易的。</p>
+<p class="p">* OnInit &nbsp;     * OnLoad &nbsp;     * ReadProperties(PropertyBag)
+- 读取保持在viewatate中的属性 &nbsp;     * WriteProperties(PropertyBag) - 把属性写入viewstate
+&nbsp;     * HandleClientEvent(event) - 如果对象是一个PostBack的目标，则处理事件</p>
+<p class="p">3， CLASP 2.0的特性：</p>
+<p class="p">1) ViewState支持 (可以在页面层次废止):</p>
+<p class="p">A, 客户端：在一个隐藏域中</p>
+<p class="p">B, 服务器端：在一个Session变量中。</p>
+<p class="p">C,&nbsp;SQL&nbsp;Server: 在一个SQL Server表中</p>
+<p class="p">D, 自定义: 可以编写你自己的Viewstate处理程序。</p>
+<p class="p">E, 有不同的部署方式：COM (最快) 和纯&nbsp;ASP&nbsp;(有点慢)。服务器端和SQL Server不需要COM的部署。</p>
+<p class="p">2) Ability to register client side scripts and to register client
+side events from the server code.</p>
+<p class="p">For instance. Page.RegisterEventListener cmdSave,”onclick”,”TestFnc”.
+All events are stacked/linked and are called in a bubble like fashion,
+so you can have multiple event listeners for the same object!!!.</p>
+<p class="p">3) Other nice things are a PageController concept which allows
+you to structure your pages in a template-like fashion that supports
+role-level authentication and authorization.</p>
+<p class="p">4) Other cool features are</p>
+<p class="p">* Page.AutoResetScrollPosition - used to restore the vertical scroll
+position between postbacks</p>
+<p class="p">* Page.AutoResetFocus - used to reset the focus to the last control
+souce of a postback (which can be overrided!)</p>
+<p class="p">* Page.DebugEnabled - To keep track of a bunch of information that
+is displayed at the end of the page (like tracing in .NET). You control
+the details level using Page.DebugLevel (1-3)</p>
+<p class="p">* Page.CompressFactor - Set to -1 for no compress, and &gt; 0 to compress
+if ViewState size &gt; CompressFactor bytes</p>
+<p class="p">* Page.ViewstateMode - used to control the location of the viewstate.
+Can be set to VIEW_STATE_MODE_CLIENT or VIEW_STATE_MODE_SERVER. If
+VIEW_STATE_MODE_SERVER then the viewstate will be persisted in the
+VS session variable!</p>
+<p class="p">* Page.IsRedirectedPostBack - This property indicates if the page
+was called from another asp page and it has event information in the
+form… VERY useful to pass parameters between pages and avoid the use
+of the QueryString!</p>
+<p class="p">The postback events are usually captured by writing a function
+using the following format: controlName_eventName([event]). For instance,
+if you click on button with name cmdSave then you would capture this
+event on the server side by creating a function such as: cmdSave_OnClick()</p>
+<p class="p">The Framework supports viewstate, so you can use Page.ViewState.Add(key,value)
+and Page.ViewState.GetValue(key). Each control also supports viewstate
+through Control.EnableViewstate = (true/false)</p>
+<p class="p">五，安装步骤</p>
+<p class="p">1，把ASPFramwork目录复制到虚拟目录下</p>
+<p class="p">2，修改DBWrapper.asp中的数据库连接字串</p>
+<p class="p">3，修改controlls子目录下的CLASP_Setup.asp和SQLServerViewState.asp，ScriptLibrary中的相应路径</p>
+<p class="p">4，浏览<a class="xref" href="http://localhost/ASPFramework/Buttons.asp" target="_blank" rel="external noopener"><strong class="ph b">http://localhost/ASPFramework/Buttons.asp</strong></a></p>
+<p class="p">5，COM组件默认设置为不使用，如果你想封装客户端viewstate(在一个隐藏域中是一个XML)</p>
+<p class="p">和提速使用Base64加密函数和ListItemCollection对象，就需要注册COM组件ASPFramework.dll。</p>
+<p class="p">六，使用实例</p>
+<div class="p"><pre class="pre codeblock"><code><strong class="ph b">&lt;!--#Include File = </strong>"..\WebControl.asp"<strong class="ph b">--&gt;
+&nbsp;
+&lt;!--#Include File =</strong>"..\Server_Button.asp"<strong class="ph b"> --&gt;
+&nbsp;
+&lt;!--#Include File = </strong>"..\Server_CheckBox.asp"<strong class="ph b"> --&gt;
+&nbsp;
+&lt;!--#Include File = </strong>"..\Server_DropDown.asp"<strong class="ph b"> --&gt;
+&nbsp;
+&lt;!--#Include File = </strong>"..\Server_Label.asp"<strong class="ph b">--&gt;
+&nbsp;
+&lt;!--#Include File =</strong>"DBWrapper.asp"<strong class="ph b">--&gt;
+&nbsp;
+&nbsp;
+&nbsp;
+&lt;HTML&gt;
+&nbsp;
+&lt;HEAD&gt;
+&nbsp;
+&lt;TITLE&gt;Samples&lt;/TITLE&gt;
+&nbsp;
+&lt;LINK rel=</strong>"stylesheet"<strong class="ph b"> </strong><strong class="ph b">type</strong><strong class="ph b">=</strong>"text/css"<strong class="ph b"> href=</strong>"Samples.css"<strong class="ph b">
+&nbsp;
+&lt;/HEAD&gt;
+&nbsp;
+&lt;BODY&gt;
+&nbsp;
+&lt;!--#Include File = </strong>"Home.asp"<strong class="ph b">--&gt;
+&nbsp;
+&lt;%Page.Execute%&gt;
+&nbsp;
+&lt;Span Class=</strong>"Caption"<strong class="ph b">DROPDOWN EXAMPLES&lt;/Span&gt;
+&nbsp;
+&lt;%Page.OpenForm%&gt;
+&nbsp;
+  &lt;%lblMessage%&gt;&lt;HR&gt;
+&nbsp;
+  &lt;%chkHideShow%&gt; | &lt;%chkAutoPostBack%&gt; | &lt;%chkListBox%&gt;&lt;HR&gt;
+&nbsp;
+  &lt;%cboDropDown%&gt;
+&nbsp;
+  &lt;HR&gt;
+&nbsp;
+  &lt;%cmdAdd%&gt; | &lt;%cmdRemove%&gt;
+&nbsp;
+&lt;%Page.CloseForm%&gt;
+&nbsp;
+&nbsp;
+&nbsp;
+&lt;/BODY&gt;
+&nbsp;
+&lt;/HTML&gt;
+&nbsp;
+&nbsp;
+&nbsp;
+&lt;%  
+&nbsp;
+</strong><strong class="ph b">'--Controls Declaration</strong><strong class="ph b">&nbsp;
+&nbsp;</strong><strong class="ph b">Dim</strong><strong class="ph b">lblMessage
+&nbsp;</strong><strong class="ph b">Dim</strong><strong class="ph b">cmdAdd
+&nbsp;</strong><strong class="ph b">Dim</strong><strong class="ph b">cmdRemove  
+&nbsp;</strong><strong class="ph b">Dim</strong><strong class="ph b">chkHideShow
+&nbsp;</strong><strong class="ph b">Dim</strong><strong class="ph b">chkAutoPostBack
+&nbsp;</strong><strong class="ph b">Dim</strong><strong class="ph b">chkListBox
+&nbsp;</strong><strong class="ph b">Dim</strong><strong class="ph b"> cboDropDown
+&nbsp;
+&nbsp;
+&nbsp;
+</strong><strong class="ph b">'--Page Events</strong><strong class="ph b">&nbsp;
+&nbsp;</strong><strong class="ph b">Public</strong><strong class="ph b"> </strong><strong class="ph b">Function</strong><strong class="ph b"> Page_Init()
+&nbsp;
+    Page.DebugEnabled = </strong><strong class="ph b">False</strong><strong class="ph b"> </strong><strong class="ph b">' True/False</strong><strong class="ph b"></strong><strong class="ph b">Set</strong><strong class="ph b"> lblMessage = New_ServerLabel(</strong>"lblMessage"<strong class="ph b">)
+&nbsp;</strong><strong class="ph b">Set</strong><strong class="ph b"> cmdAdd = New_ServerLinkButton(</strong>"cmdAdd"<strong class="ph b">)
+&nbsp;</strong><strong class="ph b">Set</strong><strong class="ph b"> cmdRemove = New_ServerLinkButton(</strong>"cmdRemove"<strong class="ph b">)            
+&nbsp;</strong><strong class="ph b">Set</strong><strong class="ph b"> chkHideShow = New_ServerCheckBox(</strong>"chkHideShow"<strong class="ph b">)
+&nbsp;</strong><strong class="ph b">Set</strong><strong class="ph b"> chkAutoPostBack = New_ServerCheckBox(</strong>"chkAutoPostBack"<strong class="ph b">)
+&nbsp;</strong><strong class="ph b">Set</strong><strong class="ph b"> chkListBox= New_ServerCheckBox(</strong>"chkListBox"<strong class="ph b">)
+&nbsp;</strong><strong class="ph b">Set</strong><strong class="ph b"> cboDropDown = New_ServerDropDown(</strong>"cboDropDown"<strong class="ph b">)
+&nbsp;</strong><strong class="ph b">End</strong><strong class="ph b"> </strong><strong class="ph b">Function</strong><strong class="ph b">&nbsp;
+&nbsp;
+&nbsp;</strong><strong class="ph b">Public</strong><strong class="ph b"> </strong><strong class="ph b">Function</strong><strong class="ph b"> Page_Controls_Init()
+&nbsp;
+    cmdAdd.Text = </strong>"Add"<strong class="ph b">
+&nbsp;
+    cmdRemove.Text = </strong>"Remove"<strong class="ph b">
+&nbsp;
+&nbsp;
+&nbsp;
+    lblMessage.</strong><strong class="ph b">Control</strong><strong class="ph b">.Style = </strong>"border:1px solid blue;
+&nbsp;
+     background-color:#EEEEEE;width:100%;font-size:8pt"<strong class="ph b">&nbsp;
+    lblMessage.Text =</strong>"This is an Example"<strong class="ph b">
+&nbsp;
+    chkHideShow.Caption = </strong>"Hide/Show List"<strong class="ph b">
+&nbsp;
+    chkHideShow.AutoPostBack = </strong><strong class="ph b">True</strong><strong class="ph b">
+&nbsp;
+    chkAutoPostBack.Caption = </strong>"DropDown AutoPostBack"<strong class="ph b">
+&nbsp;
+    chkAutoPostBack.AutoPostBack=</strong><strong class="ph b">True</strong><strong class="ph b">
+&nbsp;
+    chkListBox.Caption = </strong>"Make it a list box"<strong class="ph b">
+&nbsp;
+    chkListBox.AutoPostBack = </strong><strong class="ph b">True</strong><strong class="ph b">
+&nbsp;
+&nbsp;
+&nbsp;
+    cboDropDown.DataTextField = </strong>"TerritoryDescription"<strong class="ph b">
+&nbsp;
+    cboDropDown.DataValueField = </strong>"TerritoryID"<strong class="ph b">&nbsp;</strong><strong class="ph b">Set</strong><strong class="ph b"> cboDropDown.DataSource = GetRecordset(
+&nbsp;
+</strong>"SELECT TerritoryID,TerritoryDescription FROM Territories ORDER BY 2"<strong class="ph b">)    
+&nbsp;
+    cboDropDown.DataBind() </strong><strong class="ph b">'Loads the items collection </strong><strong class="ph b"></strong><strong class="ph b">'(that will stay in the viewstate)...</strong><strong class="ph b"></strong><strong class="ph b">Set</strong><strong class="ph b"> cboDropDown.DataSource = </strong><strong class="ph b">Nothing</strong><strong class="ph b"> </strong><strong class="ph b">'Clear</strong><strong class="ph b">
+    cboDropDown.Caption = </strong>"Territory:"<strong class="ph b">
+&nbsp;
+    cboDropDown.CaptionCssClass = </strong>"InputCaption"<strong class="ph b">&nbsp;
+&nbsp;
+&nbsp;</strong><strong class="ph b">End</strong><strong class="ph b"> </strong><strong class="ph b">Function</strong><strong class="ph b">&nbsp;
+&nbsp;
+&nbsp;</strong><strong class="ph b">Public</strong><strong class="ph b"> </strong><strong class="ph b">Function</strong><strong class="ph b">Page_PreRender()
+&nbsp;</strong><strong class="ph b">Dim</strong><strong class="ph b">x,mx
+&nbsp;</strong><strong class="ph b">Dim</strong><strong class="ph b">msg 
+&nbsp;</strong><strong class="ph b">Set</strong><strong class="ph b"> msg = </strong><strong class="ph b">New</strong><strong class="ph b"> StringBuilder
+&nbsp;
+    msg.Append </strong>"&lt;B&gt;Selected Value=&lt;/B&gt;"<strong class="ph b">&nbsp;
+        &amp; cboDropDown.Items.GetSelectedText  &amp;</strong>"&lt;BR&gt;"<strong class="ph b">
+&nbsp;
+    msg.Append </strong>"&lt;B&gt;Selected Text=&lt;/B&gt;"<strong class="ph b">&nbsp;
+       &amp; cboDropDown.Items.GetSelectedValue  &amp;</strong>"&lt;BR&gt;"<strong class="ph b">
+&nbsp;
+&nbsp;
+&nbsp;
+    msg.Append </strong>"&lt;HR&gt;"<strong class="ph b">&nbsp;
+    mx = cboDropDown.Items.Count -1    
+&nbsp;
+    lblMessage.Text  = msg.ToString()    
+&nbsp;</strong><strong class="ph b">End</strong><strong class="ph b"> </strong><strong class="ph b">Function</strong><strong class="ph b">
+&nbsp;
+&nbsp;
+&nbsp;
+</strong><strong class="ph b">'-- PostBack Handlers</strong><strong class="ph b">&nbsp;
+&nbsp;</strong><strong class="ph b">Public</strong><strong class="ph b"> </strong><strong class="ph b">Function</strong><strong class="ph b"> chkHideShow_Click()
+&nbsp;
+    cboDropDown.</strong><strong class="ph b">Control</strong><strong class="ph b">.Visible = </strong><strong class="ph b">Not</strong><strong class="ph b"> cboDropDown.</strong><strong class="ph b">Control</strong><strong class="ph b">.Visible
+&nbsp;</strong><strong class="ph b">End</strong><strong class="ph b"> </strong><strong class="ph b">Function</strong><strong class="ph b">&nbsp;
+&nbsp;
+&nbsp;</strong><strong class="ph b">Public</strong><strong class="ph b"> </strong><strong class="ph b">Function</strong><strong class="ph b">chkAutoPostBack_Click()
+&nbsp;
+    cboDropDown.AutoPostBack = chkAutoPostBack.Checked
+&nbsp;</strong><strong class="ph b">End</strong><strong class="ph b"> </strong><strong class="ph b">Function</strong><strong class="ph b">&nbsp;
+&nbsp;
+&nbsp;</strong><strong class="ph b">Public</strong><strong class="ph b"> </strong><strong class="ph b">Function</strong><strong class="ph b"> cmdAdd_OnClick()
+&nbsp;
+    cboDropDown.Items.Add cboDropDown.Items.Count,
+&nbsp;
+        cboDropDown.Items.Count,</strong><strong class="ph b">False</strong><strong class="ph b">&nbsp;</strong><strong class="ph b">End</strong><strong class="ph b"> </strong><strong class="ph b">Function</strong><strong class="ph b">&nbsp;
+&nbsp;
+&nbsp;</strong><strong class="ph b">Public</strong><strong class="ph b"> </strong><strong class="ph b">Function</strong><strong class="ph b">cmdRemove_OnClick()
+&nbsp;
+    cboDropDown.Items.Remove cboDropDown.Items.Count-1
+&nbsp;</strong><strong class="ph b">End</strong><strong class="ph b"> </strong><strong class="ph b">Function</strong><strong class="ph b">&nbsp;
+&nbsp;
+&nbsp;</strong><strong class="ph b">Public</strong><strong class="ph b"> </strong><strong class="ph b">Function</strong><strong class="ph b">chkListBox_Click()
+&nbsp;</strong><strong class="ph b">if</strong><strong class="ph b"> chkListBox.Checked </strong><strong class="ph b">Then</strong><strong class="ph b">
+&nbsp;
+      cboDropDown.Rows = 10
+&nbsp;
+      cboDropDown.Multiple = </strong><strong class="ph b">True</strong><strong class="ph b">&nbsp;</strong><strong class="ph b">Else</strong><strong class="ph b">
+&nbsp;
+      cboDropDown.Rows = 1
+&nbsp;
+      cboDropDown.Multiple = </strong><strong class="ph b">False</strong><strong class="ph b">&nbsp;</strong><strong class="ph b">End</strong><strong class="ph b"> </strong><strong class="ph b">If</strong><strong class="ph b">&nbsp;</strong><strong class="ph b">End</strong><strong class="ph b"> </strong><strong class="ph b">Function</strong><strong class="ph b">&nbsp;
+%&gt;</strong></code></pre></div>
+<p class="p">其它</p>
+<p class="p">框架开发时间为四五天，每个控件一到三小时，除了DataGrid耗了一两天。开发完后发现一些有趣的事情，比如你恢复HTML输入控件(text
+boxes, drop downs等)的viewstate时，根据它们是可见，不可见，已渲染，未渲染的状态，它们会有不同的行为。</p>
+<p class="p">参见</p>
+<p class="p"><a class="xref" href="http://www.webdevbros.net/ajaxed/" target="_blank" rel="external noopener">ajaxed - free classic ASP Ajax Library (VBScript)</a></p>
+<p class="p"><a class="xref" href="http://weblogs.asp.net/dneimke/archive/2004/07/28/199217.aspx" target="_blank" rel="external noopener">Classic ASP Page Framework的讨论</a></p>
+<p class="p"><a class="xref" href="http://weblogs.asp.net/dneimke/archive/2004/07/28/199291.aspx" target="_blank" rel="external noopener">Darren Neimke关于How to use the ASP Page Framework</a>Darren Neimke的简版ASP框架无法下载，他说Andy Smith开发过一个优秀的ASP框架，后来封装成COM，可惜也找不到下载。</p>
+<p class="p"><a class="xref" href="http://www.claspdev.com/ASPFramework/newhelp/helppage.asp" target="_blank" rel="external noopener">开源的ASP框架作品CLASP</a></p>
+<p class="p"><a class="xref" href="http://www.codeproject.com/asp/ClassicAspFW.asp" target="_blank" rel="external noopener">Classic ASP Framework - Make your Classic ASP code work like in ASP.NET</a></p>
+</div>
+<nav role="navigation" class="related-links"><div class="familylinks"><div class="parentlink"><strong>父主题：</strong> <a class="link" href="ASP.html">ASP</a></div></div></nav></article></main></body></html>

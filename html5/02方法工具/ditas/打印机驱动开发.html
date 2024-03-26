@@ -1,0 +1,2191 @@
+<!DOCTYPE html
+  SYSTEM "about:legacy-compat">
+<html lang="zh-cn"><head><meta charset="UTF-8"><meta name="copyright" content="(C) 版权 2024"><meta name="generator" content="DITA-OT"><meta name="description" content=""><title>打印机驱动开发</title><link rel="stylesheet" type="text/css" href="../../commonltr.css">
+<link rel="stylesheet" type="text/css" href="../../common-extended.css"></head><body id="打印机驱动开发-7E28DB89"><main role="main"><article role="article" aria-labelledby="ariaid-title1">
+<h1 class="title topictitle1" id="ariaid-title1">打印机驱动开发</h1>
+
+
+<div class="body conbody"><p class="shortdesc"></p>
+<p class="p"></p>
+<section class="section"></section>
+<section class="section"><h2 class="title sectiontitle">LPD（Line Printer Daemon）协定</h2><p class="p">LPD协议是一个建立在TCP/IP协议之上的协议，发表于1990年，原本是用于UNIX系统的网络打印服务的协议，而windows系统在XP以后也都支持了这个协议。</p><p class="p">LPD协议规范的功能很多，但我只需要其中传收打印工作的部分，指令格式如下所示：</p><p class="p">主指令︰</p><table class="table"><caption></caption><colgroup><col><col><col></colgroup><tbody class="tbody">
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"><p class="p">02</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">Queue</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">Line Feed</p></td>
+</tr>
+</tbody></table><p class="p">字段一：指令号码，02表示这是一个传送打印工作的要求</p><p class="p">字段二：指定目的的打印机队列</p><p class="p">字段三：结束字符</p><p class="p">副指令︰</p><table class="table"><caption></caption><colgroup><col><col><col><col><col></colgroup><tbody class="tbody">
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"><p class="p">02</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">Count</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">Space</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">Name</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">Line Feed</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"><p class="p">03</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">Count</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">Space</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">Name</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">Line Feed</p></td>
+</tr>
+</tbody></table><p class="p">&nbsp;</p><p class="p">字段一：指令号码，02表示要传送的是Control File，03表示要传送的是Data
+File</p><p class="p">字段二：欲传送的档案大小（单位为byte）</p><p class="p">字段三：空白，分隔用</p><p class="p">字段四：传送的文件名称</p><p class="p">字段五：结束字符</p><p class="p">传送流程如下：</p><div class="p"><figure class="fig fignone"><figcaption><span class="fig--title-label">图 1. </span>LPD传送打印工作流程</figcaption>
+
+<img class="image" src="../../images/2018-04/printer1.png"></figure></div><p class="p">根据规范，操作系统在打印时会产生两个档案传送给服务器端，control file 以及 data file，data
+file就是经过打印机驱动程序编译过的打印机语言档案，直接送至打印机就可以打印，也就是说，这只程序不需要费尽苦心的去开启由任一软件的任一版本所编辑的档案来打印，因为送过来的档案是已经编译完成的，我甚至不需要在服务器上安装打印机的驱动程序！而control
+file 则是记录了这笔打印工作的信息，包含有：打印文件的文件名，来源计算机的计算机名称以及打印工作的标题。</p></section>
+<section class="section"><h2 class="title sectiontitle">SNMP支持OID列表</h2><table class="table"><caption><span class="table--title-label">表 1. </span><span class="title">SNMP Agent</span></caption><colgroup><col><col><col><col><col></colgroup><tbody class="tbody">
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">管理对象</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">OID</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">访问</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">描述(备注)</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"><p class="p">（1） iso/org/dod/internet/mgmt/mib-2/system组</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">sysDescr</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.1.1.0</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">设备实体描述</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">sysObjectID</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.1.2.0</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">实体中包含的网络管理子系统的厂商标识</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">sysUpTime</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.1.3.0</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">系统的网络管理部分本次启动以来的时间</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">sysContact</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.1.4.0</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RW</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">该被管节点负责人的标识和联系信息</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">sysName</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.1.5.0</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RW</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">该被管节点被赋予的名称</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">sysLocation</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.1.6.0</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RW</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">该节点的物理地点</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">sysServices</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.1.7.0</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">指出该节点所提供的服务的集合，7个bit对应7层服务</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">sysORLastChange</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.1.8.0</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">MIB表集合动态变化中最近一次的时间</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">sysORID</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.1.9.1.2.0</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">各个MIB表OID</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">sysORDescr</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.1.9.1.3.0</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">各个MIB表描述</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">sysORUpTime</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.1.9.1.4.0</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">各个MIB表动态变化时间</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"><p class="p">（2） iso/org/dod/internet/mgmt/mib-2/interfaces组</p></td>
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">ifNumber</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.2.1.0</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">网络接口的数目</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">ifIndex</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.2.2.1.1.0</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">对应各个接口的唯一值索引</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">ifDescr</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.2.2.1.2.0</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">有关接口的信息</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">ifType</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.2.2.1.3.0</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">接口类型，根据物理或链路层协议区分</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">ifMtu</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.2.2.1.4.0</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">接口可接收或发送的最大协议数据单元的尺寸</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">ifSpeed</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.2.2.1.5.0</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">接口当前数据速率的估计值</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">ifPhyAddress</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.2.2.1.6.0</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">接口物理地址</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">ifAdminStatus</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.2.2.1.7.0</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">期望的接口状态(up(1),
+down(2), testing(3))</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">ifOperStatus</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.2.2.1.8.0</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">当前的操作接口状态
+(up(1), down(2), testing(3))</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">ifInOctets</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.2.2.1.10.0</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">接口收到的8元组的总数</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">ifInUcastPkts</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.2.2.1.11.0</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">递交到高层协议的子网单播的分组数</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">ifInDiscards</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.2.2.1.13.0</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">被丢弃的进站分组数</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">ifInErrors</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.2.2.1.14.0</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">有错的进站分组数</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">ifOutOctets</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.2.2.1.16.0</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">接口发送的8元组的总数</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">ifOutUcastPkts</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.2.2.1.17.0</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">发送到子网单播地址的分组总数</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">ifOutDiscards</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.2.2.1.19.0</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">被丢弃的出站分组数</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">ifOutErrors</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.2.2.1.20.0</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">不能被发送的有错的分组数</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">ifOutQLen</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.2.2.1.21.0</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">输出分组队列长度</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">ifSpecific</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.2.2.1.22.0</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">当前接口的特定媒介</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"><p class="p">（3） iso/org/dod/internet/mgmt/mib-2/at组</p></td>
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">atPhysAddress</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.3.1.1.2.0</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">活动到设备的物理地址</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">atNetAddress</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.3.1.1.3.0</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">对应物理地址的网络地址</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"><p class="p">（4） iso/org/
+dod/internet/mgmt/mib-2/ip组</p></td>
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">ipForwarding</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.4.1.0</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RW</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">是否作为IP网关(路由器)（1/2）</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">ipDefaultTTL</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.4.2.0</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RW</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">插入到该实体生成的数据报的IP头中Time-To-Live字段中的默认值</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">ipInReceives</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.4.3.0</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">接口收到的输入数据报的总数</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">ipInHdrErrors</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.4.4.0</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">由于IP头错被丢弃的输入数据报总数</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">ipInAddrErrors</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.4.5.0</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">由于IP地址错被丢弃的输入数据报总数</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">ipForwDatagrams</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.4.6.0</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">转发的输入数据报数</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">ipInUnknownProtos</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.4.7.0</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">由于协议未知被丢弃的输入数据报数</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">ipInDiscards</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.4.8.0</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">无适当理由而被丢弃的输入数据报数</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">ipInDelivers</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.4.9.0</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">成功地递交给IP用户协议的输入数据报数</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">ipOutRequests</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.4.10.0</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">本地IP用户协议要求传输的IP数据报总数</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">ipOutDiscards</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.4.11.0</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">无适当理由而被丢弃的输出数据报数</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">ipOutNoRoutes</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.4.12.0</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">由于未找到路由而被丢弃的IP数据报数</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">ipReasmTimeout</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.4.13.0</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">重组接收到的碎片可等待的最大秒数</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">ipReasmReqds</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.4.14.0</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">接收到的需要重组的IP碎片数</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">ipReasmOKs</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.4.15.0</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">成功重组的IP数据报数</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">ipReasmFails</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.4.16.0</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">由IP重组算法检测到的重组失败的数目</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">ipFragOKs</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.4.17.0</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">成功拆分的IP数据报数</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">ipFragFails</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.4.18.0</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">不能成功拆分而被丢弃的IP数据报数</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">ipFragCreates</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.4.19.0</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">本实体产生的IP数据报碎片数</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">ipAdEntAddr</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.4.20.1.1.0</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">网络接口的IP地址</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">ipAdEntIfIndex</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.4.20.1.2.0</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">网络接口的IP地址索引</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">ipAdEntNetMask</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.4.20.1.3.0</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">网络接口的子网掩码地址</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">ipAdEntBcastAddr</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.4.20.1.4.0</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">网络接口的广播地址宏(INADDR_BROADCAST、0)</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">ipRouteDest</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.4.21.1.1.0</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">网络接口的路由目标</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">ipRouteIfIndex</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.4.21.1.2.0</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">网络接口的路由目标索引</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">ipRouteMetric1</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.4.21.1.3.0</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">路由度量值</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">ipRouteNextHop</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.4.21.1.7.0</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">下一跳（非路由器则0地址）</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">ipRouteType</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.4.21.1.8.0</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">路由类型</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">ipRouteProto</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.4.21.1.9.0</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">路由协议</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">ipRouteMask</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.4.21.1.11.0</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">路由掩码</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">ipRouteInfo</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.4.21.1.13.0</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">特殊路由协议</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">ipNetToMediaPhysAddress</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.4.22.1.2.0</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">最近活动过有效设备的物理地址</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">ipNetToMediaNetAddress</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.4.22.1.3.0</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">最近活动过有效设备的IP地址</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">ipNetToMediaType</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.4.22.1.4.0</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">最近活动过有效设备的地址映射类型</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">ipRoutingDiscards</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.4.23.0</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">被丢弃的路由选择条目</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">ipCidrRouteDest</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.4.24.4.1.1.0</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">CIDR路由目的地址</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">ipCidrRouteMask</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.4.24.4.1.2.0</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">CIDR路由掩码值</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">ipCidrRouteTos</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.4.24.4.1.3.0</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">CIDR路由指定策略的IP
+ToS字段</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">ipCidrRouteNextHop</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.4.24.4.1.4.0</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">CIDR路由的下一跳地址</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">ipCidrRouteIfIndex</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.4.24.4.1.5.0</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">CIDR路由出接口索引</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">ipCidrRouteType</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.4.24.4.1.6.0</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">CIDR路由类型</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">ipCidrRouteProto</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.4.24.4.1.7.0</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">CIDR路由学习机制</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">ipCidrRouteInfo</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.4.24.4.1.9.0</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">一个负责该CIDR路由的特殊路由协议中有一个关于MIB定义的参考信息</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">ipCidrRouteNextHopAS</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.4.24.4.1.10.0</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">CIDR路由下一跳所在的自治系统号</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">ipCidrRouteMetric1</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.4.24.4.1.11.0</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">主要的CIDR路由度量值</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">ipCidrRouteMetric2</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.4.24.4.1.12.0</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">可选的CIDR路由度量值</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">ipCidrRouteMetric3</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.4.24.4.1.13.0</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">可选的CIDR路由度量值</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">ipCidrRouteMetric4</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.4.24.4.1.14.0</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">可选的CIDR路由度量值</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">ipCidrRouteMetric5</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.4.24.4.1.15.0</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">可选的CIDR路由度量值</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">ipCidrRouteStatus</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.4.24.4.1.16.0</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">可选的CIDR路由度量值</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">inetCidrRouteNumber</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.4.24.6.0</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">ipCidrRouteTable中正确的条目的数量</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">inetCidrRouteIfIndex</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.4.24.7.1.7.</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">公网路由出接口索引，出接口指要到达该路由的下一跳所经过的本地接口。</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">inetCidrRouteType</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.4.24.7.1.8.</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">公网路由类型</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">inetCidrRouteProto</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.4.24.7.1.9.</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">公网路由协议</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">inetCidrRouteAge</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.4.24.7.1.10.</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">公网路由更新时间</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">inetCidrRouteNextHopAS</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.4.24.7.1.11.</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">公网路由下一跳所在的自治系统号</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">inetCidrRouteMetric1</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.4.24.7.1.12.</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">主要的公网路由度量值</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">inetCidrRouteMetric2</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.4.24.7.1.13.</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">可选的公网路由度量值</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">inetCidrRouteMetric3</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.4.24.7.1.14.</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">可选的公网路由度量值</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">inetCidrRouteMetric4</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.4.24.7.1.15.</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">可选的公网路由度量值</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">inetCidrRouteMetric5</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.4.24.7.1.16.</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">可选的公网路由度量值</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">inetCidrRouteStatus</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.4.24.7.1.17.</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">根据行的创建和删除约定来使用的行状态变量</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">ipSystemStatsInReceives</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.4.31.1.1.3.</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">系统所有接收的IP报文的统计</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">ipSystemStatsHCInReceives</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.4.31.1.1.4.</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">系统所有接收的IP报文的统计(容纳的值比ipSystemStatsInReceives更大)</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">ipSystemStatsInHdrErrors</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.4.31.1.1.7.</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">所有由于IP报文头错误而统计的报文总数</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">ipSystemStatsInNoRoutes</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.4.31.1.1.8.</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">查找不到路由的报文统计总和</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">ipSystemStatsInAddrErrors</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.4.31.1.1.9.</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">所有IP头中目的地址字段不合法的IP报文数总和</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">ipSystemStatsInUnknownProtos</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.4.31.1.1.10.</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">所有已经成功接收，但是协议号非法的报文统计总和</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">ipSystemStatsInTruncatedPkts</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.4.31.1.1.11.</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">所有接收的净荷和IP长度不一致的IP报文数目统计总和</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">ipSystemStatsInForwDatagrams</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.4.31.1.1.12.</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">所有输入的转发报文的统计数目</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">ipSystemStatsHCInForwDatagrams</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.4.31.1.1.13.</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">所有输入的转发报文的统计数目（容纳的值比ipSystemStatsInForwDatagrams更大）</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">ipSystemStatsReasmReqds</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.4.31.1.1.14.</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">接口接收到的需要重组的报文数目统计总和</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">ipSystemStatsReasmOKs</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.4.31.1.1.15.</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">成功重组的报文数目统计总和</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">ipSystemStatsReasmFails</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.4.31.1.1.16.</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">由IP重组算法检测到的重组失败的报文数目统计总和</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">ipSystemStatsInDiscards</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.4.31.1.1.17.</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">由于设备内部原因导致报文丢弃统计总和</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">ipSystemStatsInDelivers</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.4.31.1.1.18.</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">表示成功上送至IP协议（包括ICMP）的数据报总数</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">ipSystemStatsHCInDelivers</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.4.31.1.1.19.</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">所有成功上送到IP协议（包括ICMP）的报文统计总和（容纳的值比ipSystemStatsInDelivers更大）</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">ipSystemStatsOutRequests</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.4.31.1.1.20.</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">所有转发出去IP协议（包括ICMP）报文统计总和</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">ipSystemStatsHCOutRequests</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.4.31.1.1.21.</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">所有转发出去IP协议（包括ICMP）报文统计总和（容纳的值比ipSystemStatsOutRequests更大）</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">ipSystemStatsOutNoRoutes</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.4.31.1.1.22.</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">所有本地发送的却查不到路由无法转发出去报文的统计总和</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">ipSystemStatsOutForwDatagrams</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.4.31.1.1.23.</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">所有成功转发出去的IP报文统计之和（目的地址并非本机）
+ </p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">ipSystemStatsHCOutForwDatagrams</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.4.31.1.1.24.</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">所有成功转发出去的IP报文统计之和（目的地址并非本机），容纳值比ipSystemStatsOutForwDatagrams更大</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">ipSystemStatsOutDiscards</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.4.31.1.1.25.</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">由于设备内部原因而导致无法转发出去的报文之和</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">ipSystemStatsOutFragReqds</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.4.31.1.1.26.</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">系统中所有需要分片报文统计总和</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">ipSystemStatsOutFragOKs</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.4.31.1.1.27.</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">系统中所有分片成功的IP报文统计总和</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">ipSystemStatsOutFragFails</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.4.31.1.1.28.</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">系统中所有分片失败的IP报文统计总和</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">ipSystemStatsOutFragCreates</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.4.31.1.1.29.</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">所有分片产生的IP报文数目之和</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">ipSystemStatsOutTransmits</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.4.31.1.1.30.</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">所有交给下一层转发的IP报文总和
+ </p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">ipSystemStatsHCOutTransmits</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.4.31.1.1.31.</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">所有交给下一层转发的IP报文总和(容纳值比ipSystemStatsOutTransmits更大30.)</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">ipSystemStatsInMcastPkts</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.4.31.1.1.34.</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">接收的IP组播报文总和</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">ipSystemStatsHCInMcastPkts</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.4.31.1.1.35.</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">接收的IP组播报文总和（容纳值比ipSystemStatsInMcastPkts更大）</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">ipSystemStatsOutMcastPkts</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.4.31.1.1.38.</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">发送的IP组播报文总和</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">ipSystemStatsHCOutMcastPkts</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.4.31.1.1.39.</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">发送的IP组播报文总和（容纳值比ipSystemStatsOutMcastPkts更大）</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">ipSystemStatsInBcastPkts</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.4.31.1.1.42.</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">接收到的广播报文总和</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">ipSystemStatsHCInBcastPkts</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.4.31.1.1.43.</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">接收到的广播报文总和（容纳值比ipSystemStatsInBcastPkts更大）</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">ipSystemStatsOutBcastPkts</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.4.31.1.1.44.</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">发送的广播报文总和</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">ipSystemStatsHCOutBcastPkts</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.4.31.1.1.45.</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">发送的广播报文总和（容纳值比ipSystemStatsOutBcastPkts更大）</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">ipSystemStatsRefreshRate</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.4.31.1.1.47.</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">最小适度的报文投送间隔(ms)</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">ipIfStatsTableLastChange</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.4.31.2.0</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">(ipIfStatsTableLastChange)</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">ipAddressPrefixOrigin</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.4.32.1.5.</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">该前缀的来源</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">ipAddressPrefixOnLinkFlag</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.4.32.1.6.</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">该前缀是否可以用于链路确定</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">ipAddressPrefixAutonomousFlag</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.4.32.1.7.</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">自动地址配置标志</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">ipAddressPrefixAdvPreferredLifetime</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.4.32.1.8.</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">该前缀保持首选的秒数</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">ipAddressPrefixAdvValidLifetime</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.4.32.1.9.</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">该前缀保持有效的秒数，也就是说，直到前缀无效的时间</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">ipAddressSpinLock</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.4.33.0</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">（ipAddressSpinLock）</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">ipAddressIfIndex</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.4.34.1.3.</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">唯一可应用于标识该实体的接口的索引值</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">ipAddressType</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.4.34.1.4.</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">地址的类型</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">ipAddressPrefix</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.4.34.1.5.</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">指向前缀表中该地址所对应前缀的行的指针</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">ipAddressOrigin</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.4.34.1.6.</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">IP地址的来源</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">ipAddressStatus</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.4.34.1.7.</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">IP地址的状态，例如描述地址是否可用于通信</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">ipAddressCreated</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.4.34.1.8.</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">IP表项被创建时的系统时间</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">ipAddressLastChanged</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.4.34.1.9.</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">IP表项最后一次被更新的系统时间</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">ipAddressRowStatus</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.4.34.1.10.</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">IP地址行的存储状态</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">ipAddressStorageType</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.4.34.1.11.</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">IP地址行的存储类型</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">ipNetToPhysicalPhysAddress</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.4.35.1.4.</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">物理地址</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">ipNetToPhysicalLastUpdated</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.4.35.1.5.</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">IP-MAC映射表项最后一次被更新的系统时间</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">ipNetToPhysicalType</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.4.35.1.6.</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">IP-MAC映射表的类型</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">ipNetToPhysicalState</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.4.35.1.7.</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">IP-MAC映射表项的邻居可达性探测的状态 </p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">ipNetToPhysicalRowStatus</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.4.35.1.8.</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">IP-MAC映射表行状态</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">ipDefaultRouterLifetime</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.4.37.1.4.</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">默认路由地址的剩余生命周期</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">ipDefaultRouterPreference</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.4.37.1.5.</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">默认路由优先级</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"><p class="p">（5） iso/org/
+dod/internet/mgmt/mib-2/icmp组</p></td>
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">icmpInMsgs</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.5.1.0</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">收到的ICMP消息的总数</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">icmpInErrors</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.5.2.0</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">收到的有错的ICMP的消息数</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">icmpInDestUnreachs</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.5.3.0</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">收到的目的地不可到达的消息数</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">icmpInTimeExcds</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.5.4.0</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">收到的超时的消息数</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">icmpInParmProbs</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.5.5.0</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">收到的有参数问题的消息数</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">icmpInSrcQuenchs</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.5.6.0</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">收到的源有问题的消息数</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">icmpInRedirects</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.5.7.0</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">收到的重定向的消息数</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">icmpInEchos</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.5.8.0</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">收到的要求echo的消息数</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">icmpInEchoReps</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.5.9.0</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">收到的应答echo的消息数</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">icmpInTimestamps</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.5.10.0</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">收到的要求Timestamp的消息数</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">icmpInTimestampReps</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.5.11.0</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">收到的应答Timestamp的消息数</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">icmpInAddrMasks</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.5.12.0</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">收到的要求Address
+Mask的消息数</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">icmpInAddrMaskReps</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.5.13.0</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">收到的应答Address
+Mask的消息数</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">icmpOutMsgs</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.5.14.0</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">发出的ICMP消息的总数</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">icmpOutErrors</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.5.15.0</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">发出的有错的ICMP的消息数</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">icmpOutDestUnreachs</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.5.16.0</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">发出的目的地不可到达的消息数</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">icmpOutTimeExcds</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.5.17.0</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">发出的超时的消息数</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">icmpOutParmProbs</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.5.18.0</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">发出的有参数问题的消息数</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">icmpOutSrcQuenchs</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.5.19.0</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">发出的源有问题的消息数</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">icmpOutRedirects</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.5.20.0</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">发出的重定向的消息数</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">icmpOutEchos</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.5.21.0</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">发出的要求echo的消息数</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">icmpOutEchoReps</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.5.22.0</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">发出的应答echo的消息数</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">icmpOutTimestamps</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.5.23.0</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">发出的要求Timestamp的消息数</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">icmpOutTimestampReps</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.5.24.0</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">发出的应答Timestamp的消息数</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">icmpOutAddrMasks</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.5.25.0</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">发出的要求Address
+Mask的消息数</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">icmpOutAddrMaskReps</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.5.26.0</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">发出的应答Address
+Mask的消息数</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">icmpStatsInMsgs</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.5.29.1.2.</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">全局下输入的ICMP报文统计计数</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">icmpStatsInErrors</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.5.29.1.3.</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">全局输入的ICMP错误报文统计计数</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">icmpStatsOutMsgs</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.5.29.1.4.</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">全局下输出的ICMP报文统计</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">icmpStatsOutErrors</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.5.29.1.5.</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">全局输出的ICMP错误报文统计计数</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">icmpMsgStatsInPkts</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.5.30.1.3.</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">基于该类型的ICMP输入报文统计</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">icmpMsgStatsOutPkts</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.5.30.1.4.</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">基于该类型的ICMP输出报文统计</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"><p class="p">（6） iso/org/
+dod/internet/mgmt/mib-2/tcp组</p></td>
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">tcpRtoAlgorithm</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.6.1.0</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">重传时间</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">tcpRtoMin</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.6.2.0</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">重传时间的最小值</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">tcpRtoMax</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.6.3.0</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">重传时间的最大值</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">tcpMaxConn</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.6.4.0</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">实体支持的TCP连接数的上限</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">tcpActiveOpens</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.6.5.0</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">实体已经支持的主动打开的数量</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">tcpPassiveOpens</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.6.6.0</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">实体已经支持的被动打开的数量</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">tcpAttemptFails</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.6.7.0</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">已经发生的试连失败的次数</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">tcpEstabResets</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.6.8.0</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">已经发生的复位的次数</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">tcpCurrEstab</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.6.9.0</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">当前状态为established的TCP连接数</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">tcpInSegs</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.6.10.0</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">收到的segments总数</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">tcpOutSegs</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.6.11.0</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">发出的segments总数</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">tcpRetransSegs</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.6.12.0</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">重传的segments总数</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">tcpConnState</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.6.13.1.1.0</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">各个连接的状态</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">tcpConnLocalAddress</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.6.13.1.2.0</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">各个连接的本地IP</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">tcpConnLocalPort</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.6.13.1.3.0</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">各个连接的本地端口</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">tcpConnRemAddress</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.6.13.1.4.0</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">各个连接的远程IP</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">tcpConnRemPort</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.6.13.1.5.0</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">各个连接的远程端口</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">tcpInErrs</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.6.14.0</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">收到的有错的segments的总数</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">tcpOutRsts</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.6.15.0</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">发出的含有RST标志的segments数</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">tcpConnectionState</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.6.19.1.7.</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">表示TCP连接状态</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">tcpConnectionProcess</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.6.19.1.8.</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">连接所属进程的TASK
+ID</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">tcpListenerProcess</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.6.20.1.4.</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">系统进程号。表示与该条LISTEN状态的TCP连接相关的进程号</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"><p class="p">（7） iso/org/
+dod/internet/mgmt/mib-2/udp组</p></td>
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">udpInDatagrams</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.7.1.0</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">递交该UDP用户的数据报的总数</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">udpNoPorts</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.7.2.0</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">收到的目的端口上没有应用的数据报总数</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">udpInErrors</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.7.3.0</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">收到的无法递交的数据报数</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">udpOutDatagrams</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.7.4.0</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">该实体发出的UDP数据报总数</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">udpLocalAddress</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.7.5.1.1.0</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">用户的本地IP地址</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">udpLocalPort</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.7.5.1.2.0</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">用户的本地端口号</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">udpEndpointProcess</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.7.7.1.8.</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">系统进程号。表示与该UDP结点相关的进程号</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"><p class="p">（8） iso/org/
+dod/internet/mgmt/mib-2/snmp组</p></td>
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">snmpInPkts</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.11.1.0</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">SNMP实体收到的消息总数</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">snmpOutPkts</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.11.2.0</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">SNMP实体发送的消息总数</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">snmpInBadVersions</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.11.3.0</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">不支持的SNMP版本消息数</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">snmpInBadCommunityNames</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.11.4.0</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">当前实体不能识别的SNMP团体名消息数</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">snmpInBadCommunityUses</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.11.5.0</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">涉及此消息使用的团体名中不允许的SNMP操作消息数</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">snmpInASNParseErrs</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.11.6.0</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">SNMP实体在解析所收到的SNMP消息时，出现的有关ASN.1和BER的错误总数</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">snmpInTooBigs</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.11.8.0</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">发送到SNMP协议实体和错误状态字段的值太大的SNMP
+PDU总数</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">snmpInNoSuchNames</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.11.9.0</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">发送到SNMP协议实体和错误状态字段的值为无此名的SNMP
+PDU总数</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">snmpInBadValues</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.11.10.0</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">发送到SNMP协议实体和错误状态字段的值为“badValue”的SNMP
+PDU总数</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">snmpInReadOnlys</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.11.11.0</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">发送到SNMP协议实体和错误状态字段的值为“readOnly”的SNMP
+PDU数目</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">snmpInGenErrs</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.11.12.0</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">发送到SNMP协议实体和错误状态字段的值为“genErr”的SNMP
+PDU总数</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">snmpInTotalReqVars</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.11.13.0</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">SNMP实体根据收到的正确的Get-Request和Get-Next报文，成功找到的MIB目标数</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">snmpInTotalSetVars</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.11.14.0</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">SNMP实体根据收到的正确的Set-Request报文，成功改变的MIB目标数</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">snmpInGetRequests</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.11.15.0</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">SNMP实体收到并且处理的Get-Request报文总数</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">snmpInGetNexts</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.11.16.0</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">SNMP实体收到并且处理的Get-Next报文总数</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">snmpInSetRequests</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.11.17.0</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">SNMP实体收到并且处理的Set-Request报文总数</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">snmpInGetResponses</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.11.18.0</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">SNMP协议实体收到并处理SNMP响应PDU的总数</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">snmpInTraps</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.11.19.0</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">收到的Trap总数</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">snmpOutTooBigs</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.11.20.0</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">产生的错误状态为“tooBig”的SNMP
+PDU报文的总数</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">snmpOutNoSuchNames</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.11.21.0</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">产生的错误状态为“noSuchName”的SNMP
+PDU报文的总数</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">snmpOutBadValues</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.11.22.0</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">产生的错误状态为“badValue”的SNMP
+PDU报文的总数</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">snmpOutGenErrs</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.11.24.0</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">产生的错误状态为“genErr”的SNMP
+PDU报文的总数</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">snmpOutGetRequests</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.11.25.0</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">SNMP实体产生的Get-Request报文总数</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">snmpOutGetNexts</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.11.26.0</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">生成的SNMP
+GET-NEXT总数</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">snmpOutSetRequests</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.11.27.0</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">生成的SNMP
+Set-Request总数</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">snmpOutGetResponses</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.11.28.0</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">SNMP实体产生的Get-Response报文总数</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">snmpOutTraps</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.11.29.0</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">SNMP实体产生的Trap报文总数</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">snmpEnableAuthenTraps</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.11.30.0</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">该值显示SNMP实体是否可以生成鉴定失败的Trap</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">snmpSilentDrops</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.11.31.0</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">被丢弃的SNMP报文总数</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">snmpProxyDrops</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.2.1.11.32.0</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">被代理丢弃的SNMP报文总数</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"><p class="p">（9） iso/org/dod/internet/snmpV2</p></td>
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">snmpSetSerialNo</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.6.3.1.1.6.1.0</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">该对象用于粗粒度的协调SNMP集合运算</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">snmpEngineID </p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.6.3.10.2.1.1.0</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">SNMP引擎ID</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">snmpEngineBoots</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.6.3.10.2.1.2.0</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">自上一次配置之后SNMP实体启动或重新初始化的次数</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">snmpEngineTime</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.6.3.10.2.1.3.0</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">自上一次snmpEngineBoots对象的值改变之后的秒数</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">snmpEngineMaxMessageSize</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.6.3.10.2.1.4.0</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">SNMP能够发送或接收的最大尺寸</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">snmpUnknownSecurityModels</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.6.3.11.2.1.1.0</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">SNMP消息包含了不支持的或无法识别的安全模型而被丢弃的接收包的数量</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">snmpInvalidMsgs</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.6.3.11.2.1.2.0</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">因SNMP信息包含错误安全级别而被丢弃的接收包的数量</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">snmpUnknownPDUHandlers</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.6.3.11.2.1.3.0</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">因无法处理PDU而被丢弃的接收包的数量</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">snmpTargetSpinLock</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.6.3.12.1.1.0</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">使用该节点便于多用户同时修改SNMP_TARGET_MIB表项</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">snmpUnavailableContexts</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.6.3.12.1.4.0</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">SNMP收到并丢弃的不可用上下文数目</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">snmpUnknownContexts</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.6.3.12.1.5.0</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">SNMP收到并丢弃的未知的上下文数目</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">usmStatsUnsupportedSecLevels</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.6.3.15.1.1.1.0</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">由于其安全级别不被支持的而丢弃的包数</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">usmStatsNotInTimeWindows</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.6.3.15.1.1.2.0</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">由于落在时间窗之外而被丢弃的包数</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">usmStatsUnknownUserNames</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.6.3.15.1.1.3.0</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">由于未知用户名而被丢弃的包数</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">usmStatsUnknownEngineIDs</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.6.3.15.1.1.4.0</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">由于未知引擎ID数而被丢弃的包数</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">usmStatsWrongDigests</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.6.3.15.1.1.5.0</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">摘要值错误而被丢弃的包数</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">usmStatsDecryptionErrors</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.6.3.15.1.1.6.0</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">解码错误而被丢弃的包数</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">usmUserSpinLock</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.6.3.15.1.2.1.0</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">用户配置锁，保证同一时刻只允许一个用户进行配置操作</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">usmUserSecurityName</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.6.3.15.1.2.2.1.3.</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">安全模型自由格式的一个用户</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">usmUserCloneFrom</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.6.3.15.1.2.2.1.4.</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">一个指针指向usmUserTable中的其他的一行。那么，在其他行的用户被称为clone-from用户</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">usmUserAuthProtocol</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.6.3.15.1.2.2.1.5.</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">认证协议（No、MD5、SHA）</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">usmUserAuthKeyChange</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.6.3.15.1.2.2.1.6.</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">（当该节点为只读权限时，将会返回一个空字符串）</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">usmUserOwnAuthKeyChange</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.6.3.15.1.2.2.1.7.</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">（当该节点为只读权限时，将会返回一个空字符串）</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">usmUserPrivProtocol</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.6.3.15.1.2.2.1.8.</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">密钥协议(No\DES\AES)</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">usmUserPrivKeyChange</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.6.3.15.1.2.2.1.9.</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">（当该节点为只读权限时，将会返回一个空字符串）</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">usmUserOwnPrivKeyChange</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.6.3.15.1.2.2.1.10.</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">（当该节点为只读权限时，将会返回一个空字符串）</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">usmUserPublic</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.6.3.15.1.2.2.1.11.</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">验证鉴别加密设置是否成功</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">usmUserStorageType</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.6.3.15.1.2.2.1.12.</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">指定用户行的存储方式</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">usmUserStatus</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.6.3.15.1.2.2.1.13.</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">指定用户行对象状态</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">vacmContextName</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.6.3.16.1.1.1.1.0</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">在特定SNMP实体中定义某个上下文的便于人员读取的名称</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">vacmGroupName</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.6.3.16.1.2.1.3.</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">该表项（例如securityModel和securityName结合）所属组的名称。
+ </p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">vacmSecurityToGroupStorageType</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.6.3.16.1.2.1.4.</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">该视图概念行的存储类型</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">vacmSecurityToGroupStatus</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.6.3.16.1.2.1.5.</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">该视图概念行的状态</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">vacmAccessContextMatch</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.6.3.16.1.4.1.4.</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">组访问通配方式</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">vacmAccessReadViewName</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.6.3.16.1.4.1.5.</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">该对象实例的值标识了此概念行授权读取的SNMP上下文的MIB视图</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">vacmAccessWriteViewName</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.6.3.16.1.4.1.6.</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">该对象实例的值标识了此概念行授权写访问的SNMP上下文的MIB视图</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">vacmAccessNotifyViewName</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.6.3.16.1.4.1.7.</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">该对象实例的值标识了此概念行授权通知访问的SNMP上下文的MIB视图</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">vacmAccessStorageType</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.6.3.16.1.4.1.8.</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">该访问组概念行的存储类型</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">vacmAccessStatus</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.6.3.16.1.4.1.9.</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">该访问组概念行的状态</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">vacmViewSpinLock</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.6.3.16.1.5.1.0</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">一个咨询性质（advisory）的锁，用于使多个合作SNMP命令生成器应用在创建或修改视图下协调Set操作</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">vacmViewTreeFamilyMask</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.6.3.16.1.5.2.1.3.</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">视图子树的位掩码</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">vacmViewTreeFamilyType</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.6.3.16.1.5.2.1.4.</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">标识vacmViewTreeFamilySubtree和vacmViewTreeFamilyMask相应实例定义的一组视图子树是否包含在MIB视图中</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">vacmViewTreeFamilyStorageType</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.6.3.16.1.5.2.1.5.</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">该视图子树概念行的存储类型</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">vacmViewTreeFamilyStatus</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.6.3.16.1.5.2.1.6.</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RO</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">该视图子树概念行的状态</p></td>
+</tr>
+</tbody></table><p class="p"></p><table class="table"><caption><span class="table--title-label">表 2. </span><span class="title">SNMP Trap Sender</span></caption><colgroup><col><col><col><col></colgroup><tbody class="tbody">
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"><p class="p">v1标识</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">v2c OID</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">N/A</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">含义</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"><p class="p">coldStart </p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.6.3.1.1.5.1</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">N/A</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">冷启动告警</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"><p class="p">warmStart </p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.6.3.1.1.5.2</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">N/A</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">热启动告警</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"><p class="p">linkUp </p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1.3.6.1.6.3.1.1.5.4</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">N/A</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">网口重新链接告警</p></td>
+</tr>
+</tbody></table><div class="note note note_note"><span class="note__title">注：</span> <div class="note__body">备注：OID节点的具体含义均可参考OID查询网站：http://www.oid-info.com</div></div></section>
+<section class="section"><h2 class="title sectiontitle">参见</h2><ol class="ol">
+<li class="li"><p class="p"><a class="xref" href="https://www.c-sharpcorner.com/article/an-snmp-library-for-net-framework/" target="_blank" rel="external noopener">An SNMP Library for .NET Framework - C# Corner</a></p></li>
+<li class="li"><p class="p"><a class="xref" href="https://zhuanlan.zhihu.com/p/30463847" target="_blank" rel="external noopener">SNMP实现局域网打印机状态检测 - 知乎专栏</a></p></li>
+<li class="li"><p class="p"><a class="xref" href="https://blog.csdn.net/gzliudan/article/details/39937171" target="_blank" rel="external noopener">用C++在Windows上开发SNMP扩展代理(SNMP extension agent) DLL</a></p></li>
+<li class="li"><p class="p"><a class="xref" href="https://www.codeproject.com/Articles/9024/How-to-develop-a-SNMP-extension-agent-DLL" target="_blank" rel="external noopener">How to develop a SNMP extension agent DLL - CodeProject</a></p></li>
+<li class="li"><p class="p"><a class="xref" href="https://blog.csdn.net/kangear/article/details/26885685" target="_blank" rel="external noopener">关于打印机状态的获取</a></p></li>
+<li class="li"><p class="p"><a class="xref" href="http://dbpub.cnki.net/grid2008/Dbpub/detail.aspx?dbname=SCPD&amp;filename=CN102684905A" target="_blank" rel="external noopener">设备交互树及技术--中国专利全文数据库</a></p></li>
+<li class="li"><p class="p"><a class="xref" href="https://patents.google.com/patent/CN100555953C/zh" target="_blank" rel="external noopener">CN100555953C - 管理系统及其控制方法- Google Patents</a></p></li>
+<li class="li"><p class="p"><a class="xref" href="https://wenku.baidu.com/view/21987a43a32d7375a517802a.html?from=search" target="_blank" rel="external noopener">主机代理概要设计</a></p></li>
+<li class="li"><p class="p"><a class="xref" href="https://tools.ietf.org/html/draft-ietf-printmib-mib-info-00" target="_blank" rel="external noopener">draft-ietf-printmib-mib-info-00 - Printer MIB v2
+- IETF Tools</a></p></li>
+<li class="li"><p class="p"><a class="xref" href="https://tools.ietf.org/html/rfc7472" target="_blank" rel="external noopener">RFC 7472 - Internet Printing Protocol (IPP) over
+HTTPS Transport</a></p></li>
+<li class="li"><p class="p"><a class="xref" href="https://tools.ietf.org/html/rfc3805" target="_blank" rel="external noopener">RFC 3805 - Printer MIB v2 - IETF Tools</a></p></li>
+<li class="li"><p class="p"><a class="xref" href="https://www.codeproject.com/Articles/9026/Tool-to-traverse-MIB-tree-using-SNMP" target="_blank" rel="external noopener">Tool to traverse MIB tree using SNMP - CodeProject</a></p></li>
+<li class="li"><p class="p"><a class="xref" href="https://www.codeproject.com/Articles/12993/SNMP-library" target="_blank" rel="external noopener">SNMP library - CodeProject</a></p></li>
+<li class="li"><p class="p"><a class="xref" href="https://www.snmpsharpnet.com/" target="_blank" rel="external noopener">SnmpSharpNet</a></p></li>
+<li class="li"><p class="p"><a class="xref" href="https://wenku.baidu.com/view/6580cbdbce2f0066f5332280.html" target="_blank" rel="external noopener">基于.NET技术实现的SNMP通信_图文_百度文库</a></p></li>
+</ol></section>
+</div>
+<nav role="navigation" class="related-links"><ul class="ullinks"><li class="link ulchildlink"><strong><a href="%E6%89%93%E5%8D%B0%E6%9C%BASNMP%E7%9B%91%E6%8E%A7.html">打印机SNMP监控</a></strong><br></li></ul><div class="familylinks"><div class="parentlink"><strong>父主题：</strong> <a class="link" href="%E9%A9%B1%E5%8A%A8%E5%BC%80%E5%8F%91.html">驱动开发</a></div></div></nav></article></main></body></html>

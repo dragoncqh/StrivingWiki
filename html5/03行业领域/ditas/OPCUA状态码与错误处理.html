@@ -1,0 +1,151 @@
+<!DOCTYPE html
+  SYSTEM "about:legacy-compat">
+<html lang="zh-cn"><head><meta charset="UTF-8"><meta name="copyright" content="(C) 版权 2024"><meta name="generator" content="DITA-OT"><meta name="description" content=""><title>OPC UA状态码与错误处理</title><link rel="stylesheet" type="text/css" href="../../commonltr.css">
+<link rel="stylesheet" type="text/css" href="../../common-extended.css"></head><body id="OPCUA状态码与错误处理-90219D94"><main role="main"><article role="article" aria-labelledby="ariaid-title1">
+<h1 class="title topictitle1" id="ariaid-title1">OPC UA状态码与错误处理</h1>
+
+
+<div class="body refbody"><p class="shortdesc"></p>
+<section class="section"><h2 class="title sectiontitle">错误处理</h2><p class="p">服务参数和服务处理中，错误处理都是重要的部分，因为不同厂商的分布式系统之间的通信，可能在不同层次和不同情况发生错误。错误可能是普通的操作，例如一个客户端使用错误的参数（如不再可用的节点标识符）。错误也可能是通信错误，例如当客户端和服务器之间，或服务器和底层系统之间连接被中断。</p><p class="p">在服务中使用两种类型的错误信息。一种类型是被称为状态码（<strong class="ph b">StatusCode)</strong>的错误码。状态码是一个<strong class="ph b">32</strong>位的无符号整型。髙<strong class="ph b">16</strong>位用来探测特殊错误和条件<strong class="ph b">,</strong>低<strong class="ph b">16</strong>位是标记位，包含附加的信息，但不影响状态码的意义。最髙两位用来指出错误信息的总体严重性，可能有三种值，<strong class="ph b">Good</strong>表示成功，<strong class="ph b">Uncertain</strong>表示警告<strong class="ph b">，</strong><strong class="ph b">Bad</strong>表示失败。状态码只能由<strong class="ph b">OPCUA</strong>定义，而不能被供应商或其他组织扩展。</p><p class="p">第二种类型的错误信息是诊断信息（<strong class="ph b">Diagnosticlnformation</strong>)。这个结构包含了状态码的附加信息，包括供应商特定的错误码、错误的本地化描述，以及一个用来提供附加信息的文本字段。诊断信息可以被嵌套，以便提供一个错误栈。服务中的</p><p class="p">每个状态码字段都有一个可用的诊断信息字段，但是这些附加信息只有当客户端请求时才会返回。本章的服务描述不包含诊断信息字段。</p><p class="p">错误信息有两个层次。第一个层次是服务调用的结果，第二个层次是服务调用内部的操作列表。因为<strong class="ph b">OPCUA</strong>中，所有用于数据交换的服务都支持批量操作，所以在服务调用中，可能有部分操作成功，而另一部分操作失败。以读取服务为<strong class="ph b">.</strong>例，客户端在一个读取服务操作中读取一个关于变量的列表，读取的每个变量就是一个操作。</p><p class="p">客户端必须总是校验这两个层次的结果，因为它们有可能都失败。在第一步中客户端必须校验服务调用是否成功。如果失败的话，结果字段都是无效的。如果服务成功的话，在使用结果之前，客户端必须对每个操作的状态码进行验证。</p><p class="p">与传统<strong class="ph b">OPC</strong>相比，在<strong class="ph b">OPCUA</strong>中对错误处理做了简化。传统<strong class="ph b">OPC</strong>提供了读取和数据交换的结果码和质量戳代码。客户端需要首先校验结果码，然后是质量戳代码，但是仅仅有一个字段可能包含错误信息<strong class="ph b">。</strong><strong class="ph b">OPCUA</strong>仅仅提供了一个状态码，这个字段包含了一般的错误码和质量戳。</p></section>
+<section class="section"><h2 class="title sectiontitle">状态码</h2><p class="p">状态码基于OPC UA的statuscode定义，遵循“OPC UA Part
+4 specification”规范约束。可以把状态码按照字节来解析含义。如果10:11位值为 01，你可使用 0:4 位去获得历史状态码。</p><p class="p"></p><table class="table"><caption><span class="table--title-label">表 1. </span><span class="title">状态码解析规则</span></caption><colgroup><col style="width:16.333333333333332%"><col style="width:13%"><col style="width:70.66666666666667%"></colgroup><tbody class="tbody">
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"><p class="p">字段</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">字节数位</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">说明</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"><p class="p">结果等级</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">30:31</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">定义状态码所代表的返回结果的严重性(风险)等级，即代表了一个成功、失败或不确认的结果，</p><p class="p">00 成功可用,表示操作执行成功且其返回结果可用</p><p class="p">01 不确认警告,表示操作部分成功执行，且其返回结果可能不可用于某些严格用途。</p><p class="p">10 失败不可用,表示操作执行失败且其返回结果不可用</p><p class="p">11 预留,生产中相当于"10 失败不可用"</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"><p class="p">预留</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">28:29</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">预留,写死为00</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"><p class="p">错误码</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">16:27</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">错误子码，由OPC
+UA Part 6规范定义</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"><p class="p">结构改变</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">15:15</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">表示自从上次Notification通知之后，服务端返回的数据结构发生改变，客户端必须再次读取元数据才能处理返回数据。</p><p class="p">如果一个变量的数据编码DataTypeEncoding(Clause7.23)发生变化，服务端要把15:15位设置为1</p><p class="p">变量的数据类型Attribute改变需要设置， BaseDataType改变不需要设置</p><p class="p">变量的DataType的ArrayDimensions,ValueRank
+Attribute,EnumStrings Property改变需要设置</p><p class="p">这是为了当客户端解析复杂数据时，警告客户端数据的结构改变了，解析可能会失败。</p><p class="p">仅用于Notification或HistoryRead时的StatusCodes，其余情况下本位必须写死为0</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"><p class="p">语义变化</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">14:14</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">表示服务端返回变量的数据语义发生改变(etc.
+Part 8 DA Variable)，客户端必须再次读取元数据才能处理返回数据。</p><p class="p">如果一个变量的元数据发生变化，客户端必须再次读取元数据否则会出错时，服务端要把15:15位设置为1，如计量单位变化，会影响计算结果</p><p class="p">仅用于Notification或HistoryRead时的StatusCodes，其余情况下本位必须写死为0</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"><p class="p">预留</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">12:13</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">预留他用,必须写死为0</p></td>
+</tr>
+<tr class="row">
+<td class="entry"><p class="p">信息类型</p></td>
+<td class="entry"><p class="p">10:11</p></td>
+<td class="entry"><p class="p">表明了信息位的的信息类型:</p><p class="p">00 尚未使用,必须写死为0</p><p class="p">01 数据的值.</p><p class="p">1X 预留他用,必须写死为0</p></td>
+</tr>
+<tr class="row">
+<td class="entry"><p class="p">信息位</p></td>
+<td class="entry"><p class="p">0:9</p></td>
+<td class="entry"><p class="p">与状态码质量相关的附加信息，其结构由10:11信息类型定义.</p></td>
+</tr>
+</tbody></table><p class="p">当信息类型10:11设置为”01 数据值”时,信息位0:9的结构。</p><table class="table"><caption><span class="table--title-label">表 2. </span><span class="title">信息位的数据值</span></caption><colgroup><col style="width:11.960132890365449%"><col style="width:12.292358803986712%"><col style="width:75.74750830564784%"></colgroup><tbody class="tbody">
+<tr class="row">
+<td class="entry"><p class="p">信息类型</p></td>
+<td class="entry"><p class="p">字节数位</p></td>
+<td class="entry"><p class="p">说明</p></td>
+</tr>
+<tr class="row">
+<td class="entry">限制位</td>
+<td class="entry">8:9</td>
+<td class="entry"><p class="p">限制位和数据值是相关的，限制位的含义如下：</p><div class="p"><table class="simpletable"><colgroup><col style="width:12.333333333333334%"><col style="width:10.666666666666668%"><col style="width:77%"></colgroup><thead><tr class="sthead">
+<th class="stentry" scope="col" id="OPCUA状态码与错误处理-90219D94__stentry__1">限制</th>
+<th class="stentry" scope="col" id="OPCUA状态码与错误处理-90219D94__stentry__2">数位</th>
+<th class="stentry" scope="col" id="OPCUA状态码与错误处理-90219D94__stentry__3">说明</th>
+</tr></thead><tbody><tr class="strow">
+<td class="stentry" headers="OPCUA状态码与错误处理-90219D94__stentry__1"><p class="p">无</p></td>
+<td class="stentry" headers="OPCUA状态码与错误处理-90219D94__stentry__2"><p class="p">00</p></td>
+<td class="stentry" headers="OPCUA状态码与错误处理-90219D94__stentry__3"><p class="p">数据值可自由改变</p></td>
+</tr><tr class="strow">
+<td class="stentry" headers="OPCUA状态码与错误处理-90219D94__stentry__1"><p class="p">低</p></td>
+<td class="stentry" headers="OPCUA状态码与错误处理-90219D94__stentry__2"><p class="p">01</p></td>
+<td class="stentry" headers="OPCUA状态码与错误处理-90219D94__stentry__3"><p class="p">该数据源的值有最小值限制</p></td>
+</tr><tr class="strow">
+<td class="stentry" headers="OPCUA状态码与错误处理-90219D94__stentry__1"><p class="p">高</p></td>
+<td class="stentry" headers="OPCUA状态码与错误处理-90219D94__stentry__2"><p class="p">10</p></td>
+<td class="stentry" headers="OPCUA状态码与错误处理-90219D94__stentry__3"><p class="p">该数据源的值有最大值限制</p></td>
+</tr><tr class="strow">
+<td class="stentry" headers="OPCUA状态码与错误处理-90219D94__stentry__1"><p class="p">常量</p></td>
+<td class="stentry" headers="OPCUA状态码与错误处理-90219D94__stentry__2"><p class="p">11</p></td>
+<td class="stentry" headers="OPCUA状态码与错误处理-90219D94__stentry__3"><p class="p">数据值是个常量，不可改变</p></td>
+</tr></tbody></table></div></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1">溢出位</td>
+<td class="entry" rowspan="1" colspan="1">7</td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">如果本位设置为1，表示不是每个侦测的改变都被返回了，因为服务端的Monitoredftem缓存队列超过其容量了，数据溢出丢失。</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1">预留</td>
+<td class="entry" rowspan="1" colspan="1">5:6</td>
+<td class="entry" rowspan="1" colspan="1"><p class="p"> 预留他用,必须写死为0</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1">历史数据位</td>
+<td class="entry" rowspan="1" colspan="1">0:4</td>
+<td class="entry" rowspan="1" colspan="1">仅用于读取历史数据时，表明数据的来源和涉及客户使用数据值的相关信息。历史数据位含义如下：<div class="p"><table class="simpletable"><colgroup><col style="width:16.333333333333332%"><col style="width:13.999999999999998%"><col style="width:69.66666666666667%"></colgroup><thead><tr class="sthead">
+<th class="stentry" scope="col" id="OPCUA状态码与错误处理-90219D94__stentry__16">含义</th>
+<th class="stentry" scope="col" id="OPCUA状态码与错误处理-90219D94__stentry__17">数位</th>
+<th class="stentry" scope="col" id="OPCUA状态码与错误处理-90219D94__stentry__18">说明</th>
+</tr></thead><tbody><tr class="strow">
+<td class="stentry" headers="OPCUA状态码与错误处理-90219D94__stentry__16"><p class="p">原始数据</p></td>
+<td class="stentry" headers="OPCUA状态码与错误处理-90219D94__stentry__17"><p class="p">XXX00</p></td>
+<td class="stentry" headers="OPCUA状态码与错误处理-90219D94__stentry__18"><p class="p">原始数据的值</p></td>
+</tr><tr class="strow">
+<td class="stentry" headers="OPCUA状态码与错误处理-90219D94__stentry__16"><p class="p">算出值</p></td>
+<td class="stentry" headers="OPCUA状态码与错误处理-90219D94__stentry__17"><p class="p">XXX01</p></td>
+<td class="stentry" headers="OPCUA状态码与错误处理-90219D94__stentry__18"><p class="p">计算出来的数据值</p></td>
+</tr><tr class="strow">
+<td class="stentry" headers="OPCUA状态码与错误处理-90219D94__stentry__16"><p class="p">插值</p></td>
+<td class="stentry" headers="OPCUA状态码与错误处理-90219D94__stentry__17"><p class="p">XXX10</p></td>
+<td class="stentry" headers="OPCUA状态码与错误处理-90219D94__stentry__18"><p class="p">以内插值替换的数据值</p></td>
+</tr><tr class="strow">
+<td class="stentry" headers="OPCUA状态码与错误处理-90219D94__stentry__16"><p class="p">预留</p></td>
+<td class="stentry" headers="OPCUA状态码与错误处理-90219D94__stentry__17"><p class="p">XXX11</p></td>
+<td class="stentry" headers="OPCUA状态码与错误处理-90219D94__stentry__18"><p class="p">未定义</p></td>
+</tr><tr class="strow">
+<td class="stentry" headers="OPCUA状态码与错误处理-90219D94__stentry__16"><p class="p">部分值</p></td>
+<td class="stentry" headers="OPCUA状态码与错误处理-90219D94__stentry__17"><p class="p">XX1XX</p></td>
+<td class="stentry" headers="OPCUA状态码与错误处理-90219D94__stentry__18"><p class="p">根据不完整数据计算出来的数据值</p></td>
+</tr><tr class="strow">
+<td class="stentry" headers="OPCUA状态码与错误处理-90219D94__stentry__16"><p class="p">附加值</p></td>
+<td class="stentry" headers="OPCUA状态码与错误处理-90219D94__stentry__17"><p class="p">X1XXX</p></td>
+<td class="stentry" headers="OPCUA状态码与错误处理-90219D94__stentry__18"><p class="p">一个在同一个时间戳中摭掩了其他数据的原始数据值</p></td>
+</tr><tr class="strow">
+<td class="stentry" headers="OPCUA状态码与错误处理-90219D94__stentry__16"><p class="p">多值</p></td>
+<td class="stentry" headers="OPCUA状态码与错误处理-90219D94__stentry__17"><p class="p">1XXXX</p></td>
+<td class="stentry" headers="OPCUA状态码与错误处理-90219D94__stentry__18"><p class="p">多个同时满足聚合规范的数据值(如在同一个时间间隔中出现的最小值)</p></td>
+</tr></tbody></table></div><p class="p">(Part 11 详细说明了这些数位的用法)</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"></td>
+</tr>
+</tbody></table><p class="p">&nbsp;&nbsp;</p></section>
+<section class="section refsyn"><span class="ph synph"><span class="keyword kwd"></span></span></section>
+<section class="section"><dl class="dl parml">
+<dt class="dt pt dlterm"><span class="ph synph"><span class="keyword kwd"></span><span class="ph delim"></span></span></dt><dd class="dd pd"></dd>
+
+</dl></section>
+<div class="example"><pre class="pre"></pre></div>
+</div>
+<nav role="navigation" class="related-links"><div class="familylinks"><div class="parentlink"><strong>父主题：</strong> <a class="link" href="OPCUA.html">OPC UA</a></div></div></nav></article></main></body></html>

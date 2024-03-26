@@ -1,0 +1,682 @@
+<!DOCTYPE html
+  SYSTEM "about:legacy-compat">
+<html lang="zh-cn"><head><meta charset="UTF-8"><meta name="copyright" content="(C) 版权 2024"><meta name="generator" content="DITA-OT"><meta name="description" content=""><title>打印机SNMP监控</title><link rel="stylesheet" type="text/css" href="../../commonltr.css">
+<link rel="stylesheet" type="text/css" href="../../common-extended.css"></head><body id="打印机SNMP监控-79EC9707"><main role="main"><article role="article" aria-labelledby="ariaid-title1">
+<h1 class="title topictitle1" id="ariaid-title1">打印机SNMP监控</h1>
+
+
+<div class="body conbody"><p class="shortdesc"></p>
+<div class="p"><pre class="pre codeblock"><code>mib-2(1.3.6.1.2.1)
+   └──host(25)
+   |       └───hrDevice(3)hr设备
+   |                 └────hrDeviceTable(2)──────hrDeviceEntry(1)
+   |                    																				└───────hrDeviceDescr(3)
+   |                    																				└───────hrDeviceStatus(5)
+   |                 └────hrPrinterTable(5)─────hrPrinterEntry(1)───hrPrinterStatus(1)
+   |                 																						└───────hrPrinterDetectedErrorState(2)
+   └──Printer-MIB(43)
+   |       └───prtAlert(18)───prtAlertTable(1)───prtAlertEntry(1)───prtAlertSeverityLevel(2)
+   |                																						└───────prtAlertTrainingLevel(3)
+   |                																						└───────prtAlertGroup(4)
+   |                																						└───────prtAlertLocation(6)
+   |                																						└───────prtAlertCode(7)
+
+[2]。hrDeviceTable:主机设备表 [NONACCESS],[U]
+     1） hrDeviceEntry：入口： [NONACCESS]
+         3]。hrDeviceDescr：该设备的文本描述  [R]
+         4]。hrDeviceID：该设备的产品ID   [R]
+         5]。hrDeviceStatus：设备状态 （未知，运行，警告，测试，DOWN）《NO》 [R]
+         6]。hrDeviceErrors：检测到的设备错误。默认为0 《NO》  [R]
+[5]。hrPrinterTable：主机的打印机设备表 《NO》 [NONACCESS],[P]
+     1）	hrPrinterEntry：入口：hrDeviceIndex索引  [NONACCESS]
+         1]。hrPrinterStatus：打印机状态（其他，未知，空闲，打印，热启）
+         2]。hrPrinterDetectedErrorState：检测到的错误类型：少纸，没纸，少墨，没墨，门开，堵塞，掉线，服务请求等。</code></pre></div>
+<section class="section"><h2 class="title sectiontitle">SNMP获取Printer状态流程图</h2><figure class="fig fignone"><img class="image" src="../../images/2018-04/snmpstatus.jpg"></figure></section>
+<section class="section"><h2 class="title sectiontitle">SNMP与打印机状态相关的基础的OID及其数据结构</h2><p class="p">对象类型 语法：32位计数器
+最大权限：只读 状态：现行 描述</p><p class="p">OBJECT-TYPE;ACCESS read-only;STATUS mandatory</p><table class="table"><caption></caption><colgroup><col style="width:13.438735177865615%"><col style="width:19.367588932806328%"><col style="width:16.40316205533597%"><col style="width:32.41106719367589%"><col style="width:18.379446640316207%"></colgroup><tbody class="tbody">
+<tr class="row">
+<td class="entry">名称</td>
+<td class="entry">OID</td>
+<td class="entry">语法</td>
+<td class="entry">描述</td>
+<td class="entry">上级节点</td>
+</tr>
+<tr class="row">
+<td class="entry">设备实体描述(sysDescr)</td>
+<td class="entry">.1.3.6.1.2.1.1.1.0</td>
+<td class="entry">STATUS mandatory SYNTAX DisplayString (SIZE (0..255))</td>
+<td class="entry">获取系统基本信息,此对象为只读的显示串，它包含所用硬件、操作系统和网络软件的名称和版本等完整信息。</td>
+<td class="entry">::= { system 1 }</td>
+</tr>
+<tr class="row">
+<td class="entry">hr设备描述(hrDeviceDescr)</td>
+<td class="entry">1.3.6.1.2.1.25.3.2.1.3</td>
+<td class="entry">STATUS mandatory SYNTAX DisplayString (SIZE (0..64))</td>
+<td class="entry">A textual description of this device, including the device's
+manufacturer and revision, and optionally, its serial number.</td>
+<td class="entry">::= { hrDeviceEntry 3 }</td>
+</tr>
+<tr class="row">
+<td class="entry">hr打印机状态(hrPrinterStatus)</td>
+<td class="entry">1.3.6.1.2.1.25.3.5.1.1.1</td>
+<td class="entry">STATUS mandatory SYNTAX INTEGER { other(1), unknown(2), idle(3),
+printing(4), warmup(5) }</td>
+<td class="entry">打印机当前状态。注意：处于idle(1), printing(2), 或warmup(3)状态时，相应hrDeviceStatus应该为running(2)运行或者warning(3)警告，当处于unknown状态时，相应hrDeviceStatus则处于unknown(1)未知。
+整数值，Object ID为1.3.6.1.2.1.25.3.5.1.1.1，表示此打印机目 前的工作状态，数值定义为：other(1),
+unknown(2), idle(3), printing(4), warmup(5)。</td>
+<td class="entry">::= { hrPrinterEntry 1 }</td>
+</tr>
+<tr class="row">
+<td class="entry">hr设备状态(hrDeviceStatus)</td>
+<td class="entry">1.3.6.1.2.1.25.3.2.1.5.1</td>
+<td class="entry">STATUS mandatory SYNTAX 整数值INTEGER { unknown(1), running(2),
+warning(3), testing(4), down(5) }</td>
+<td class="entry">表示此设备目前的工作状态，数值定义如下︰  unknown(1) ：未知的状态，无法取得相关信息。  running
+(2)  ：正常运作中。  warning(3)  ：有某种程度的错误(如磁盘设备驱动引起的软件性批操作错误)，但依旧是可操作状态。
+ testing(4)   ：测试状态，无法使用。  down(5)    ：无法使用。   </td>
+<td class="entry">::= { hrDeviceEntry 5 } </td>
+</tr>
+<tr class="row">
+<td class="entry">hr 打印机检测到错误状态(hrPrinterDetectedErrorState)</td>
+<td class="entry">1.3.6.1.2.1.25.3.5.1.2.1</td>
+<td class="entry">STATUS mandatory SYNTAX 8位字符(OCTET STRING)</td>
+<td class="entry">表示目前的错误状态，每一个bit都代表一种错误状态，当某一bit为high(1)，则表示此错误发生，为(0)则表示无错错误。每一bit定义如下：<p class="p">状态 字位 hrDeviceStatus</p><p class="p">lowPaper少纸 0 warning(3)</p><p class="p">noPaper没纸
+1 down(5)</p><p class="p">lowToner少墨 2 warning(3)</p><p class="p">noToner没墨 3 down(5)</p><p class="p">doorOpen门开 4 down(5)</p><p class="p">jammed堵塞 5 down(5)</p><p class="p">offline掉线
+6 down(5)</p><p class="p">serviceRequested服务请求 7 warning(3)&nbsp; </p><p class="p">inputTrayMissing缺少入盘
+8</p><p class="p">outputTrayMissing缺少出盘 9</p><p class="p">markerSupplyMissing补给记号丢失 10</p><p class="p">outputNearFull输出快满 11</p><p class="p">outputFull输出满 12</p><p class="p">inputTrayEmpty输入盘空
+13</p><p class="p">overduePreventMaint防慢 14</p>如果多个错误被侦测到，则hrDeviceStatus就不会是"unknown(1)"或"testing(4)"，而是取当前错误中的最严重状态(down(5)&gt;warning(3)&gt;running(2))。
+字位左到右顺序是高位到低位，类似小端模式(LE little-endian鸡蛋圆头小端)顺序。 本状态有利于在需要人工干预纠正时，根据具体错误来决定提示用户警告信息或致命错误信息</td>
+<td class="entry">::= { hrPrinterEntry 2 }</td>
+</tr>
+<tr class="row">
+<td class="entry">打印告警代码（prtAlertCode)</td>
+<td class="entry">1.3.6.1.2.1.43.18.1.1.7</td>
+<td class="entry">This value is a type 2 enumeration STATUS     current SYNTAX
+INTEGER { other(1), unknown(2), -- codes common to serveral groups
+coverOpen(3), coverClosed(4), interlockOpen(5), interlockClosed(6),
+configurationChange(7), jam(8), -- RFC 3805 Generic codes subunitMissing(9)
+subunitLifeAlmostOver(10) subunitLifeOver(11) subunitAlmostEmpty(12)
+subunitEmpty(13) subunitAlmostFull(14) subunitFull(15) subunitNearLimit(16)
+subunitAtLimit(17) subunitOpened(18) subunitClosed(19) subunitTurnedOn(20)
+subunitTurnedOff(21) subunitOffline(22) subunitPowerSaver(23) subunitWarmingUp(24)
+subunitAdded(25) subunitRemoved(26) subunitResourceAdded(27) subunitResourceRemoved(28)
+subunitRecoverableFailure(29) subunitUnrecoverableFailure(30) subunitRecoverableStorageError(31)
+subunitUnrecoverableStorageError(32) subunitMotorFailure(33) subunitMemoryExhausted(34)
+subunitUnderTemperature(35) subunitOverTemperature(36) subunitTimingFailure(37)
+subunitThermistorFailure(38)-- general Printer group doorOpen(501),
+doorClosed(502), powerUp(503), powerDown(504), -- Input Group inputMediaTrayMissing(801),
+inputMediaSizeChange(802), inputMediaWeightChange(803), inputMediaTypeChange(804),
+inputMediaColorChange(805), inputMediaFormPartsChange(806), inputMediaSupplyLow(807),
+inputMediaSupplyEmpty(808), -- Output Group outputMediaTrayMissing(901),
+outputMediaTrayAlmostFull(902), outputMediaTrayFull(903), -- Marker
+group markerFuserUnderTemperature(1001), markerFuserOverTemperature(1002),
+-- Marker Supplies group markerTonerEmpty(1101), markerInkEmpty(1102),
+markerPrintRibbonEmpty(1103), markerTonerAlmostEmpty(1104), markerInkAlmostEmpty(1105),
+markerPrintRibbonAlmostEmpty(1106), markerWasteTonerReceptacleAlmostFull(1107),
+markerWasteInkReceptacleAlmostFull(1108), markerWasteTonerReceptacleFull(1109),
+markerWasteInkReceptacleFull(1110), markerOpcLifeAlmostOver(1111),
+markerOpcLifeOver(1112), markerDeveloperAlmostEmpty(1113), markerDeveloperEmpty(1114),
+-- Media Path Device Group mediaPathMediaTrayMissing(1301), mediaPathMediaTrayAlmostFull(1302),
+mediaPathMediaTrayFull(1303), -- interpreter Group interpreterMemoryIncrease(1501),
+interpreterMemoryDecrease(1502), interpreterCartridgeAdded(1503),
+interpreterCartridgeDeleted(1504), interpreterResourceAdded(1505),
+interpreterResourceDeleted(1506), interpreterResourceUnavailable(1507)
+}</td>
+<td class="entry">The code that describes the type of alert for this entry in
+the table.  There are different codes for each sub-unit type: for
+example, Media Supply Low and MediaSupply Empty are Aler codes for
+the Input sub-unit.</td>
+<td class="entry">::= { prtAlertEntry 7}</td>
+</tr>
+<tr class="row">
+<td class="entry">打印告警组（prtAlertGroup)</td>
+<td class="entry">1.3.6.1.2.1.43.18.1.1.4</td>
+<td class="entry">This value is a type 1 enumeration STATUS     current SYNTAX
+INTEGER { other(1), hostResourcesMIBStorageTable(3), hostResourcesMIBDeviceTable(4),
+generalPrinter(5), cover(6), localization(7), input(8), output(9),
+marker(10), markerSupplies(11), markerColorant(12), mediaPath(13),
+channel(14), interpreter(15), consoleDisplayBuffer(16), consoleLights(17)
+}</td>
+<td class="entry">提示信息相关的打印模块子单元的类型。  Input, output, and markers are examples
+of printer model groups, i.e., examples of types of sub-units.Whereever
+possible, these enumerations match the sub-identifier that identifies
+the relevant table in the print mib.</td>
+<td class="entry">::= { prtAlertEntry 4 }</td>
+</tr>
+<tr class="row">
+<td class="entry">打印告警位置(prtAlertLocation)</td>
+<td class="entry">1.3.6.1.2.1.43.18.1.1.6</td>
+<td class="entry">STATUS     current SYNTAX Integer32</td>
+<td class="entry">The sub-unit location that is defined by the printer manufacturer
+to further refine the location of this alertwithin the designated
+sub-unit.  The location is used inconjunction with the Group and GroupIndex
+values; forexample, there is an alert in Input #2 at location number
+7.</td>
+<td class="entry">::= { prtAlertEntry 6 }</td>
+</tr>
+<tr class="row">
+<td class="entry">打印告警严重等级（prtAlertSeverityLevel)</td>
+<td class="entry">1.3.6.1.2.1.43.18.1.1.2 </td>
+<td class="entry">This value is a type 1 enumeration STATUS     current SYNTAX
+    INTEGER { other(1), critical(3), warning(4) }</td>
+<td class="entry">The level of severity of this alert table entry.  The printer
+determines the severity level assigned to each entry into thetable.</td>
+<td class="entry">::= { prtAlertEntry 2 }</td>
+</tr>
+<tr class="row">
+<td class="entry">打印告警训练等级（prtAlertTrainingLevel)</td>
+<td class="entry">1.3.6.1.2.1.43.18.1.1.3</td>
+<td class="entry">This value is a type 2 enumeration STATUS     current SYNTAX
+    INTEGER { other(1), unknown(2), untrained(3), trained(4), fieldService(5),
+management(6) }</td>
+<td class="entry">The level of training required to handle this alert. The training
+level is an enumeration that is determined and assigned by the printer
+manufacturer based on the information or the training required to
+handle this alert.  The printer will break alerts into these different
+training levels.  It is the responsibility of the management application
+in the system to determine how a particular alert is handled and how
+and to whom that alert is routed.  The following are the four training
+levels of alerts: Field Service - Alerts that typically require advanced
+      training and technical knowledge of the printer            
+  and its sub-units. An example of a technical       person would
+be a manufacture’s Field Service       representative, or other person
+formally       trained by the manufacturer or similar       representative.
+Trained - Alerts that require an intermediate or moderate       level
+of knowledge of the printer and its       sub-units. A typical examples
+of alerts that       a trained operator can handle is replacing  
+    toner cartridges. Untrained - Alerts that can be fixed without
+prior       training either because the action to correct       the
+alert is obvious or the printer can help the       untrained person
+fix the problem. A typical       example of such an alert is reloading
+paper       trays and emptying output bins on a low end       printer.
+Management - Alerts that have to do with overall       operation of
+and configuration of the printer.       Examples of management events
+are configuration       change of sub-units.</td>
+<td class="entry">::= { prtAlertEntry 3 }</td>
+</tr>
+</tbody></table><div class="note note note_note"><span class="note__title">注：</span> <div class="note__body"><ol class="ol">
+<li class="li"><p class="p">enumeration (1)即type 1 enumeration表示基本固定的枚举值。  enumeration
+(2)即type 2 enumeration表示会变动但需要批准并受控的枚举值。enumeration (3)即type 3 enumeration表示会变动且需要批准，但不受控的枚举值。具体参见:《<a class="xref" href="https://tools.ietf.org/html/draft-ietf-printmib-mib-info-00.txt" target="_blank" rel="external noopener">draft-ietf-printmib-mib-info-00</a>》</p></li>
+<li class="li"><p class="p"><strong class="ph b">BE big-endian 大端模式</strong>&nbsp; 最直观的字节序&nbsp; 地址低位存储值的高位&nbsp;
+地址高位存储值的低位&nbsp; 为什么说直观，不要考虑对应关系&nbsp; 只需要把内存地址从左到右按照由低到高的顺序写出&nbsp;
+把值按照通常的高位到低位的顺序写出&nbsp; 两者对照，一个字节一个字节的填充进去</p><p class="p"><strong class="ph b">LE little-endian
+小端模式</strong>&nbsp; 最符合人的思维的字节序&nbsp; 地址低位存储值的低位&nbsp; 地址高位存储值的高位&nbsp;
+怎么讲是最符合人的思维的字节序，是因为从人的第一观感来说&nbsp; 低位值小，就应该放在内存地址小的地方，也即内存地址低位&nbsp;
+反之，高位值就应该放在内存地址大的地方，也即内存地址高位</p></li>
+</ol></div></div></section>
+<section class="section"><h2 class="title sectiontitle">打印机详细状态</h2><table class="table"><caption></caption><colgroup><col><col><col><col><col><col></colgroup><tbody class="tbody">
+<tr class="row">
+<td class="entry">打印机状态</td>
+<td class="entry">hrPrinterStatus</td>
+<td class="entry">hrDeviceStatus</td>
+<td class="entry">hrPrinterDetectedErrorState</td>
+<td class="entry">prtAlertCode</td>
+<td class="entry">prtAlertGroup</td>
+</tr>
+<tr class="row">
+<td class="entry">空闲就绪 idle</td>
+<td class="entry">空闲idle(3)</td>
+<td class="entry">运行中running(2)</td>
+<td class="entry">前两位00</td>
+<td class="entry">null</td>
+<td class="entry"></td>
+</tr>
+<tr class="row">
+<td class="entry">休眠中sleeping</td>
+<td class="entry">空闲idle(3)</td>
+<td class="entry">运行中running(2)</td>
+<td class="entry">前两位00</td>
+<td class="entry">subunitPowerSaver(23)</td>
+<td class="entry"></td>
+</tr>
+<tr class="row">
+<td class="entry">休眠中sleeping</td>
+<td class="entry">空闲idle(3)</td>
+<td class="entry">运行中running(2)</td>
+<td class="entry">前两位00</td>
+<td class="entry">other(1)</td>
+<td class="entry"></td>
+</tr>
+<tr class="row">
+<td class="entry">未知Unknown</td>
+<td class="entry">空闲idle(3)</td>
+<td class="entry">运行中running(2)</td>
+<td class="entry">前两位00</td>
+<td class="entry">非other(1)，非subunitPowerSaver(23)</td>
+<td class="entry"></td>
+</tr>
+<tr class="row">
+<td class="entry">未知Unknown</td>
+<td class="entry">空闲idle(3)</td>
+<td class="entry">运行中running(2)</td>
+<td class="entry">非前两位00，非Samsung 770</td>
+<td class="entry"></td>
+<td class="entry"></td>
+</tr>
+<tr class="row">
+<td class="entry">睡眠，低墨粉 sleeping,low toner</td>
+<td class="entry">空闲idle(3)</td>
+<td class="entry">运行中running(2)</td>
+<td class="entry">前两位04,Samsung 770</td>
+<td class="entry">subunitPowerSaver(23)</td>
+<td class="entry"></td>
+</tr>
+<tr class="row">
+<td class="entry">空闲，低墨粉idle,low toner</td>
+<td class="entry">空闲idle(3)</td>
+<td class="entry">运行中running(2)</td>
+<td class="entry">前两位04,Samsung 770</td>
+<td class="entry">非subunitPowerSaver(23)</td>
+<td class="entry"></td>
+</tr>
+<tr class="row">
+<td class="entry">未知 unknown</td>
+<td class="entry">空闲idle(3)</td>
+<td class="entry">运行中running(2)</td>
+<td class="entry">非前两位00,非前两位04,Samsung 770</td>
+<td class="entry"></td>
+<td class="entry"></td>
+</tr>
+<tr class="row">
+<td class="entry">未知Unknown</td>
+<td class="entry">空闲idle(3)</td>
+<td class="entry">非运行中running(2)，非警告warning(3)</td>
+<td class="entry"></td>
+<td class="entry"></td>
+<td class="entry"></td>
+</tr>
+<tr class="row">
+<td class="entry">错误，没有纸托盘error,no paper tray</td>
+<td class="entry">空闲idle(3)</td>
+<td class="entry">警告warning(3)</td>
+<td class="entry"></td>
+<td class="entry">subunitMissing(9) </td>
+<td class="entry">input(8)</td>
+</tr>
+<tr class="row">
+<td class="entry">未知Unknown</td>
+<td class="entry">空闲idle(3)</td>
+<td class="entry">警告warning(3)</td>
+<td class="entry"></td>
+<td class="entry">subunitMissing(9) </td>
+<td class="entry">非input(8)</td>
+</tr>
+<tr class="row">
+<td class="entry">错误，没有纸 error,out of paper</td>
+<td class="entry">空闲idle(3)</td>
+<td class="entry">警告warning(3)</td>
+<td class="entry"></td>
+<td class="entry">inputMediaSupplyEmpty(808)</td>
+<td class="entry"></td>
+</tr>
+<tr class="row">
+<td class="entry">错误，没有纸 error,out of paper</td>
+<td class="entry">空闲idle(3)</td>
+<td class="entry">警告warning(3)</td>
+<td class="entry"></td>
+<td class="entry">subunitEmpty(13)</td>
+<td class="entry"></td>
+</tr>
+<tr class="row">
+<td class="entry">休眠中sleeping</td>
+<td class="entry">空闲idle(3)</td>
+<td class="entry">警告warning(3)</td>
+<td class="entry"></td>
+<td class="entry">other(1)</td>
+<td class="entry">input(8)</td>
+</tr>
+<tr class="row">
+<td class="entry">未知Unknown</td>
+<td class="entry">空闲idle(3)</td>
+<td class="entry">警告warning(3)</td>
+<td class="entry"></td>
+<td class="entry">other(1)</td>
+<td class="entry">非input(8)</td>
+</tr>
+<tr class="row">
+<td class="entry">睡眠，没有纸sleeping,No Paper</td>
+<td class="entry">空闲idle(3)</td>
+<td class="entry">警告warning(3)</td>
+<td class="entry">ErrorState&amp;64</td>
+<td class="entry">subunitPowerSaver(23)</td>
+<td class="entry"></td>
+</tr>
+<tr class="row">
+<td class="entry">睡眠，告警 sleeping,warning</td>
+<td class="entry">空闲idle(3)</td>
+<td class="entry">警告warning(3)</td>
+<td class="entry">非ErrorState&amp;64</td>
+<td class="entry">subunitPowerSaver(23)</td>
+<td class="entry"></td>
+</tr>
+<tr class="row">
+<td class="entry">空闲，低墨粉idle,low toner，</td>
+<td class="entry">空闲idle(3)</td>
+<td class="entry">警告warning(3)</td>
+<td class="entry"></td>
+<td class="entry">markerTonerAlmostEmpty(1104)</td>
+<td class="entry"></td>
+</tr>
+<tr class="row">
+<td class="entry">未知的告警 unknown,warning</td>
+<td class="entry">空闲idle(3)</td>
+<td class="entry">警告warning(3)</td>
+<td class="entry"></td>
+<td class="entry">非上述6种错误(subunitMissing(9) ,inputMediaSupplyEmpty(808),subunitEmpty(13),other(1),subunitPowerSaver(23),markerTonerAlmostEmpty(1104))</td>
+<td class="entry"></td>
+</tr>
+<tr class="row">
+<td class="entry">错误，没有纸 error,out of paper</td>
+<td class="entry">其他other(1)</td>
+<td class="entry">当机down(5)</td>
+<td class="entry"></td>
+<td class="entry">inputMediaSupplyEmpty(808)</td>
+<td class="entry"></td>
+</tr>
+<tr class="row">
+<td class="entry">错误，盖子打开 error,cover open</td>
+<td class="entry">其他other(1)</td>
+<td class="entry">当机down(5)</td>
+<td class="entry"></td>
+<td class="entry">coverOpen(3)</td>
+<td class="entry"></td>
+</tr>
+<tr class="row">
+<td class="entry">错误，没有纸 error,out of paper</td>
+<td class="entry">其他other(1)</td>
+<td class="entry">当机down(5)</td>
+<td class="entry"></td>
+<td class="entry">subunitOffline(22)</td>
+<td class="entry">input(8)</td>
+</tr>
+<tr class="row">
+<td class="entry">离线，低墨粉 low toner</td>
+<td class="entry">其他other(1)</td>
+<td class="entry">当机down(5)</td>
+<td class="entry">ErrorState&amp;32</td>
+<td class="entry">非上述3个错误(inputMediaSupplyEmpty(808),coverOpen(3),subunitOffline(22))</td>
+<td class="entry"></td>
+</tr>
+<tr class="row">
+<td class="entry">未知Unknown</td>
+<td class="entry">其他other(1)</td>
+<td class="entry">当机down(5)</td>
+<td class="entry">非ErrorState&amp;32</td>
+<td class="entry">非上述3个错误(inputMediaSupplyEmpty(808),coverOpen(3),subunitOffline(22))</td>
+<td class="entry"></td>
+</tr>
+<tr class="row">
+<td class="entry">错误，没有纸 error,out of paper</td>
+<td class="entry">其他other(1)</td>
+<td class="entry">当机down(5)</td>
+<td class="entry">ErrorState&amp;64</td>
+<td class="entry">subunitOffline(22)</td>
+<td class="entry">非input(8)</td>
+</tr>
+<tr class="row">
+<td class="entry">错误，盖子打开 error,cover open</td>
+<td class="entry">其他other(1)</td>
+<td class="entry">当机down(5)</td>
+<td class="entry">非ErrorState&amp;64，ErrorState&amp;8</td>
+<td class="entry">subunitOffline(22)</td>
+<td class="entry">非input(8)</td>
+</tr>
+<tr class="row">
+<td class="entry">离线，低墨粉 low toner</td>
+<td class="entry">其他other(1)</td>
+<td class="entry">当机down(5)</td>
+<td class="entry">非ErrorState&amp;64，非ErrorState&amp;8，ErrorState&amp;32</td>
+<td class="entry"></td>
+<td class="entry"></td>
+</tr>
+<tr class="row">
+<td class="entry">未知Unknown</td>
+<td class="entry">其他other(1)</td>
+<td class="entry">当机down(5)</td>
+<td class="entry">非ErrorState&amp;64，非ErrorState&amp;8，非ErrorState&amp;32</td>
+<td class="entry"></td>
+<td class="entry"></td>
+</tr>
+<tr class="row">
+<td class="entry">休眠中sleeping</td>
+<td class="entry">其他other(1)</td>
+<td class="entry">运行中running(2)</td>
+<td class="entry"></td>
+<td class="entry"></td>
+<td class="entry"></td>
+</tr>
+<tr class="row">
+<td class="entry">未知Unknown</td>
+<td class="entry">其他other(1)</td>
+<td class="entry">非运行中running(2)，非当机down(5)</td>
+<td class="entry"></td>
+<td class="entry"></td>
+<td class="entry"></td>
+</tr>
+<tr class="row">
+<td class="entry">预热中warming up</td>
+<td class="entry">预热中warmup(5)</td>
+<td class="entry"></td>
+<td class="entry"></td>
+<td class="entry"></td>
+<td class="entry"></td>
+</tr>
+<tr class="row">
+<td class="entry">打印中printing</td>
+<td class="entry">打印中printing(4)</td>
+<td class="entry"></td>
+<td class="entry"></td>
+<td class="entry"></td>
+<td class="entry"></td>
+</tr>
+</tbody></table><table class="table"><caption><span class="table--title-label">表 1. </span><span class="title">Samsung 770</span></caption><colgroup><col><col><col><col><col><col></colgroup><tbody class="tbody">
+<tr class="row">
+<td class="entry">打印机状态</td>
+<td class="entry">hrPrinterStatus</td>
+<td class="entry">hrDeviceStatus</td>
+<td class="entry">hrPrinterDetectedErrorState</td>
+<td class="entry">prtAlertCode</td>
+<td class="entry">prtAlertGroup</td>
+</tr>
+<tr class="row">
+<td class="entry">睡眠，低墨粉 sleeping,low toner</td>
+<td class="entry">空闲idle(3)</td>
+<td class="entry">运行中running(2)</td>
+<td class="entry">前两位04,Samsung 770</td>
+<td class="entry">subunitPowerSaver(23)</td>
+<td class="entry"></td>
+</tr>
+<tr class="row">
+<td class="entry">空闲，低墨粉idle,low toner</td>
+<td class="entry">空闲idle(3)</td>
+<td class="entry">运行中running(2)</td>
+<td class="entry">前两位04,Samsung 770</td>
+<td class="entry">非subunitPowerSaver(23)</td>
+<td class="entry"></td>
+</tr>
+<tr class="row">
+<td class="entry">未知 unknown</td>
+<td class="entry">空闲idle(3)</td>
+<td class="entry">运行中running(2)</td>
+<td class="entry">非前两位00,非前两位04,Samsung 770</td>
+<td class="entry"></td>
+<td class="entry"></td>
+</tr>
+<tr class="row">
+<td class="entry"></td>
+<td class="entry"></td>
+<td class="entry"></td>
+<td class="entry"></td>
+<td class="entry"></td>
+<td class="entry"></td>
+</tr>
+</tbody></table></section>
+<section class="section"></section>
+<section class="section"></section>
+<section class="section"><h2 class="title sectiontitle">简要的打印机状态</h2><table class="table"><caption></caption><colgroup><col><col><col><col></colgroup><tbody class="tbody">
+<tr class="row">
+<td class="entry">打印机状态</td>
+<td class="entry">hrDeviceStatus</td>
+<td class="entry">hrPrinterStatus</td>
+<td class="entry">hrPrinterDetectedErrorState</td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1">正常Normal</td>
+<td class="entry" rowspan="1" colspan="1">运行中running(2)</td>
+<td class="entry" rowspan="1" colspan="1">空闲idle(3)</td>
+<td class="entry" rowspan="1" colspan="1">无错none set</td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1">正忙Busy/暂时不可用Temporarily
+Unavailable</td>
+<td class="entry" rowspan="1" colspan="1">运行中running(2)</td>
+<td class="entry" rowspan="1" colspan="1">打印中printing(4)</td>
+<td class="entry" rowspan="1" colspan="1"></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1">非致命错误Non Critical
+Alert Active</td>
+<td class="entry" rowspan="1" colspan="1">警告warning(3)</td>
+<td class="entry" rowspan="1" colspan="1">空闲或打印中idle(3)
+or printing(4)</td>
+<td class="entry" rowspan="1" colspan="1">少纸少墨或服务请求could
+be: lowPaper, lowToner, or serviceRequested</td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1">致命错误Critical
+Alert Active</td>
+<td class="entry" rowspan="1" colspan="1">当机down(5)</td>
+<td class="entry" rowspan="1" colspan="1">其他other(1)</td>
+<td class="entry" rowspan="1" colspan="1">卡纸或无纸could
+be: jammed,noPaper,</td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1">不可用Unavailable</td>
+<td class="entry" rowspan="1" colspan="1">当机down(5)</td>
+<td class="entry" rowspan="1" colspan="1">其他other(1)</td>
+<td class="entry" rowspan="1" colspan="1"></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1">脱机中Moving off-line</td>
+<td class="entry" rowspan="1" colspan="1">警告warning(3)</td>
+<td class="entry" rowspan="1" colspan="1">空闲或打印中idle(3)
+or printing(4)</td>
+<td class="entry" rowspan="1" colspan="1">离线offline</td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1">脱机Off-line</td>
+<td class="entry" rowspan="1" colspan="1">当机down(5)</td>
+<td class="entry" rowspan="1" colspan="1">其他other(1)</td>
+<td class="entry" rowspan="1" colspan="1">离线offline</td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1">联机中Moving on-line</td>
+<td class="entry" rowspan="1" colspan="1">当机down(5)</td>
+<td class="entry" rowspan="1" colspan="1">热启中warmup(5)</td>
+<td class="entry" rowspan="1" colspan="1"></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1">待机Standby</td>
+<td class="entry" rowspan="1" colspan="1">运行中running(2)</td>
+<td class="entry" rowspan="1" colspan="1">其他other(1)</td>
+<td class="entry" rowspan="1" colspan="1"></td>
+</tr>
+</tbody></table><p class="p">这些命名状态只是可能状态的一个不完整子集。另外注意。当重要和非重要警报同时出现，将显示更重要的警报状态。另外，处于"Standby待机"状态的打印机将会是表示在主机MIB中为一组组合状态：设备状态devicestatus为正在运行running(2)和其他（1）的打印机状态printerstatus为other(1)。</p><p class="p">虽然上面的映射是可行的，以后可以做如下优化考虑：在主机MIB资源的hrDeviceStatus和hrPrinterStatus中，添加一个“standby待机”到hrDeviceStatus，可完整表示机器正常可用。添加一个“offline离线”到hrPrinterStatus：就可使用"warning"and"offline"表明打印机离线（而不是旧的状态"other"）,另外可使用“其他”），使用"down"and"offline"表示离线且不可用</p><p class="p">每个子模块的状态分别在相应子模块详细状态信息中描述。</p></section>
+<section class="section"><h2 class="title sectiontitle"><strong class="ph b">SNMP</strong>与打印机相关的基础的<strong class="ph b">OID</strong>及其数据结构</h2><p class="p"></p><p class="p">.1.3.6.1.2.1.25.3.5.1.1.1 &nbsp;hrPrinterStatus 得到打印机的当前状态。</p><p class="p">SYNTAX INTEGER {</p><p class="p">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+other(1),</p><p class="p">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+unknown(2),</p><p class="p">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+idle(3),</p><p class="p">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+printing(4),</p><p class="p">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+warmup(5)</p><p class="p">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+}</p><p class="p">说明：当打印机状态处于idle(1), printing(2), or warmup(3)状态时，打印机设备应该运行或者警告，当处于unknown状态时，设备状态则处于未知。</p><p class="p">&nbsp;</p><p class="p"><strong class="ph b">1.3.6.1.2.1.25.3.5.1.2</strong>&nbsp;&nbsp; hrPrinterDetectedErrorState
+检测打印机错误状态。</p><p class="p">说明：错误状态由8位字节的位进行描述，具体定义为下：</p><p class="p">Condition&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Bit #&nbsp;&nbsp;&nbsp; hrDeviceStatus</p><p class="p">lowPaper&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp;&nbsp;&nbsp;&nbsp;0&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+warning(3)</p><p class="p">noPaper&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+1&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; down(5)</p><p class="p">lowToner&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+2&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; warning(3)</p><p class="p">noToner&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+3&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; down(5)</p><p class="p">doorOpen&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+4&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; down(5)</p><p class="p">jammed&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+5&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; down(5)</p><p class="p">offline&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+6&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; down(5)</p><p class="p">serviceRequested&nbsp;&nbsp;
+7&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; warning(3)</p><p class="p">&nbsp;</p><p class="p">.1.3.6.1.2.1.43.12.1.1.3&nbsp;&nbsp; prtMarkerColorantRole 得到打印机色剂的类型。</p><p class="p">SYNTAX&nbsp;&nbsp;&nbsp;&nbsp; INTEGER { --&nbsp; Colorant Role</p><p class="p">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+other(1),</p><p class="p">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+process(3),</p><p class="p">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+spot(4)</p><p class="p">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+}</p><p class="p">.1.3.6.1.2.1.43.12.1.1.4&nbsp;&nbsp; prtMarkerColorantValue
+得到打印机色剂的值。</p><p class="p">&nbsp;SYNTAX&nbsp;&nbsp;&nbsp;&nbsp; OCTET STRING
+(SIZE(0..63))</p><p class="p">&nbsp;</p><p class="p"><strong class="ph b">.1.3.6.1.2.1.43.12.1.1.5 </strong>&nbsp;&nbsp;prtMarkerColorantTonality
+得到打印机色剂的色调。</p><p class="p">&nbsp;SYNTAX&nbsp;&nbsp;&nbsp;&nbsp; Integer32</p><p class="p">&nbsp;</p><p class="p">.1.3.6.1.2.1.43.13.4.1.9 &nbsp;&nbsp;prtMediaPathType得到媒介路径的种类。</p><p class="p">SYNTAX&nbsp;&nbsp;&nbsp;&nbsp; INTEGER {</p><p class="p">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+other(1),</p><p class="p">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+unknown(2),</p><p class="p">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+longEdgeBindingDuplex(3),</p><p class="p">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+shortEdgeBindingDuplex(4),</p><p class="p">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+simplex(5)</p><p class="p">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+}</p><p class="p">&nbsp;</p><p class="p">.1.3.6.1.2.1.43.13.4.1.10&nbsp;&nbsp; prtMediaPathDescription
+得到媒介路径的描述。</p><p class="p">SYNTAX&nbsp;&nbsp;&nbsp;&nbsp; OCTET STRING (SIZE(0..255))</p><p class="p">&nbsp;</p><p class="p">.1.3.6.1.2.1.43.13.4.1.11&nbsp;&nbsp; prtMediaPathStatus
+得到媒介路径的状态。</p><p class="p">SYNTAX&nbsp;&nbsp;&nbsp;&nbsp; SubUnitStatus</p><p class="p">&nbsp;</p><p class="p">.1.3.6.1.2.1.43.5.1.1.1 &nbsp;&nbsp;&nbsp;prtGeneralConfigChanges
+常规配置更改。</p><p class="p">&nbsp;SYNTAX&nbsp;&nbsp;&nbsp;&nbsp; Counter32</p><p class="p">&nbsp;</p><p class="p"><strong class="ph b">.1.3.6.1.2.1.43.5.1.1.2</strong>&nbsp;&nbsp; prtGeneralCurrentLocalization
+打印机当前本地化</p><p class="p">SYNTAX&nbsp;&nbsp;&nbsp;&nbsp; Integer32 (1..65535)</p><p class="p">&nbsp;</p><p class="p">.1.3.6.1.2.1.43.5.1.1.3&nbsp;&nbsp; prtGeneralReset
+打印机重置</p><p class="p">&nbsp;SYNTAX&nbsp;&nbsp;&nbsp;&nbsp; INTEGER {</p><p class="p">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+notResetting(3),</p><p class="p">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+powerCycleReset(4), -- Cold Start</p><p class="p">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+resetToNVRAM(5), -- Warm Start</p><p class="p">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+resetToFactoryDefaults(6) -- Reset contents of</p><p class="p">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+-- NVRAM to factory defaults</p><p class="p">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+}</p><p class="p">&nbsp;</p><p class="p"><strong class="ph b">.1.3.6.1.2.1.43.5.1.1.4</strong>&nbsp;&nbsp; prtGeneralCurrentOperator
+打印机当前操作</p><p class="p">SYNTAX&nbsp;&nbsp;&nbsp;&nbsp; OCTET STRING (SIZE(0..255))</p><p class="p">&nbsp;</p><p class="p">.1.3.6.1.2.1.43.5.1.1.6 &nbsp;&nbsp;prtInputDefaultIndex
+输入默认指数</p><p class="p">SYNTAX&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; interger32</p><p class="p">.1.3.6.1.2.1.43.5.1.1.7&nbsp;&nbsp; prtOutputDefaultIndex 输出默认指数</p><p class="p">SYNTAX&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; interger32</p><p class="p">&nbsp;</p><p class="p">.1.3.6.1.2.1.43.6.1.1.2&nbsp;&nbsp; prtCoverDescription 打印机外壳描述</p><p class="p">SYNTAX&nbsp;&nbsp;&nbsp;&nbsp; OCTET STRING (SIZE(0..255))</p><p class="p">&nbsp;</p><p class="p">.1.3.6.1.2.1.43.6.1.1.3 &nbsp;&nbsp;prtCoverStatus
+打印机外壳状态</p><p class="p">SYNTAX&nbsp;&nbsp;&nbsp;&nbsp; INTEGER {</p><p class="p">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+other(1),</p><p class="p">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+doorOpen(3),</p><p class="p">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+doorClosed(4),</p><p class="p">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+interlockOpen(5),</p><p class="p">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+interlockClosed(6)</p><p class="p">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+}</p><p class="p">&nbsp;</p><p class="p">.1.3.6.1.2.1.43.5.1.1.7.1 &nbsp;prtOutputIndex&nbsp;&nbsp;&nbsp;
+输出索引&nbsp;&nbsp; </p><p class="p">SYNTAX&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; interger32</p><p class="p">&nbsp;</p><p class="p">.1.3.6.1.2.1.43.5.1.1.7.2&nbsp; prtOutputType&nbsp;&nbsp;&nbsp;
+输出类型&nbsp;&nbsp;&nbsp;&nbsp; </p><p class="p">&nbsp;SYNTAX&nbsp;&nbsp;&nbsp;&nbsp;
+INTEGER {</p><p class="p">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+other(1),</p><p class="p">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+unknown(2),</p><p class="p">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+removableBin(3),</p><p class="p">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;unRemovableBin(4),</p><p class="p">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+continuousRollDevice(5),</p><p class="p">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+mailBox(6),</p><p class="p">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+continuousFanFold(7)</p><p class="p">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+}</p><p class="p">&nbsp;</p><p class="p">.1.3.6.1.2.1.43.5.1.1.7.3&nbsp; prtOutputCapacityUnit&nbsp;
+输出容量单位</p><p class="p">SYNTAX&nbsp;&nbsp;&nbsp;&nbsp; CapacityUnit</p><p class="p">&nbsp;</p><p class="p">.1.3.6.1.2.1.43.5.1.1.7.4&nbsp; prtOutputMaxCapacity&nbsp; 输出最大容量 </p><p class="p">SYNTAX&nbsp;&nbsp;&nbsp;&nbsp; Integer32</p><p class="p">&nbsp;</p><p class="p"><strong class="ph b">.1.3.6.1.2.1.43.5.1.1.7.5</strong>&nbsp; prtOutputRemainingCapacity 输出剩余容量 </p><p class="p">SYNTAX&nbsp;&nbsp;&nbsp;&nbsp; Integer32</p><p class="p">&nbsp;</p><p class="p">.1.3.6.1.2.1.43.5.1.1.7.6&nbsp;
+prtOutputStatus&nbsp; 输出状态&nbsp; </p><p class="p">&nbsp;SYNTAX&nbsp;&nbsp;&nbsp;&nbsp;
+SubUnitStatus&nbsp; </p><p class="p">&nbsp;&nbsp;&nbsp; </p><p class="p">.1.3.6.1.2.1.43.5.1.1.7.7&nbsp;
+prtOutputName&nbsp; 输出打印机名称&nbsp; </p><p class="p">SYNTAX&nbsp;&nbsp;&nbsp;&nbsp;
+OCTET STRING (SIZE(0..63))</p><p class="p">&nbsp;</p><p class="p">.1.3.6.1.2.1.43.5.1.1.7.8
+&nbsp;prtOutputVendorName&nbsp; 输出供应商名称 </p><p class="p">SYNTAX&nbsp;&nbsp;&nbsp;&nbsp;
+OCTET STRING (SIZE(0..63))</p><p class="p">&nbsp;</p><p class="p">.1.3.6.1.2.1.43.5.1.1.7.9&nbsp;
+prtOutputModel&nbsp; 输出打印机模型&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; </p><p class="p">SYNTAX&nbsp;&nbsp;&nbsp;&nbsp; OCTET STRING (SIZE(0..63))</p><p class="p">&nbsp;</p><p class="p">.1.3.6.1.2.1.43.5.1.1.7.10&nbsp; prtOutputVersion&nbsp;
+输出打印机版本&nbsp;&nbsp;&nbsp; </p><p class="p">SYNTAX&nbsp;&nbsp;&nbsp;&nbsp; OCTET
+STRING (SIZE(0..63))</p><p class="p">&nbsp;</p><p class="p">.1.3.6.1.2.1.43.5.1.1.7.11&nbsp;
+prtOutputSerialNumber 输出打印机序列号 </p><p class="p">SYNTAX&nbsp;&nbsp;&nbsp;&nbsp;
+OCTET STRING (SIZE(0..63))</p><p class="p">&nbsp;</p><p class="p">.1.3.6.1.2.1.43.5.1.1.7.12&nbsp;
+prtOutputDescription&nbsp; 输出打印机描述</p><p class="p">SYNTAX&nbsp;&nbsp;&nbsp;&nbsp;
+OCTET STRING (SIZE(0..255))</p><p class="p">&nbsp;</p><p class="p">.1.3.6.1.2.1.43.5.1.1.7.13&nbsp;
+prtOutputSecurity 输出打印机安全性</p><p class="p">SYNTAX&nbsp;&nbsp;&nbsp;&nbsp; PresentOnOff</p><p class="p">&nbsp;</p><p class="p">.1.3.6.1.2.1.43.5.1.1.7.14&nbsp; prtOutputDimUnit
+输出打印机尺寸单位</p><p class="p">SYNTAX&nbsp;&nbsp;&nbsp;&nbsp; MediaUnit</p><p class="p">&nbsp;</p><p class="p">.1.3.6.1.2.1.43.5.1.1.7.15&nbsp; prtOutputMaxDimFeedDir 输出打印机最大尺寸单位</p><p class="p">&nbsp;SYNTAX&nbsp;&nbsp;&nbsp;&nbsp; Integer32 </p><p class="p">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; </p><p class="p">.1.3.6.1.2.1.43.5.1.1.7.16&nbsp; prtOutputMaxDimXFeedDir 输出打印机X轴最大尺寸单位</p><p class="p">&nbsp;SYNTAX&nbsp;&nbsp;&nbsp;&nbsp; Integer32 </p><p class="p">&nbsp;</p><p class="p">.1.3.6.1.2.1.43.5.1.1.7.17&nbsp; prtOutputMinDimFeedDir&nbsp;
+输出打印机最小尺寸单位</p><p class="p">&nbsp;SYNTAX&nbsp;&nbsp;&nbsp;&nbsp; Integer32</p><p class="p">&nbsp;</p><p class="p">.1.3.6.1.2.1.43.5.1.1.7.18&nbsp; prtOutputMinDimXFeedDir&nbsp;
+输出打印机X轴最小尺寸单位</p><p class="p">&nbsp;SYNTAX&nbsp;&nbsp;&nbsp;&nbsp; Integer32</p><p class="p">&nbsp;</p><p class="p">.1.3.6.1.2.1.43.5.1.1.7.19&nbsp; prtOutputStackingOrder&nbsp;
+输出堆叠顺序 </p><p class="p">SYNTAX&nbsp;&nbsp;&nbsp;&nbsp; INTEGER {</p><p class="p">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+unknown(2),</p><p class="p">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+firstToLast(3),</p><p class="p">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+lastToFirst(4)</p><p class="p">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+}&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; </p><p class="p"><strong class="ph b">.1.3.6.1.2.1.43.5.1.1.7.20</strong>&nbsp; prtOutputPageDeliveryOrientation 输出打印递送方向 </p><p class="p">SYNTAX&nbsp;&nbsp;&nbsp;&nbsp;
+INTEGER {</p><p class="p">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+faceUp(3),</p><p class="p">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+faceDown(4)</p><p class="p">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+}</p></section>
+<section class="section"></section>
+<div class="example"><ol class="ol">
+<li class="li"><p class="p"><a class="xref" href="https://tools.ietf.org/html/draft-ietf-printmib-mib-info-00.txt" target="_blank" rel="external noopener">draft-ietf-printmib-mib-info-00</a></p></li>
+<li class="li"><p class="p"><a class="xref" href="https://blog.csdn.net/gatieme/article/details/50642756" target="_blank" rel="external noopener">深入理解计算机系统-之-数值存储（一）-CPU大端和小端模式详解</a></p></li>
+<li class="li"><p class="p"><a class="xref" href="https://www.rfc-editor.org/" target="_blank" rel="external noopener">RFC Editor：查看最新RFC文档标准</a></p></li>
+<li class="li"><p class="p"><a class="xref" href="https://www.iana.org/protocols" target="_blank" rel="external noopener">IANA — Protocol Registries：查看最新RFC文档标准</a></p></li>
+</ol></div>
+</div>
+<nav role="navigation" class="related-links"><div class="familylinks"><div class="parentlink"><strong>父主题：</strong> <a class="link" href="%E6%89%93%E5%8D%B0%E6%9C%BA%E9%A9%B1%E5%8A%A8%E5%BC%80%E5%8F%91.html">打印机驱动开发</a></div></div></nav></article></main></body></html>

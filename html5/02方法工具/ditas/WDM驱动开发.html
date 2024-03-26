@@ -1,0 +1,650 @@
+<!DOCTYPE html
+  SYSTEM "about:legacy-compat">
+<html lang="zh-cn"><head><meta charset="UTF-8"><meta name="copyright" content="(C) 版权 2024"><meta name="generator" content="DITA-OT"><meta name="description" content=""><title>WDM驱动开发</title><link rel="stylesheet" type="text/css" href="../../commonltr.css">
+<link rel="stylesheet" type="text/css" href="../../common-extended.css"></head><body id="WDM驱动开发-C1ADF89F"><main role="main"><article role="article" aria-labelledby="ariaid-title1">
+<h1 class="title topictitle1" id="ariaid-title1">WDM驱动开发</h1>
+
+
+<div class="body conbody"><p class="shortdesc"></p>
+<section class="section"><h2 class="title sectiontitle">概要 </h2><p class="p">本系列文章将从头开始教你如何编写简单的 Windows NT 设备驱动程序。的确，你可以在互联网上找到各种有关编写设备驱动程序的资源和教程，不过，其中大部分都是编写
+“Hello,World” 之类的入门程序，这也导致了在真正编写设备驱动程序时，很难搜索到有用的信息。也许你手边也有些教程，为啥你还需要阅读本文呢？我个人认为，信息越多总是越好，尤其对于那些第一次接触到的概念。能从多角度来观察同一个事物总是会带来新的观点。不同的人会用不同的方式写作，并从自己的角度描述信息，这取决于作者熟悉哪一方面或他觉得哪一方面值得说明。这种情况下，我个人建议任何想要编写设备驱动程序的人不要拘泥于本文或者其他文章。你应该多看看各种的示例和代码段，并研究其中的差异。</p><p class="p">本教程会介绍如何创建一个简单的设备驱动，然后动态加载/卸载这个驱动，最后我们会涉及如何在用户模式下与驱动进行通讯。</p></section>
+<section class="section"><h2 class="title sectiontitle">开发WDM类型驱动程序的常见方法 </h2>开发WDM驱动程序的方法三种，一种是利用微软提供的DDK驱动程序开发包，第二种是使用Compuware
+Numega公司的DriverStudio，第三种是使用KRF Tech公司的WinDriver。后两种给出驱动程序的框架，并对DDK中的一些操作进行封装，因此减少了开发时间，提高了效率。开发速度方面，第一种最慢，第三种最快。普及程度方法，第一种和第二种用得比较多。
+对于DDK与DriverStudio的优缺点在网上争论了很久，我个人认为这种争论根本没有必要，因为它们之间的关系就好比MFC与SDK之间的关系一样。DriverStudio只是对DDK中的相关函数进行封装，让程序设计者只关注相关功能部分的实现，节省开发时间而已。不管使用什么工具，只要顺手，符合我们的习惯就行。</section>
+<section class="section"><h2 class="title sectiontitle">创建简单的设备驱动</h2><p class="p"></p><p class="p">首先我们先来了解什么是子系统。</p></section>
+<section class="section"><h2 class="title sectiontitle">什么是子系统？</h2><p class="p">在解释如何编写设备驱动前，我会引入一些基础知识。我们将从编译器开始。编译器和链接器会按操作系统可以理解的格式生成二进制文件。在
+Windows 中，这种格式称为 “PE”，即”可移植的可执行文件- Portable Executable”格式。在该格式中，有个称为子系统的概念。子系统
+和 PE 头部信息中的其他选项一起描述了如何加载可执行文件，其中也包括了二进制文件的入口点的信息。（注：在 PE 可选头部中包含了很多关于可执行映像的重要信息，例如初始的堆栈大小、程序入口点的位置、首选基地址、操作系统版本、段对齐的信息等等。）</p><p class="p">许多人使用VC++ IDE自带的预设默认的编译器(链接器)指令设置项去简单地创建一个项目。所以即使他们已经写过了Console或GUI应用，仍然对子系统等概念不熟悉。Console或GUI应用是不同的Windows子系统，都会产生一个包含相应子系统信息的PE二进制包，console应用通常使用"<strong class="ph b">main</strong>”，而WINDOWS应用使用”<strong class="ph b">WinMain</strong>”。当你选择这些项目后，VC++会很简便地创建一个使用 <strong class="ph b">/SUBSYSTEM:CONSOLE</strong> 或 <strong class="ph b">/SUBSYSTEM:WINDOWS</strong>参数的子系统。如果选错了项目类型，你也不需要重建项目，而可以在IDE的<span class="ph uicontrol">linker</span>链接器选项中很方便地修改。</p><p class="p"></p><p class="p">而用WDM编译的 Windows NT
+内核模式驱动程序使用“<strong class="ph b">NATIVE</strong>”。此选项通常预留给 Windows 系统组件。其他子系统具体可参见：<a class="xref" href="https://docs.microsoft.com/cpp/build/reference/subsystem-specify-subsystem" target="_blank" rel="external noopener">-SUBSYSTEM (Specify Subsystem)</a>.</p></section>
+<section class="section"><h2 class="title sectiontitle">驱动的“main”</h2><p class="p">编译器选项设置好之后，就要考虑驱动的入口点了。注意，"NATIVE”也可以用于已自定义一个“NtProcessStartup”入口点的user-mode用户模式应用。这样会如同“WinMain”和“main”一样，默认生成一个可执行EXE。可以使用“-entry:&lt;functionname&gt;”链接选项去重载默认的入口点函数，所以就可以这样重新写一个适合驱动的参数组和返回类型的入口点函数。这样在我们安装驱动并告诉系统这是一个驱动时，系统会加载该驱动。</p></section>
+<section class="section"><h2 class="title sectiontitle">Native&nbsp;Application</h2><p class="p">驱动程序使用不同的子系统，驱动程序对应的子系统设置是/subsystem:native。“NATIVE"并不是专用于驱动程序，也可以用于用户模式应用，即：native&nbsp;application&nbsp;。我们知道在windows下写程序，无非就是两种程序，一种是应用程序，一种是驱动程序。其实还存在第三种程序：Native&nbsp;Application。具体可以参考文章《Inside&nbsp;Native&nbsp;Applications》。</p><p class="p">Native&nbsp;Application使用native&nbsp;api，直接与系统内核交互；它的运行时机是在WINNT&nbsp;CORE启动之后，在驱动程序和WIN32等子系统加载之前运行。</p><p class="p"> Native&nbsp;api数量有限，而且大部分是undocumented，这些函数都封装在ntdll.dll中，&nbsp;网上有本电子书叫做《Windows&nbsp;NT&nbsp;2000&nbsp;Native&nbsp;API&nbsp;Reference》，写了这些函数的介绍，有兴趣可以搜索看看。</p><p class="p">Native&nbsp;application的入口函数不是main或winmain或DriverEntry，而是NtProcessStartup</p><code class="ph codeph">void&nbsp;&nbsp;&nbsp;NtProcessStartup&nbsp;(PSTARTUP_ARGUMENT&nbsp;Argument);</code><p class="p">Native&nbsp;application自己不会返回，所以需要在NtProcessStartup的最后，自己结束线程：</p><code class="ph codeph">NtTerminateProcess(NtCurrentProcess(),&nbsp;0);</code><p class="p">写native&nbsp;application其实也是很简单的：</p><pre class="pre codeblock"><code>void NtProcessStartup(PSTARTUP_ARGUMENT Argument)
+{
+NTSTATUS status;
+
+status = ChangeHostName();
+if (status != STATUS_SUCCESS)
+{
+   swprintf(g_sMsg, L"[sxg] Change computer name failed\n");
+   NtDisplayString（g_sMsg);
+}
+else
+{
+   swprintf(g_sMsg, L"[sxg] Change computer name success\n");
+   NtDisplayString(g_sMsg);
+}
+
+NtTerminateProcess(NtCurrentProcess(), 0);
+}</code></pre><div class="p"><ol class="ol">
+<li class="li"><p class="p">调用ntdll.dll中的函数，完成你想要的功能 </p></li>
+<li class="li"><p class="p">利用DDK进行编译，以下是makefile和sources的内容</p><pre class="pre codeblock"><code>MAKEFILE文件:
+
+!INCLUDE $(NTMAKEENV)\makefile.def
+
+
+SOURCES文件:
+
+TARGETNAME=hostnamex
+
+TARGETPATH=obj
+
+TARGETTYPE=PROGRAM
+
+INCLUDES=$(DDK_INC_PATH)
+
+
+SOURCES= hostnamex.c
+
+
+编译生成可执行程序，此处为hostnamex.exe</code></pre></li>
+<li class="li"><p class="p">将hostnamex.exe拷贝到系统的system32目录中 </p></li>
+<li class="li"><p class="p">修改注册表值HKLM\System\CurrentControlSet\Control\Session&nbsp;Manager\BootExecute，增加字符串hostnamex</p></li>
+<li class="li">重新启动之后，我们的native application就会运行了。值得注意的是，native application需要自行进行堆的管理。例如：<pre class="pre codeblock"><code>RTL_HEAP_DEFINITION heapParams;    
+memset( &amp;heapParams, 0, sizeof( RTL_HEAP_DEFINITION ));   
+heapParams.Length = sizeof( RTL_HEAP_DEFINITION );   
+Heap = RtlCreateHeap( 2, 0, 0x100000, 0x1000, 0, &amp;heapParams ); </code></pre></li>
+</ol></div><p class="p">  native application应用还是比较广的，例如瑞星的开机杀毒软件，就是一个典型的native
+application. 关于native application得更多信息, MJ0011大牛翻译过一篇文章，《深入Native应用程序》大家可以借鉴。</p><p class="p">虽然入口点函数名可以自定义成诸如BufferFly，但最MS官方与大多开发者常用的命名是“DriverEntry”，使用“-entry:DriverEntry”链接选项：<code class="ph codeph">#pragma comment(linker,"/entry:DriverEntry")</code>。如果你使用DDK，那么这些动作在你指定
+“DRIVER”为生成可执行程序的类型时就会自动完成。为了更简便地使用默认选项来创建应用，DDK在常用的<strong class="ph b">make</strong>文件中包含许多预设的选项。开发者可以重载make文件中的设置或直接方便地使用。这也是“DriverEntry”成为官方的驱动入口点命名的原因。</p><p class="p">注意，DLL动态库也使用“WINDOWS”子系统编译选项，即<code class="ph codeph">/subsystem:windows</code>，但同时还用了<strong class="ph b">/DLL</strong>开关选项。同样地，驱动可以使用<strong class="ph b">/DRIVER:WDM</strong>(会在后台设置NATIVE)开关选项。驱动的<strong class="ph b">/DRIVER:UP</strong>表示驱动不能在多处理器系统中加载。</p><p class="p">链接器生成最终的二进制包.PE文件头部中的选项和二进制包的被加载方式(run
+as an EXE through the loader, loaded by LoadLibrary, or attempting
+to be loaded as a driver),决定了加载系统的行为。加载系统会进行某些层次的验证，图片的加载实际上也是支持此模式的，例如，有时启动代码会在你的入口点之前附加执行动作(W如inMainCRTStartup在调用WinMain会初始合CRT)。要想简便地进行开发工作，就要基于自定义的加载方式而在链接器中设置正确选项，以使得链接器可以正常创建二进制包。PE格式的二进制包中有各种各样的资源，有兴趣可以自行深入研究。</p><p class="p">如下为设置好的最终的链接器选项：</p><p class="p"><code class="ph codeph">/SUBSYSTEM:NATIVE /DRIVER:WDM –entry:DriverEntry</code></p></section>
+<section class="section"><h2 class="title sectiontitle">在创建“DriverEntry”之前</h2><p class="p">在创建“DriverEntry”之前我们要了解一些东西。许多人想要快速开始写驱动并且马上投产。就如同许多机构所培训的普通应用开发场景一样地：获得源码，修改，编译，测试。你的程序可能不会马上工作，可能会崩溃或消失，然后经过调试修正，你会很开心地学到很多知识。但是驱动开发是不一样的，如果不事先了解代码做了什么动作，可能会导致系统蓝屏。如果导致蓝屏的驱动是在启动时就加载并执行的，那么还会导致启动就蓝屏。还好，你还可以用安全模式启动或系统还原。所以在正式开始编写驱动之前，有不多的一些东西必须要先掌握。</p><p class="p">第一个决窍是不要随便修改一个驱动源码去编译。如果你不理解驱动工作原理和编程环境，就很可能出问题。驱动的BUG并不会一直出现，但会概率性发生，这样会破坏操作系统的完整性。应用程序也会有同类BUG但不会在启动时引发。比如不时发生无法访问页面缓存中内存的BUG。如果你知道了虚拟内存的工作机制，你会知道系统会从内存中清除旧页面并缓存所需的新页面，这样程序就以使用比物理内存上限更多的虚拟内存。但有一些情况下，一些页面无法被载入内存，所以与内存相关的驱动就只能访问那些能够被载入并释放的内存。</p><p class="p">然后，如果要使用一个访问上述可页面缓存的内存的驱动，在系统总是尽可能多即可能久地缓存页面的策略下，就要确保该驱动不会崩溃。比如你关闭一个应用程序，实际上它还长驻内存。这样的一个BUG就很可能难以察觉(除非你做驱动验证)且只能概率性捕捉。所以如果你不理解一些基本概念，你就无从下手。</p><p class="p">本文会介绍许多底层概念。比如IRQL和IRP，在MSDN上都能找到数十页之多的文档。本文不会重复每个细节，而是尝试介绍基本概要，指出可以搜索更多信息的方向。在写驱动之前，至少要知道这些概念的存在并理解基本机制。</p></section>
+<section class="section"><h2 class="title sectiontitle">IRQL是什么</h2><p class="p">IRQL是Interrupt Request Level的缩写，即中断请求级别、中断执行优先级别。是Windows操作系统使用的处理器中断级别。处理器会在一个特别的IRQL线程中执行代码。
+处理器的IRQL根本上决定了线程是如何允许被中断的。线程只允许被同个处理器下的更高级别的IRQL上的代码来中断。同级或更低级IRQL上的中断请求被掩码屏蔽了。在多处理器系统中，每个处理器在自己的IRQL上独立运行。</p><div class="p">简单的说IRQL就是中断执行的优先等级。若某个中断产生了，且IRQL等于或小于目前处理器的IRQL设置。那么它将不会影响目前的程序执行。反之，若中断的IRQL高于目前处理器的IRQL设置，那么将会造成目前的执行中断，而去执行中断的代码。&nbsp;总之，较高优先级的中断会中断较低优先级的中断。当这个情况发生时，所有其他等于或者小于这个IRQL的中断都将成为等待状态。透过KeGetCurrentIRQL()这个系统例程可以得到目前处理器的IRQL.可用的IRQL如下：<pre class="pre codeblock"><code>Software IRQL 
+PASSIVE_LEVEL 0 // Passive release level 
+LOW_LEVEL 0 // Lowest interrupt level 
+APC_LEVEL 1 // APC interrupt level 
+DISPATCH_LEVEL 2 // Dispatch level 
+Hardware IRQL 
+DIRQL: from 3 to 26 for device ISR 
+PROFILE_LEVEL 27, 0x1B // Timer used for profiling. 
+CLOCK1_LEVEL 28, 0x1C // Interval clock 1 level - not used on x86 
+CLOCK2_LEVEL 28, 0x1C // Interval clock 2 level 
+SYNCH_LEVEL 28, 0x1C // Synchronization level 
+IPI_LEVEL 29, 0x1D // Interprocessor interrupt level 
+POWER_LEVEL 30, 0x1E // Power failure level 
+HIGH_LEVEL 31, 0x1F // Highest interrupt leve </code></pre></div><p class="p">数值越大代表其IRQL的优先级越高。在驱动开发中，常见的有：
+PASSIVE_LEVEL. APC_LEVEL DISPATCH_LEVEL DIRQL(Device IRQL)四个级别的IRQL。</p><p class="p">MSDN中的核心API文档一般都标明了各个API分别可以在什么IRQL级别上运行。IRQL级别越高，能用的API就越少。MSDN文档定义了当一个驱动的入口点被调用时所对应的处理器IRQL。如DriverEntry将在PASSIVE级别上被调用。</p><p class="p"><strong class="ph b">PASSIVE_LEVEL</strong></p><p class="p">IRQL最低级别,没有被屏蔽的中断，在这个级别上，线程执行用户模式，可以访问分页内存。</p><p class="p"><strong class="ph b">APC_LEVEL</strong></p><p class="p">在这个级别上,只有APC级别的中断被屏蔽，可以访问分页内存。处理器执行在这个优先级别上时，只有apc级别的中断可以被屏蔽。这个级别上可以执行异步过程调用APC<a class="xref" href="http://msdn.microsoft.com/library/default.asp?url=/library/enhttps://docs.microsoft.com/en-us/windows/desktop/sync/asynchronous-procedure-calls" target="_blank" rel="external noopener">Asynchronous Procedure Calls</a>.&nbsp;分页内存可以访问。当一个APC(异步过程调用）出现时，处理器就被提升到APC_LEVEL级别。这样抑制了其他APCS(如执行一些I/O动作的APC)的产生。驱动可以被人为提升到这个级别以执行一些APCS的同步。</p><p class="p">&nbsp;</p><p class="p">DISPATCH_LEVEL</p><p class="p">处理器执行在这个优先级别上时，DPC及其以下级别的中断可以被屏蔽。分页内存不能访问，只能访问非分页内存。由于只能使用非分页内存，因此当你在这个级别时，可以使用的API大大减少了。</p><p class="p">&nbsp;</p><p class="p">DIRQL (Device IRQL)</p><p class="p">通常处于高层次的驱动程序不会使用这个IRQL等级，在这个等级上所有的中断都会被忽略。这是IRQL的最高等级。通常使用这个来判断设备的优先级。</p><p class="p">一般的，更高级的驱动在这个级别上不处理IRQL，但是几乎所有的中断被屏蔽，这实际上是IRQL的一个范围，这是一个决定某个驱动有更高的优先级的方法。</p><p class="p"></p><p class="p">本文中所制驱动为简单起见，仅工作于PASSIVE_LEVEL级别。但你可以自行去了解IRQL和线程调度的知识。参见：</p><ol class="ol">
+<li class="li"><p class="p"><a class="xref" href="http://download.microsoft.com/download/e/b/a/eba1050f-a31d-436b-9281-92cdfeae4b45/IRQL_thread.doc" target="_blank" rel="external noopener">相关MSDN文档</a></p></li>
+<li class="li"><p class="p"><a class="xref" href="http://msdn.microsoft.com/library/default.asp?url=/library/en-us/kmarch/hh/kmarch/Intrupts_70fd60c6-4f07-40f7-96aa-eee7cc2a126f.xml.asp" target="_blank" rel="external noopener">其他资源和信息</a></p></li>
+</ol><p class="p">IRQL 仅仅解决了单个处理器中的同步问题，使用SpinLock可以解决在多个处理器中的同步问题。DDK提供了两组函数。
+ KeAcquireSpinLock()  KeReleaseSpinLock()  及  KeAcquireSpinLockAtDpcLevel()
+ KeReleaseSpinLockAtDpcLevel() </p></section>
+<section class="section"><h2 class="title sectiontitle">什么是IRP?</h2><p class="p">几乎所有的Windows2000/XP/2003的I/O都是包驱动的，系统采取一种称为“I/O请求包（IRP--­I/O&nbsp;request&nbsp;packet）”的数据结构来完成与内核模式驱动程序通信。IRP由I/O管理器根据用户态程序提出的请求创建并传给相应的驱动程序。在分层的驱动程序中，这个过程很复杂，一个IRP常常要穿越几层驱动程序。另外，驱动程序也能够建立新的IRP并传递给其它驱动程序。IRP功能的复杂性决定了它结构的复杂性，正确的理解IRP的结构是理解WDM框架的基础。IRP由I/O管理器在非分页内存池内创建，它包括两部分：头部区域和I/O堆栈位置。</p><p class="p">IRP数据结构的描述可参见：<a class="xref" href="http://msdn.microsoft.com/library/default.asp?url=/library/en-us/kmarch/hh/kmarch/k112_39688b8b-4b33-4bce-b71f-e9c183e4d6bd.xml.asp" target="_blank" rel="external noopener">here</a>.</p><p class="p">IRP的文档可以由简入繁，所以我们暂时先介绍IRP对你的意义。其他详细的多达二十多页的文档可参见：<a class="xref" href="http://msdn.microsoft.com/library/default.asp?url=/library/en-us/dndevice/html/IRP_Handle.asp" target="_blank" rel="external noopener">here</a>.</p><p class="p">IRP头部可见字段</p><table class="table"><caption></caption><colgroup><col><col></colgroup><tbody class="tbody">
+<tr class="row">
+<td class="entry">AssociatedIrp.SystemBuffer</td>
+<td class="entry">设备执行缓冲I/O时，指向系统空间缓冲区</td>
+</tr>
+<tr class="row">
+<td class="entry">PMDL MdlAddress</td>
+<td class="entry">设备执行直接I/O时，指向用户空间的内存描述表</td>
+</tr>
+<tr class="row">
+<td class="entry">IO_STATUS_BLOCK IoStatus</td>
+<td class="entry">包含了I/O请求的状态；驱动程序在最终完成请求时设置这个结构。IoStatus.Status域将收到一个NTSTATUS代码。</td>
+</tr>
+<tr class="row">
+<td class="entry">PVOID UserBuffer</td>
+<td class="entry">对于METHOD_NEITHER方式的</td>
+</tr>
+<tr class="row">
+<td class="entry">IRP_MJ_DEVICE_CONTROL请求</td>
+<td class="entry">该域包含输出缓冲区的用户模式虚拟地址。该域还用于保存读写请求缓冲区的用户模式虚拟地址，但指定了DO_BUFFERED_IO或DO_DIRECT_IO标志的驱动程序，其读写例程通常不需要访问这个域。当处理一个METHOD_NEITHER控制操作时，驱动程序能用这个地址创建自己的MDL。</td>
+</tr>
+<tr class="row">
+<td class="entry">BOOLEAN Cancel</td>
+<td class="entry">指示IRP已经被取消</td>
+</tr>
+</tbody></table><p class="p"></p><p class="p">I/O堆栈位置</p><table class="table"><caption></caption><colgroup><col><col></colgroup><tbody class="tbody">
+<tr class="row">
+<td class="entry">MajorFunction</td>
+<td class="entry">指示执行什么I/O操作以及如何解释Parameters 字段</td>
+</tr>
+<tr class="row">
+<td class="entry">MinorFunction</td>
+<td class="entry">由文件系统合SCSI驱动程序使用</td>
+</tr>
+<tr class="row">
+<td class="entry">Parameters</td>
+<td class="entry">MajorFunction代码决定此联合的内容</td>
+</tr>
+<tr class="row">
+<td class="entry">DeviceObject</td>
+<td class="entry">I/O请求的目标设备</td>
+</tr>
+<tr class="row">
+<td class="entry">FileObject</td>
+<td class="entry">请求的文件对象</td>
+</tr>
+</tbody></table><p class="p">I/O堆栈位置的主要目的是，保存一个I/O请求的函数代码和参数。而I/O堆栈数量实际上就是参与I/O请求的I/O层的数量。在一个IRP中，上层驱动负责负责为下层驱动设置堆栈位置指针。驱动程序可以为每个IRP调用IoGetCurrentIrpStackLocation来获得指向其自身堆栈位置的指针，而上层驱动程序必须调用IoGetNextIrpStackLocation来获得指向下层驱动程序堆栈位置的指针。因此，上层驱动可以在传送IRP给下层驱动之前设置堆栈位置的内容。</p><p class="p">上层驱动调用IoCallDriver，将DeviceObject成员设置成下层驱动目标设备对象。当上层驱动完成IRP时，IoCompletion
+函数被调用，I/O管理器传送给IoCompletion函数一个指向上层驱动的设备对象的指针。</p><p class="p">IRP也可以包含一个“sub-requests子请求”列表，它被称为“IRP
+Stack Location”。设置堆栈中的每个驱动一般都有各自的“sub-requests子请求”。其数据结构被称为“<a class="xref" href="http://msdn.microsoft.com/library/default.asp?url=/library/en-us/kmarch/hh/kmarch/k112_8fcba8ca-d004-4800-87d1-d5c7714a494b.xml.asp" target="_blank" rel="external noopener">IO_STACK_LOCATION</a>”。</p><p class="p">为了便于理解IRP 和IO_STACK_LOCATION的关系，我们举个例子，有三个人，他们分别是木工、管道工和电工，他们要一起建造一所房子，他们需要有一个总体的设计和一组工具就像他们的工具箱。我们可以把这个看作是IRP.
+为了建造房子他们每个人都有自己的工作，例如管道工，需要设计需要多少管材，在哪里铺设等等。木工需要搭建整个房子的框架。每一个人的工作可以看作是IO_STACK_LOCATION。整个的IRP是建造一所房子，每个人的工作是IO_STACK_LOCATION，当每个人都完成了自己的工作，IRP就完成了。</p><p class="p">本文的驱动不会这么复杂，只是一个栈中唯一的驱动。</p><p class="p">要注意避免的事情</p><p class="p">要注意避免的陷阱有很多，但却不会在本文的简单驱动中涉及。可在深入学习时自行参见“<a class="xref" href="http://support.microsoft.com/default.aspx?scid=KB;EN-US;Q186775&amp;" target="_blank" rel="external noopener">things to avoid</a>”。</p></section>
+<section class="section"><h2 class="title sectiontitle">创建DriverEntry程序</h2><p class="p"><a class="xref" href="http://msdn.microsoft.com/library/default.asp?url=/library/en-us/kmarch/hh/kmarch/DrvrRtns_dc503a23-7c31-421d-ac7b-ff6f4651e44e.xml.asp" target="_blank" rel="external noopener">DriverEntry</a>函数原型如下：</p><div class="p"><pre class="pre codeblock"><code>例子：
+/**********************************************************************
+* 
+* Toby Opferman
+*
+* Driver Example
+*
+* This example is for educational purposes only. I license this source
+* out for use in learning how to write a device driver.
+*
+*     Driver Entry Point
+**********************************************************************/
+#define _X86_
+
+
+#include &lt;wdm.h&gt;
+#include "example.h"
+
+
+    
+VOID Example_Unload(PDRIVER_OBJECT DriverObject);    
+NTSTATUS DriverEntry(PDRIVER_OBJECT pDriverObject, PUNICODE_STRING pRegistryPath); 
+
+/* 
+* These compiler directives tell the Operating System how to load the
+* driver into memory. The "INIT" section is discardable as you only
+* need the driver entry upon initialization, then it can be discarded.
+*
+*/
+#pragma alloc_text(INIT, DriverEntry)
+#pragma alloc_text(PAGE, Example_Unload)
+
+/**********************************************************************
+* 
+* DriverEntry
+*
+*    This is the default entry point for drivers. The parameters
+*    are a driver object and the registry path.
+*
+**********************************************************************/
+NTSTATUS DriverEntry(PDRIVER_OBJECT pDriverObject, PUNICODE_STRING pRegistryPath)
+{
+    NTSTATUS NtStatus = STATUS_SUCCESS;
+    UINT uiIndex = 0;
+    PDEVICE_OBJECT pDeviceObject = NULL;
+    UNICODE_STRING usDriverName, usDosDeviceName;
+
+    DbgPrint("DriverEntry Called \r\n");
+
+    RtlInitUnicodeString(&amp;usDriverName, L"\\Device\\Example");
+    RtlInitUnicodeString(&amp;usDosDeviceName, L"\\DosDevices\\Example"); 
+
+    NtStatus = IoCreateDevice(pDriverObject, 0, &amp;usDriverName, FILE_DEVICE_UNKNOWN, FILE_DEVICE_SECURE_OPEN, FALSE, &amp;pDeviceObject);
+
+    if(NtStatus == STATUS_SUCCESS)
+    {
+
+        /*
+         * The "MajorFunction" is a list of function pointers for entry points into the driver.
+         * You can set them all to point to 1 function, then have a switch statement for all
+         * IRP_MJ_*** functions or you can set specific function pointers for each entry
+         * into the driver.
+         *
+         */
+        for(uiIndex = 0; uiIndex &lt; IRP_MJ_MAXIMUM_FUNCTION; uiIndex++)
+             pDriverObject-&gt;MajorFunction[uiIndex] = Example_UnSupportedFunction;
+    
+        pDriverObject-&gt;MajorFunction[IRP_MJ_CLOSE]             = Example_Close;
+        pDriverObject-&gt;MajorFunction[IRP_MJ_CREATE]            = Example_Create;
+        pDriverObject-&gt;MajorFunction[IRP_MJ_DEVICE_CONTROL]    = Example_IoControl;
+        pDriverObject-&gt;MajorFunction[IRP_MJ_READ]              = Example_Read;
+        pDriverObject-&gt;MajorFunction[IRP_MJ_WRITE]             = USE_WRITE_FUNCTION;
+    
+        /* 
+         * Required to unload the driver dynamically. If this function is missing
+         * the driver cannot be dynamically unloaded.
+         */
+        pDriverObject-&gt;DriverUnload = Example_Unload; 
+
+        /* 
+         * Setting the flags on the device driver object determine what type of I/O
+         * you wish to use.
+         *   
+         * Direct I/O - MdlAddress describes the Virtual Address list. This is then
+         *                 used to lock the pages in memory.
+         *
+         *                 PROS: Fast, Pages are not copied.
+         *                 CONS: Uses resources, needs to lock pages into memory.
+         *
+         * Buffered I/o - SystemBuffer is then used by the driver to access the data. The I/O
+         *                   manager will copy the data given by the user mode driver into this buffer
+         *                   on behalf of the driver.
+         *
+         *                   CONS: Slower operation (Use on smaller data sets)
+         *                         Uses resources, allocates Non-paged memory
+         *                         Large allocations may not work since it would
+         *                         require allocating large sequential non-paged memory.
+         *                   PROS: Easier to use, driver simply accesses the buffer
+         *                         Usermode buffer is not locked in memory
+         *
+         *
+         * Neither Buffered or Direct - This is when you simply read the buffer directly using the user-mode address.
+         *                     Simply omit DO_DIRECT_IO and DO_BUFFERED_IO to perform this action.
+         *
+         *                     PROS: No copying or locking pages occurs.
+         *
+         *                     CONS: You *MUST* be in the context of the user-mode thread that made the request.
+         *                           being in another process space you the page tables would not point to
+         *                           the same location.
+         *                           You have to perform some checking and probeing in order to verify
+         *                           when you can read/write from the pages.
+         *                           You cannot access a user mode address unless it's locked into memory
+         *                           at &gt;= DPC level.
+         *                           The usermode process could also change the access rights of the
+         *                           buffer while the driver is trying to read it!
+         *
+         *
+         * If your driver services lower level drivers you will need to set this field to the same type of
+         * I/O.
+         *
+         * The flags for Read/Write is:
+         *      DO_BUFFERED_IO, DO_DIRECT_IO, Specify neither flag for "Neither".
+         *
+         * The flags (defined in the IOCTL itself) for Control I/O is:
+         *     METHOD_NEITHER, METHOD_BUFFERED, METHOD_IN_DIRECT or METHOD_OUT_DIRECT 
+         *
+         * From MSDN:
+         *    For IRP_MJ_READ and IRP_MJ_WRITE requests, drivers specify the I/O method by using flags in each 
+         *    DEVICE_OBJECT structure. For more information, see Initializing a Device Object.
+         *
+         *    For IRP_MJ_DEVICE_CONTROL and IRP_MJ_INTERNAL_DEVICE_CONTROL requests, the I/O method is determined 
+         *    by the TransferType value that is contained in each IOCTL value. For more information, see Defining
+         *    I/O Control Codes.
+         */
+         
+        pDeviceObject-&gt;Flags |= IO_TYPE;
+    
+        /*
+         * We are not required to clear this flag in the DriverEntry as the I/O Manager will
+         * clear it for us, but we will anyway. Creating a device in any other location we
+         * would need to clear it.
+         */
+    
+        pDeviceObject-&gt;Flags &amp;= (~DO_DEVICE_INITIALIZING);
+    
+        /*
+         * Create a Symbolic Link to the device. Example -&gt; \Device\Example
+         */
+    
+        IoCreateSymbolicLink(&amp;usDosDeviceName, &amp;usDriverName);
+    }
+
+
+    return NtStatus;
+}
+
+
+/**********************************************************************
+* 
+* Example_Unload
+*
+*    This is an optional unload function which is called when the
+*    driver is unloaded.
+*
+**********************************************************************/
+VOID Example_Unload(PDRIVER_OBJECT DriverObject)
+{    
+    
+    UNICODE_STRING usDosDeviceName;
+    
+    DbgPrint("Example_Unload Called \r\n");
+    
+    RtlInitUnicodeString(&amp;usDosDeviceName, L"\\DosDevices\\Example");
+    IoDeleteSymbolicLink(&amp;usDosDeviceName);
+
+    IoDeleteDevice(DriverObject-&gt;DeviceObject);
+}
+</code></pre></div><p class="p">分析： </p><p class="p">NTSTATUS DriverEntry(PDRIVER_OBJECT
+pDriverObject, PUNICODE_STRING pRegistryPath); DRIVER_OBJECT是一个数据结构，用来代表一个驱动。DriverEntry例程使用它来设置其他处理特殊I/O请求的驱动入口点。
+在这个结构中还有一个指向DEVICE_OBJECT的指针。DEVICE_OBJECT用来代表一个特定的设备。一个驱动实际上可以创建多个设备。
+这些设备组成一个链表，存放在DEVICE_OBJECT.NextDevice. <strong class="ph b">pRegistryPath:</strong>是一个字符串指针，指出了驱动信息在注册表位置。驱动程序可以利用它在注册表中存储一些特殊的信息。
+内核程序使用IopLoadDriver来加载驱动，读读这个函数，可以完全了解DRIVER_OBJECT结构中各项的意义。</p><p class="p">下一步我们来创建一个设备，你或许奇怪我们如何来创建设备，创建什么类型的设备？平时我们谈到驱动都是与硬件相关的 ，如声卡驱动，网卡驱动等等。其实驱动有不同的类型，分别工作在不同的层级，并不是所有的驱动都是直接与硬件打交道的。
+由于驱动是分层的，最高层的驱动与用户态通讯。最底层的驱动与硬件打交道。每一层驱动都有自己的堆栈。他们会将请求分解 成为一个对于更底层的驱动而言更加易于处理的一个请求。</p><p class="p">我们来看看我们自己的“DriverEntry”的第一部分吧。</p><pre class="pre codeblock"><code>NTSTATUS DriverEntry(PDRIVER_OBJECT  pDriverObject, PUNICODE_STRING  pRegistryPath)
+{
+    NTSTATUS NtStatus = STATUS_SUCCESS;
+    UINT uiIndex = 0;
+    PDEVICE_OBJECT pDeviceObject = NULL;
+    UNICODE_STRING usDriverName, usDosDeviceName;
+
+    DbgPrint("DriverEntry Called \r\n");
+
+    RtlInitUnicodeString(&amp;usDriverName, L"\\Device\\Example");
+    RtlInitUnicodeString(&amp;usDosDeviceName, L"\\DosDevices\\Example"); 
+
+    NtStatus = IoCreateDevice(pDriverObject, 0,
+                              &amp;usDriverName, 
+                              FILE_DEVICE_UNKNOWN,
+                              FILE_DEVICE_SECURE_OPEN, 
+                              FALSE, &amp;pDeviceObject);</code></pre><p class="p">其中的DbgPrint函数的工作很像“printf”，它会把数据输出到调试器或者是调试输出窗口上。你可以从www.sysinternals.com获取一个名为“DbgView”的工具，所有使用这个函数输出的信息这个工具都会显示出来。</p><p class="p">之后你会注意到的是我们调用的函数“RtlInitUnicodeString”，这个函数只是初始化一个UNICODE_STRING数据块。这种数据块包含三个项目，第一个项是Unicode字符串的长度，第二个项是Unicode的最大长度，第三个项是一个指向Unicode字符串的指针。这种数据块是用来描述一个Unicode字符串，它在驱动中用的很多。唯一的一个关于UNICODE_STRING需要记住的事情就是，它们不是以NULL来结尾的，而是以数据结构中的描述“大小”的参数来决定的。对于那些想当然的认为UNICODE_STRING是以NULL来结尾的驱动开发新手来说，这很容易写出“蓝屏驱动”。大多数传递到你的驱动中的Unicode字符串都不会以NULL来结尾，所以这也是一个你需要意识到的问题。</p><p class="p">设备也有名字。它们的名字通常类似于\Device\&lt;somename&gt;，这其实是一个我们通过IoCreateDevice来创建的一个字符串。第二个字符串是“\DosDevices\Example”，我们稍后将会讲到他，因为我们现在的驱动中还用不到。对于函数IoCreateDevice而言，我们传入的有：一个驱动程序对象，一个指向包含有我们调用驱动所使用字串的Unicode字符串，如果这个驱动程序和任何设备都无关的话，那么还会有一个被成为“UNKNOWN”的驱动类型。我们也要传入一个指针，以便于接收新创建的驱动对象。</p><p class="p">第二个参数我们传0进去，这个参数是指定用来创建新设备扩展的字节数的。这是一个驱动可以由驱动开发人员来声明的，并且对于设备并非唯一的一个数据结构。</p><p class="p">你可以利用这个数据结构来扩展能储存数据的实例所传入信息，比如对驱动程序和创建驱动上下文等。不过在我们的例子中，我们不会使用这些东西。</p><p class="p">现在我们已经成功的创建了我们的\\Device\\Example驱动程序，为了让我们的驱动能够响应用户态的IRP主要请求，我们应当设置驱动对象。当然，在IRP栈中也存在一些子请求，这些子请求就是次要请求。</p><p class="p">以下代码组织好了所有确定的请求：</p><pre class="pre codeblock"><code>for(uiIndex = 0; uiIndex &lt; IRP_MJ_MAXIMUM_FUNCTION; uiIndex++)
+             pDriverObject-&gt;MajorFunction[uiIndex] = Example_UnSupportedFunction;
+    
+        pDriverObject-&gt;MajorFunction[IRP_MJ_CLOSE]             = Example_Close;
+        pDriverObject-&gt;MajorFunction[IRP_MJ_CREATE]            = Example_Create;
+        pDriverObject-&gt;MajorFunction[IRP_MJ_DEVICE_CONTROL]    = Example_IoControl;
+        pDriverObject-&gt;MajorFunction[IRP_MJ_READ]              = Example_Read;
+　      pDriverObject-&gt;MajorFunction[IRP_MJ_WRITE]             = USE_WRITE_FUNCTION;
+</code></pre><p class="p">我们把创建，关闭，I/O控制，读和写都组织好了。这也例程意味着什么呢？当我们和用户态的应用程序通讯的时候，这些API调用会直接把参数传入驱动！</p><div class="p"><ul class="ul">
+<li class="li"><p class="p">CreateFile&nbsp;-&gt;&nbsp;IRP_MJ_CREATE</p></li>
+<li class="li"><p class="p">CloseHandle&nbsp;-&gt;&nbsp;IRP_MJ_CLEANUP &amp; IRP_MJ_CLOSE</p></li>
+<li class="li"><p class="p">WriteFile&nbsp;-&gt;&nbsp;IRP_MJ_WRITE</p></li>
+<li class="li"><p class="p">ReadFile-&gt;&nbsp;IRP_MJ_READ</p></li>
+<li class="li"><p class="p">DeviceIoControl&nbsp;-&gt;&nbsp;IRP_MJ_DEVICE_CONTROL</p></li>
+</ul></div><p class="p">需要解释的是，IRP_MJ_CLOSE不是在创建句柄的进程的上下文中调用的。如果你想要进程进行相关的清理操作，你需要通过操纵IRP_MJ_CLEANUP来替代。
+如你所见，当一个用户态程序调用了这些函数，它会调用你驱动中相应的例程。你也许想知道为什么用户态的“文件”并不意味着真正的“文件”。的确是这样的，这些API可以和任何将自己展现给用户态的设备通讯，而不是只访问文件。在这篇文章的结尾，我们将会写一个和我们的驱动通讯的用户态程序，而这个程序就是通过CreateFile，WriteFile，CloseHandle来通讯的。这是多么简单的啊！至于USE_WRITE_FUNCTION，它是一个常数，稍后我会解释的。
+下一步很容易，它是驱动的卸载函数。  pDriverObject-&gt;DriverUnload =  Example_Unload;
+ 在技术上你可以忽略这个函数，但是如果你想要动态的卸载你的驱动程序，那么它一定要被列出。如果你的驱动中没有这个函数，那么系统不会允许你卸载这个驱动。
+之后的代码实际上是DEVICE_OBJECT，而不是DRIVER_OBJECT。由于他们都是以“D”开头，同时又都是以“_OBJECT”结尾的，所以可能会有点难以区分，所以我们很容易混淆他们。
+        pDeviceObject-&gt;Flags |= IO_TYPE;         pDeviceObject-&gt;Flags
+&amp;= (~DO_DEVICE_INITIALIZING); 我们仅仅是设置了标志。“IO_TYPE”其实是一个用来定义我们所想要做的I/O类型的常数（我在example.h中定义了它）。我在操作用户态写请求的部分会进行解释。“DO_DEVICE_INITIALIZING”用来告诉I/O管理器设备正在被初始化以及不要向驱动发送任何的I/O请求。对于在“DriverEntry”的上下文中创建的设备，当“DriverEntry”完成的时候不需要清除这个标志，然而，如果你在“DriverEntry”之外的任何例程中设定了这个标志，那么你必须为任何你使用IoCreateDevice创建的设备通过手动清除这个标志，事实上这个标志是由IoCreateDevice设定的，我们在这儿清除这个标志其实只是为了玩笑而已——因为我们并不需要这么做。
+我们的驱动的最后一部分是使用我们在之前定义的Unicode字符串。“\Device\Example”和“\DosDevices\Example”。
+         IoCreateSymbolicLink(&amp;usDosDeviceName, &amp;usDriverName);
+IoCreateSymbolicLink只做了这些事情，它在对象管理器中创建了一个“符号链接”。你可以下载我的工具“<a class="xref" href="http://www.opferman.net/Files/setup_qv.exe" target="_blank" rel="external noopener">QuickView</a>”，或者是去www.sysinternals.com下载“WinObj”来查看对象管理器。一个符号链接仅仅是把一个“DOS设备名”映射为“NT设备名”而已。
+在这个例子中，“Example”是我们的DOS设备名，“\Device\Example”是我们的NT设备名。 我们接下来要看的代码段是卸载例程。这个例程是够动态的卸载驱动所需要的。这个部分比较短小而且没有什么可解释的。</p><div class="p"><pre class="pre codeblock"><code>VOID Example_Unload(PDRIVER_OBJECT  DriverObject)
+{    
+    
+    UNICODE_STRING usDosDeviceName;
+    
+    DbgPrint("Example_Unload Called \r\n");
+    
+    RtlInitUnicodeString(&amp;usDosDeviceName, L"\\DosDevices\\Example");
+    IoDeleteSymbolicLink(&amp;usDosDeviceName);
+
+    IoDeleteDevice(DriverObject-&gt;DeviceObject);
+}</code></pre></div><p class="p">你可以在你的卸载进程中做任何你喜欢的事情。这个卸载例程很简单，它只是删除了我们之前创建的符号链接和被我们命名为\Device\Example的设备。</p><p class="p">如果你使用过WriteFile和ReadFile，你应当知道调用函数的时候你只是传入一个指向缓冲区来实现写入数据或是从设备中读取数据。这些参数就如我们之前解释的那样，在IRP中被传入驱动。</p></section>
+<section class="section"><h2 class="title sectiontitle">三种I/O方式</h2><p class="p">尽管输入输出管理器在IRP传递到驱动之前有三种方法来排列数据，但是其实还是有更多的故事的。这也意味着数据的排列方式决定了驱动程序的读写函数需要如何分析传入的数据。</p><p class="p">这三种方法是“直接输入输出”，“被缓冲的输入输出”，“两者皆非”。</p><pre class="pre codeblock"><code>#ifdef __USE_DIRECT__
+#define IO_TYPE DO_DIRECT_IO
+#define USE_WRITE_FUNCTION  Example_WriteDirectIO
+#endif
+ 
+#ifdef __USE_BUFFERED__
+#define IO_TYPE DO_BUFFERED_IO
+#define USE_WRITE_FUNCTION  Example_WriteBufferedIO
+#endif
+
+#ifndef IO_TYPE
+#define IO_TYPE 0
+#define USE_WRITE_FUNCTION  Example_WriteNeither
+#endif</code></pre><p class="p">这段代码意味着，如果你在头文件中定义了“__USE_DIRECT__”，那么IO_TYPE将是DO_DIRECT_IO并且USE_WRITE_FUNCTION指向Example_WriteDirectIO。</p><p class="p">如果你在头文件中定义了“__USE_BUFFERED__”，那么IO_TYPE将是DO_BUFFERED_IO并且USE_WRITE_FUNCTION指向Example_WriteBufferedIO。</p><p class="p">如果你在头文件中既没有定义__USE_DIRECT__也没有定义__USE_BUFFERED__，那么IO_TYPE将被定义为0（两者皆非）并且写入函数指向Example_WriteNeither。</p><p class="p">&nbsp;</p><p class="p">我们将会讲解每一种类型的输入输出。</p><p class="p"><strong class="ph b">Direct I/O:</strong></p><div class="p"><pre class="pre codeblock"><code>NTSTATUS Example_WriteDirectIO(PDEVICE_OBJECT DeviceObject, PIRP Irp)
+{
+    NTSTATUS NtStatus = STATUS_SUCCESS;
+    PIO_STACK_LOCATION pIoStackIrp = NULL;
+    PCHAR pWriteDataBuffer;
+
+    DbgPrint("Example_WriteDirectIO Called \r\n");
+    
+    /*
+     * Each time the IRP is passed down
+     * the driver stack a new stack location is added
+     * specifying certain parameters for the IRP to the driver.
+     */
+    pIoStackIrp = IoGetCurrentIrpStackLocation(Irp);
+    
+    if(pIoStackIrp)
+    {
+        pWriteDataBuffer = MmGetSystemAddressForMdlSafe(Irp-&gt;MdlAddress, NormalPagePriority);
+    
+        if(pWriteDataBuffer)
+        {                             
+            /*
+             * We need to verify that the string
+             * is NULL terminated. Bad things can happen
+             * if we access memory not valid while in the Kernel.
+             */
+           if(Example_IsStringTerminated(pWriteDataBuffer, pIoStackIrp-&gt;Parameters.Write.Length))
+           {
+                DbgPrint(pWriteDataBuffer);
+           }
+        }
+    }
+
+    return NtStatus;
+}</code></pre></div><p class="p">我们所做的第一件事是调用“IoGetCurrentIrpStackLocation”，这个函数只是给我们提供我们的IO_STACK_LOCATION。
+在我们的例子中，惟一一个我们需要从它之中获取的参数是提供给驱动的缓冲区长度，它位于Parameters.Write.Length。
+缓冲输入输出所工作的方法是提供给你一个“MdlAddress”，它是“内存描述表”。这个表是一个对用户态的内存地 址以及如何将其映射到物理地址的描述。我们可以调用MmGetSystemAddressForMdlSafe这个函数，这个操作可以给我们一个系统虚拟地址，我们可以使用这个虚拟地址来读内存。所以，这只是简单的映射被用户态使用的物理页面到系统内存中。我们可以使用它的返回值来访问被用户态所传入的缓冲区。</p><p class="p">这种方法通常用于较大的换用区因为他并不需要内存来复制。用户态的缓冲区在IRP请求完成之前是被锁定的，这是使用直接输入输出的不利方面。这是唯一的不好之处，也是为什么它通常对较大缓冲区而言更有用的原因。 </p><p class="p"><strong class="ph b">Buffered I/O :</strong></p><div class="p"><pre class="pre codeblock"><code>NTSTATUS Example_WriteBufferedIO(PDEVICE_OBJECT DeviceObject, PIRP Irp)
+{
+    NTSTATUS NtStatus = STATUS_SUCCESS;
+    PIO_STACK_LOCATION pIoStackIrp = NULL;
+    PCHAR pWriteDataBuffer;
+
+    DbgPrint("Example_WriteBufferedIO Called \r\n");
+    
+    /*
+     * Each time the IRP is passed down
+     * the driver stack a new stack location is added
+     * specifying certain parameters for the IRP to the driver.
+     */
+    pIoStackIrp = IoGetCurrentIrpStackLocation(Irp);
+    
+    if(pIoStackIrp)
+    {
+        pWriteDataBuffer = (PCHAR)Irp-&gt;AssociatedIrp.SystemBuffer;
+    
+        if(pWriteDataBuffer)
+        {                             
+            /*
+             * We need to verify that the string
+             * is NULL terminated. Bad things can happen
+             * if we access memory not valid while in the Kernel.
+             */
+           if(Example_IsStringTerminated(pWriteDataBuffer, 
+                   pIoStackIrp-&gt;Parameters.Write.Length))
+           {
+                DbgPrint(pWriteDataBuffer);
+           }
+        }
+    }
+
+    return NtStatus;
+}
+</code></pre></div><p class="p">这种方法的好处是传送到驱动程序中的数据可以在任何上下文中，比如另外一个位于其他进程中的线程的上下文中被访问。另外一个原因是映射内存到未分页的页面中，以便于驱动也能够在被提升的IRQL等级中读取。</p><p class="p">使用Buffered I/O的不好之处在于它分配了未分页的内存并且进行了复制。这总是凌驾于驱动驱动每次的读写之上的。</p><p class="p">这也是它最好被用于较小的缓冲区的原因之一。整个用户态的页不需要再像直接访问输入输出那样被锁定，这是它的好的方面。另外一个将它用于较大缓冲区的问题是，由于他分配了未分页内存，它也许会需要在连续的未分页内存中分配较大的一个块。</p><p class="p"><strong class="ph b">Neither Buffered nor Direct: </strong></p><div class="p"><pre class="pre codeblock"><code>NTSTATUS Example_WriteNeither(PDEVICE_OBJECT DeviceObject, PIRP Irp)
+{
+    NTSTATUS NtStatus = STATUS_SUCCESS;
+    PIO_STACK_LOCATION pIoStackIrp = NULL;
+    PCHAR pWriteDataBuffer;
+
+    DbgPrint("Example_WriteNeither Called \r\n");
+    
+    /*
+     * Each time the IRP is passed down
+     * the driver stack a new stack location is added
+     * specifying certain parameters for the IRP to the driver.
+     */
+    pIoStackIrp = IoGetCurrentIrpStackLocation(Irp);
+    
+    if(pIoStackIrp)
+    {
+        /*
+         * We need this in an exception handler or else we could trap.
+         */
+        __try {
+        
+                ProbeForRead(Irp-&gt;UserBuffer, 
+                  pIoStackIrp-&gt;Parameters.Write.Length, 
+                  TYPE_ALIGNMENT(char));
+                pWriteDataBuffer = Irp-&gt;UserBuffer;
+            
+                if(pWriteDataBuffer)
+                {                             
+                    /*
+                     * We need to verify that the string
+                     * is NULL terminated. Bad things can happen
+                     * if we access memory not valid while in the Kernel.
+                     */
+                   if(Example_IsStringTerminated(pWriteDataBuffer, 
+                          pIoStackIrp-&gt;Parameters.Write.Length))
+                   {
+                        DbgPrint(pWriteDataBuffer);
+                   }
+                }
+
+        } __except( EXCEPTION_EXECUTE_HANDLER ) {
+
+              NtStatus = GetExceptionCode();     
+        }
+
+    }
+
+    return NtStatus;
+}</code></pre></div><p class="p">在这个方法中，驱动直接访问用户态内存。输入输出管理器不会复制数据，但是也不会锁定用户态内存中的页。它只不过将用户态缓冲区的地址交给了驱动。</p><p class="p">好处是没有数据被复制，没有内存被分配，并且也没有页被锁定到内存中。不好之处在于你必须在调用线程的上下文中处理，否则你将无法正确的访问到用户态内存。另外一个不好之处是进程自身有可能会在另一个线程中尝试去修改页的访问权限，释放内存，等等。</p><p class="p">这就是为什么你通常想要使用“ProbeForRead”和“ProbeForWrite”函数并且给所有的代码都写上异常处理。没有什么可以担保在任何时候页都是可用的，你可以简单的在你尝试读写之前，尝试确认他们是可用的。这个缓冲区位于Irp-&gt;UserBuffer。</p><p class="p"><strong class="ph b">家庭作业</strong></p><p class="p">你可以对每种 I/O处理类型都写一个读操作程序，可参考上述的写操作程序。</p></section>
+<section class="section"><h2 class="title sectiontitle">什么是#pragma指令</h2><p class="p">#pragma预处理指令可用来对链接器设置驱动文件中函数代码存放的代码段，以及其它编译时的分页内存设置。如下#pragma&nbsp;
+code_seg将函数存放在.my_data1节中</p><div class="p"><pre class="pre codeblock"><code>//
+#pragma code_seg(".my_data1")
+void func2() {                   // stored in my_data1
+}</code></pre></div><p class="p">如DriverEntry一般会很大，占据很大的空间，为了节省内存，只需要在初始化的时候载入内存，然后及时从内存中卸载掉。</p><div class="p"><pre class="pre codeblock"><code>#pragma&nbsp; code_seg("INIT") //加载到INIT内存区域中，成功加载后，可以退出内存</code></pre></div></section>
+<section class="section"><h2 class="title sectiontitle">动态加载和卸载驱动</h2><p class="p">许多教程会开始大讲注册表。但本文暂时不讲。只是一个简单的用户态API用于加载与卸载驱动。以下代码会加载驱动并启动它。使用“SERVICE_DEMAND_START”(表示驱动需要物理启动)来加载驱动，以方便调试，假如出现蓝屏要修复时，就不需要启动进入安全模式。</p><p class="p">代码如下：</p><div class="p"><pre class="pre codeblock"><code>int _cdecl main(void)
+{
+    HANDLE hSCManager;
+    HANDLE hService;
+    SERVICE_STATUS ss;
+
+    hSCManager = OpenSCManager(NULL, NULL, SC_MANAGER_CREATE_SERVICE);
+    
+    printf("Load Driver\n");
+
+    if(hSCManager)
+    {
+        printf("Create Service\n");
+
+        hService = CreateService(hSCManager, "Example", 
+                                 "Example Driver", 
+                                  SERVICE_START | DELETE | SERVICE_STOP, 
+                                  SERVICE_KERNEL_DRIVER,
+                                  SERVICE_DEMAND_START, 
+                                  SERVICE_ERROR_IGNORE, 
+                                  "C:\\example.sys", 
+                                  NULL, NULL, NULL, NULL, NULL);
+
+        if(!hService)
+        {
+            hService = OpenService(hSCManager, "Example", 
+                       SERVICE_START | DELETE | SERVICE_STOP);
+        }
+
+        if(hService)
+        {
+            printf("Start Service\n");
+
+            StartService(hService, 0, NULL);
+            printf("Press Enter to close service\r\n");
+            getchar();
+            ControlService(hService, SERVICE_CONTROL_STOP, &amp;ss);
+
+            DeleteService(hService);
+
+            CloseServiceHandle(hService);
+            
+        }
+
+        CloseServiceHandle(hSCManager);
+    }
+    
+    return 0;
+}</code></pre></div><p class="p">驱动程序基本完成，你可以在另外一个窗口中运行程序与服务进行通信。上述代码比较简单易读，注意要把驱动复制到<em class="ph i">C:\example.sys</em>以调用。当服务创建失败时，程序判断服务早就已被创建并直接启动该服务并暂停。如果点击确定按钮，程序会停止并删除服务。</p></section>
+<section class="section"><h2 class="title sectiontitle">与设备驱动通信</h2><p class="p">与驱动通信的代码也比较简单。上面使用了三种I/O方式编译驱动，其从用户态程序中发出的信息可以在DGBVIEW中查看到。程序中只需要直接打开DOS设备名<em class="ph i">\\.\&lt;DosName&gt;</em>，或NT设备名<em class="ph i">\Device\&lt;Nt Device Name&gt;</em>，就可以获得与设备通信的句柄，可以执行WriteFile,&nbsp;ReadFile,&nbsp;CloseHandle等控制指令。可以在代码中使用DbgPrint以便在DGBVIEW中查看与调试。</p><p class="p">代码如下：</p><div class="p"><pre class="pre codeblock"><code>int _cdecl main(void)
+{
+    HANDLE hFile;
+    DWORD dwReturn;
+
+    hFile = CreateFile("\\\\.\\Example", 
+            GENERIC_READ | GENERIC_WRITE, 0, NULL, 
+            OPEN_EXISTING, 0, NULL);
+
+    if(hFile)
+    {
+        WriteFile(hFile, "Hello from user mode!", 
+                  sizeof("Hello from user mode!"), &amp;dwReturn;, NULL); 
+        CloseHandle(hFile);
+    }
+    
+    return 0;
+}</code></pre></div></section>
+<section class="section"><h2 class="title sectiontitle">结论</h2><p class="p">本文完成了一个简单驱动的编写。安装驱动，你可以根据源码进行改动，尝试从一个用户态程序中访问它。如果要进一步深入编写驱动，就必须要掌握本文中的基本概念，阅读那些链接中的参考资料。</p></section>
+<section class="section"></section>
+<section class="section"><h2 class="title sectiontitle">驱动开发中的TYPE_ALIGNMENT问题</h2><p class="p">编译codeproject中的Example驱动例子（http://www.codeproject.com/Articles/9504/Driver-Development-Part-1-Introduction-to-Drivers）时，其中的Example_WriteNeither函数中使用了ProbeForWrite函数，该函数的第三个参数使用TYPE_ALIGNMENT(char)但是编译会一直提示出现问题，提供两种解决方案：</p><p class="p">a、将TYPE_ALIGNMENT(char)直接改为1</p><p class="p">b、或改为_alignof(cahr)</p><p class="p">两种方法均能将问题解决</p></section>
+<section class="section"><h2 class="title sectiontitle">F.A.Q.</h2><ol class="ol">
+<li class="li"><div class="p"><table class="table"><caption></caption><colgroup><col style="width:2.5%"><col style="width:97.5%"></colgroup><tbody class="tbody">
+<tr class="row">
+<td class="entry">F</td>
+<td class="entry"><p class="p">I tried to set environment by typing C:\WINDDK\2600.1106\bin&gt;setenv
+WINDDK\2600.1106 chk wxp it did not give any error but when I am building
+project using Build -ceZ error coming like cannot include wdm.h, _x86_
+macro redifinition. So I think environment is not set properly. So
+please help.</p></td>
+</tr>
+<tr class="row">
+<td class="entry">A</td>
+<td class="entry"><p class="p">you have to say some thing like this </p><p class="p">set WNETBASE=C:\WinDDK\7600.16385.1</p><p class="p">cd C:\WinDDK\ddkbuild3_15</p><p class="p">ddkbuild.bat -WNET free E:\personal\Projects\EPS\driver</p><p class="p">where E:\personal\Projects\EPS\driver is the path to the driver
+c files...</p></td>
+</tr>
+</tbody></table></div></li>
+<li class="li"><div class="p"><table class="table"><caption></caption><colgroup><col style="width:2.487562189054727%"><col style="width:97.51243781094529%"></colgroup><tbody class="tbody">
+<tr class="row">
+<td class="entry">F</td>
+<td class="entry"><p class="p">Hi, i just download the above code. i try to build it.but
+it give me error as "can't find wdm.h" file. can anybody tell me what
+could be the problem?</p></td>
+</tr>
+<tr class="row">
+<td class="entry">A</td>
+<td class="entry"><p class="p">You should install DDK first, then add the include directory
+to your VC include directory list.  </p></td>
+</tr>
+</tbody></table></div></li>
+<li class="li"><div class="p"><table class="table"><caption></caption><colgroup><col style="width:5.5%"><col style="width:94.5%"></colgroup><tbody class="tbody">
+<tr class="row">
+<td class="entry" rowspan="1" colspan="2"></td>
+</tr>
+<tr class="row">
+<td class="entry">F</td>
+<td class="entry"><p class="p">Hi&nbsp; I'm trying your example on Windows Vista and the
+latest DDK.  When I use Example_WriteDirectIO the example usedriver
+process simply gives a blue screen. Something about a PROCESS_HAS_PAGES_LOCKED</p></td>
+</tr>
+<tr class="row">
+<td class="entry">A</td>
+<td class="entry">Ok, the trap is occuring at the close then the problem is that
+the I/O Manager didn't unlock the pages when the IRP was "completed".
+I don't talk about completion until part 2, but they really should
+always be compelted, even though you can sometimes get away with it.
+ Try putting this at the end of the function:  Irp-&gt;IoStatus.Status
+= NtStatus; Irp-&gt;IoStatus.Information = 0;  IoCompleteRequest(Irp,
+IO_NO_INCREMENT);  return NtStatus;  If this doesn't work then need
+to see if there is any requirement that the driver should be unmapping
+the page after the Mm*safe* API, which I do not believe was a requirement
+of that API; or if there is some memory corruption somewhere that
+caused the page not to be unlocked.&nbsp; <a class="xref" href="https://www.codeproject.com/Articles/9504/Driver-Development-Part-1-Introduction-to-Drivers?fid=150661&amp;df=90&amp;mpp=25&amp;sort=Position&amp;spc=Relaxed&amp;prof=True&amp;view=Normal&amp;fr=101#xx0xx" target="_blank" rel="external noopener">Answer</a></td>
+</tr>
+</tbody></table></div></li>
+</ol></section>
+<section class="section"><h2 class="title sectiontitle">参见</h2><ol class="ol">
+<li class="li"><p class="p"><a class="xref" href="http://www.tektips.in/how-to-develop-a-hello-world-device-driver.aspx" target="_blank" rel="external noopener">How to develop a basic Hello World Device Driver
+and call its functions from a basic C#.NET window</a></p></li>
+<li class="li"><p class="p"><a class="xref" href="https://www.bbsmax.com/A/kmzLYNVKJG/" target="_blank" rel="external noopener">UMDF - BBSMAX</a></p></li>
+<li class="li"><p class="p"><a class="xref" href="http://www.cppblog.com/iniwf/archive/2009/03/23/77639.html" target="_blank" rel="external noopener">驱动开发之一 --- 创建一个简单的设备驱动（续) 【译文】</a></p></li>
+<li class="li"><p class="p"><a class="xref" href="http://www.cppblog.com/iniwf/archive/2009/03/23/77638.html" target="_blank" rel="external noopener">驱动开发之一 --- 创建一个简单的设备驱动 【译文】</a></p></li>
+<li class="li"><p class="p"><a class="xref" href="https://blog.csdn.net/u012483427/article/details/37880247" target="_blank" rel="external noopener">IRQL中断请求级别及APC_LEVEL讨论</a></p></li>
+</ol><p class="p">1.&nbsp;详细的介绍如何做一个驱动程序教程：</p><p class="p">Part 1:&nbsp;&nbsp;<a class="xref" href="http://www.codeproject.com/Articles/9504/Driver-Development-Part-1-Introduction-to-Drivers" target="_blank" rel="external noopener">http://www.codeproject.com/Articles/9504/Driver-Development-Part-1-Introduction-to-Drivers</a> </p><p class="p">Part 2: &nbsp; &nbsp;<a class="xref" href="http://www.codeproject.com/Articles/9575/Driver-Development-Part-2-Introduction-to-Implemen" target="_blank" rel="external noopener">http://www.codeproject.com/Articles/9575/Driver-Development-Part-2-Introduction-to-Implemen</a> </p><p class="p">Part 3:&nbsp;<a class="xref" href="http://www.codeproject.com/Articles/9636/Driver-Development-Part-3-Introduction-to-driver-c" target="_blank" rel="external noopener">http://www.codeproject.com/Articles/9636/Driver-Development-Part-3-Introduction-to-driver-c</a> </p><p class="p">Part 4:&nbsp;<a class="xref" href="http://www.codeproject.com/Articles/9766/Driver-Development-Part-4-Introduction-to-device-s" target="_blank" rel="external noopener">http://www.codeproject.com/Articles/9766/Driver-Development-Part-4-Introduction-to-device-s</a> </p><p class="p">Part 5:&nbsp;<a class="xref" href="http://www.codeproject.com/Articles/9974/Driver-Development-Part-5-Introduction-to-the-Tran" target="_blank" rel="external noopener">http://www.codeproject.com/Articles/9974/Driver-Development-Part-5-Introduction-to-the-Tran</a> </p><p class="p">Part 6:&nbsp;<a class="xref" href="http://www.codeproject.com/Articles/12878/Driver-Development-Part-6-Introduction-to-Display" target="_blank" rel="external noopener">http://www.codeproject.com/Articles/12878/Driver-Development-Part-6-Introduction-to-Display</a>  </p><p class="p">2.&nbsp;一个在codeproject上获较高评价的源码，并结合代码和图做详细讲解：</p><p class="p"><a class="xref" href="http://www.codeproject.com/Articles/8651/A-simple-demo-for-WDM-Driver-development" target="_blank" rel="external noopener">http://www.codeproject.com/Articles/8651/A-simple-demo-for-WDM-Driver-development</a></p></section>
+</div>
+<nav role="navigation" class="related-links"><ul class="ullinks"><li class="link ulchildlink"><strong><a href="VC6%E9%85%8D%E7%BD%AEWINXP_SP1_DDK.html">VC6配置WINXP_SP1_DDK</a></strong><br></li><li class="link ulchildlink"><strong><a href="VC6%E7%BC%96%E8%AF%91WDM%E9%A9%B1%E5%8A%A8.html">VC6编译WDM驱动</a></strong><br></li><li class="link ulchildlink"><strong><a href="DDK%E7%94%9F%E6%88%90%E9%A9%B1%E5%8A%A8%E5%AE%89%E8%A3%85%E4%BF%A1%E6%81%AFINF%E6%96%87%E4%BB%B6.html">DDK生成驱动安装信息INF文件</a></strong><br></li><li class="link ulchildlink"><strong><a href="WDM%E5%AE%9E%E7%8E%B0IOCTLs.html">WDM实现IOCTLs</a></strong><br></li><li class="link ulchildlink"><strong><a href="WDM%E9%A9%B1%E5%8A%A8%E4%B8%8A%E4%B8%8B%E6%96%87contexts.html">WDM驱动上下文contexts与IPC进程间通信</a></strong><br></li><li class="link ulchildlink"><strong><a href="WDM%E8%AE%BE%E5%A4%87%E5%A0%86%E6%A0%88stacks.html">WDM设备堆栈stacks</a></strong><br></li><li class="link ulchildlink"><strong><a href="WDM%E4%BC%A0%E8%BE%93%E8%AE%BE%E5%A4%87%E6%8E%A5%E5%8F%A3.html">WDM传输设备接口</a></strong><br></li><li class="link ulchildlink"><strong><a href="WDM%E6%98%BE%E7%A4%BA%E7%B1%BB%E9%A9%B1%E5%8A%A8.html">WDM显示类驱动</a></strong><br></li><li class="link ulchildlink"><strong><a href="%E5%88%B6%E4%BD%9CWDM%E9%A9%B1%E5%8A%A8%E7%AE%80%E5%8D%95%E5%AE%9E%E4%BE%8B.html">制作WDM驱动简单实例</a></strong><br></li></ul><div class="familylinks"><div class="parentlink"><strong>父主题：</strong> <a class="link" href="%E9%A9%B1%E5%8A%A8%E5%BC%80%E5%8F%91.html">驱动开发</a></div></div></nav></article></main></body></html>

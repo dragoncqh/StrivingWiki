@@ -1,0 +1,147 @@
+<!DOCTYPE html
+  SYSTEM "about:legacy-compat">
+<html lang="zh-cn"><head><meta charset="UTF-8"><meta name="copyright" content="(C) 版权 2024"><meta name="generator" content="DITA-OT"><meta name="description" content=""><title>泛型</title><link rel="stylesheet" type="text/css" href="../../commonltr.css">
+<link rel="stylesheet" type="text/css" href="../../common-extended.css"></head><body id="泛型-8319BDF3"><main role="main"><article role="article" aria-labelledby="ariaid-title1">
+<h1 class="title topictitle1" id="ariaid-title1">泛型</h1>
+
+
+<div class="body conbody"><p class="shortdesc"></p>
+<ol class="ol">
+<li class="li"><p class="p">泛型入门：</p><p class="p"></p><figure class="fig fignone"><figcaption><span class="fig--title-label">图 1. </span>我们先来看一个最为常见的泛型类型List&lt;T&gt;的定义 (真正的定义比这个要复杂的多，我这里删掉了很多东西)</figcaption>
+
+<pre class="pre codeblock"><code>[Serializable]
+ublic class List&lt;T&gt; : IList&lt;T&gt;, ICollection&lt;T&gt;, IEnumerable&lt;T&gt;{
+    public T this[int index] { get; set; }
+    public void Add(T item);
+    public void Clear();
+    public bool Contains(T item);
+    public int IndexOf(T item);
+    public bool Remove(T item);
+    public void Sort();
+    public T[] ToArray();
+}</code></pre>
+</figure><p class="p">List后面紧跟着一个&lt;T&gt;表示它操作的是一个未指定的数据类型 （T代表着一个未指定的数据类型）</p><p class="p">可以把T看作一个变量名，T代表着一个类型， 在List&lt;T&gt;的源代码中任何地方都能使用T</p><p class="p">T被用作方法的参数和返回值
+Add方法接收T类型的参数，ToArray方法返回一个T类型的数组</p><p class="p">注意：</p><p class="p">　　泛型参数应该以T开头，要么就叫T，要么就叫TKey、TValue之类的；
+　　这跟接口要以I开头是一样的，这是约定。</p><p class="p">下面来看一段使用泛型类型的代码</p><pre class="pre codeblock"><code>            var a = new List&lt;int();
+            a.Add(1);
+            a.Add(2);//这是错误的，因为你已经指定了泛型类型为int，就不能在这个容器中放入其他的值//这是编译器错误，更提升了排错效率，如果是运行期错误，不知道要多么烦人
+            a.Add("3");var item = a[2];</code></pre>请注意上面代码里的注释</li>
+<li class="li"><p class="p">泛型的作用(1)：</p><p class="p">作为程序员，写代码时刻不忘代码重用。 代码重用可以分成很多类，其中<strong class="ph b">算法重用</strong>就是非常重要的一类</p><p class="p">假设你要为一组整型数据写一个排序算法，又要为一组浮点型数据写一个排序算法 如果没有泛型类型，你会怎么做呢？</p><p class="p">你可能想到了方法的重载 写两个同名方法，一个方法接收整型数组，另一个方法接收浮点型的数组</p><p class="p">但有了泛型，你就完全不必这么做，只要设计一个方法就够用了，你甚至可以用这个方法为一组字符串数据排序</p></li>
+<li class="li"><p class="p">泛型的作用(2)：</p><p class="p">假设你是一个方法的设计者， 这个方法需要有一个输入参数，但你并能确定这个输入参数的类型
+那么你会怎么做呢？  有一部分人可能会马上反驳：“不可能有这种时候！” 那么我会跟你说，编程是一门经验型的工作，你的经验还不够，还没有碰到过类似的地方。</p><p class="p">另一部分人可能考虑把这个参数的类型设置成Object的 这确实是一种可行的方案 但会造成下面两个问题  如果我给这个方法传递整形的数据
+（值类型的数据都一样） 就会产生额外的装箱、拆箱操作 造成<strong class="ph b">性能损耗</strong>  如果你这个方法里的处理逻辑不适用于字符串的参数
+而使用者又传了一个字符串进来 编译器是不会报错的， 只有在运行期才会报错 (如果质管部门没有测出这个运行期BUG，那么不知道要造成多大的损失呢)
+这就是我们常说的：<strong class="ph b">类型不安全</strong></p><p class="p"></p></li>
+<li class="li"><p class="p">泛型的示例：</p><p class="p">像List&lt;T&gt;和Dictionary&lt;TKey,TValue&gt;之类的泛型类型我们经常用到
+下面我介绍几个不常用到的泛型类型  ObservableCollection&lt;T&gt; 当这个集合发生改变后会有相应的事件得到通知
+请看如下代码：</p><pre class="pre codeblock"><code>static void Main(string[] args)
+{var a = new ObservableCollection&lt;int();
+    a.CollectionChanged += a_CollectionChanged;
+}
+
+static void a_CollectionChanged(objectsender, NotifyCollectionChangedEventArgs e)
+{//可以通过Action来判断是什么操作触发了事件//e.Action == NotifyCollectionChangedAction.Add//可以根据以下两个属性来得到更改前和更改后的内容//e.NewItems;//e.OldItems;
+}</code></pre><p class="p">使用这个集合需要引用如下两个名称空间</p><p class="p">using System.Collections.ObjectModel;</p><p class="p">using System.Collections.Specialized;</p><p class="p">&nbsp;</p><p class="p">BlockingCollection&lt;int&gt;是线程安全的集合
+来看看下面这段代码</p><pre class="pre codeblock"><code>var bcollec = new BlockingCollection&lt;int(2);//试图添加1-50
+Task.Run(() =&gt;{//并行循环
+    Parallel.For(1, 51, i =&gt;{
+        bcollec.Add(i);
+        Console.WriteLine("加入：" + i);
+    });
+});
+
+Thread.Sleep(1000);
+Console.WriteLine("调用一次Take");
+bcollec.Take();
+
+//等待无限长时间
+Thread.Sleep(Timeout.Infinite);</code></pre><p class="p">输出结果为：</p><pre class="pre codeblock"><code>加入：1
+加入：37
+调用一次Take
+加入：13</code></pre>BlockingCollection&lt;int&gt;还可以设置CompleteAdding和IsCompleted属性来拒绝加入新元素
+.NET类库还提供了很多的泛型类型，在这里就不一一例举了</li>
+<li class="li"><p class="p">泛型的继承：</p><pre class="pre codeblock"><code>public classMyType
+{public virtual stringgetOneStr()
+    {return "base object Str";
+    }
+}public class MyOtherType&lt;T&gt;: MyType
+{public override stringgetOneStr()
+    {return typeof(T).ToString();
+    }
+}classProgram
+{static void Main(string[] args)
+    {
+        MyType target = new MyOtherType&lt;int();
+        Console.WriteLine(target.getOneStr());
+        Console.ReadKey();
+    }
+}</code></pre><p class="p">在.net中一切都继承自Object,泛型也不例外,泛型类型可以继承自其他类型,来看一下如下代码</p><p class="p">泛型类型MyOtherType&lt;T&gt;成功的重写了非泛型类型MyType的方法 如果我试图按如下方式从MyOtherType&lt;T&gt;类型派生子类型就会导致编译器错误</p><pre class="pre codeblock"><code>//编译期错误
+public class MyThirdType : MyOtherType&lt;T&gt;{ }</code></pre><p class="p">但是如果写成这种方式，就不会出错</p><pre class="pre codeblock"><code>public class MyThirdType : MyOtherType&lt;int{public override stringgetOneStr()
+        {return "MyThirdType";
+        }
+    }</code></pre><p class="p">如果一个方法接收MyThirdType类型的参数， 那么不能将一个MyOtherType&lt;int&gt;的实例传递给这个方法
+然而一个方法如果接收MyOtherType&lt;int&gt;类型的参数 却可以把MyThirdType类型的实例传递给这个方法 写成如下方式也不会出错</p><pre class="pre codeblock"><code>{public override stringgetOneStr()
+        {return typeof(T).ToString() + " from MyThirdType";
+        }
+    }</code></pre><p class="p">此中诀窍，只可意会，不可言传</p></li>
+<li class="li"><p class="p">泛型接口</p><p class="p">.NET类库里有很多泛型的接口 比如：IEnumerator&lt;T&gt;、IList&lt;T&gt;等
+这里不对这些接口做详细描述了 值说说为什么要有泛型接口。</p><p class="p">其实泛型接口出现的原因和泛型出现的原因类似 拿IComparable这个接口来说，
+此接口只描述了一个方法：</p><code class="ph codeph">int CompareTo(object obj);</code><p class="p">大家看到，如果是值类型的参数，势必会导致装箱和拆箱操作
+同时，也不是强类型的，不能在编译期确定参数的类型 有了IComparable&lt;T&gt;就解决掉这个问题了</p><code class="ph codeph">int
+CompareTo(T other);</code></li>
+<li class="li"><p class="p">泛型委托</p><p class="p">委托描述方法， 泛型委托的由来和泛型接口类似  定义一个泛型委托也比较简单：</p><p class="p"><code class="ph codeph">public delegate void MyAction&lt;T&gt;(T obj);</code></p><p class="p">这个委托描述一类方法
+这类方法接收T类型的参数，没有返回值 来看看使用这个委托的方法</p><p class="p"></p><pre class="pre codeblock"><code>public delegate void MyAction&lt;T&gt;(T obj);static void Main(string[] args)
+{var method = new MyAction&lt;int(printInt);
+    method(3);
+    Console.ReadKey();
+}static void printInt(int i)
+{
+    Console.WriteLine(i);
+}</code></pre><p class="p">由于定义委托比较繁琐 .NET类库在System名称空间，下定义了三种比较常用的泛型委托</p><p class="p">Predicate&lt;T&gt;委托：</p><p class="p">public delegate bool Predicate&lt;T&gt;(T obj);</p><p class="p">这个委托描述的方法为接收一个T类型的参数，返回一个BOOL类型的值，一般用于比较方法</p><p class="p">Action&lt;T&gt;委托</p><p class="p">public delegate void Action&lt;T&gt;(T obj);</p><p class="p">public delegate
+void Action&lt;T1, T2&gt;(T1 arg1, T2 arg2);</p><p class="p">这个委托描述的方法，接收一个或多个T类型的参数（最多16个，我这里只写了两种类型的定义方式），没有返回值</p><p class="p">Func&lt;T&gt;委托</p><p class="p">public delegate TResult Func&lt;TResult&gt;();</p><p class="p">public delegate TResult Func&lt;T, TResult&gt;(T arg);</p><p class="p">这个委托描述的方法，接收零个或多个T类型的参数（最多16个，我这里只写了两种类型的定义方式），
+与Action委托不同的是，它有一个返回值，返回值的类型为TResult类型的</p><p class="p">关于委托的描述，您还可以看我这篇文章 <a class="xref" href="http://www.cnblogs.com/liulun/archive/2013/02/26/2909985.html" target="_blank" rel="external noopener">30分钟LINQ教程</a></p></li>
+<li class="li"><p class="p">泛型方法</p><p class="p">泛型类型中的T可以用在这个类型的任何地方 然而有些时候，我们不希望在使用类型的时候就指定T的类型
+我们希望在使用这个类型的方法时，再指定T的类型 来看看如下代码：</p><pre class="pre codeblock"><code>public classMyClass
+    {public TParam CompareTo&lt;TParam&gt;(TParam other)
+        {
+            Console.WriteLine(other.ToString());return other;
+        }
+    }</code></pre><p class="p">面的代码中MyClass并不是一个泛型类型 但这个类型中的CompareTo&lt;TParam&gt;()却是一个泛型方法
+TParam可以用在这个方法中的任何地方。</p><p class="p">使用泛型方法一般用如下代码就可以了：</p><p class="p">obj.CompareTo&lt;int(4);
+obj.CompareTo&lt;string("ddd");</p><p class="p">然而，你可以写的更简单一些，写成如下的方式</p><p class="p">obj.CompareTo(2); obj.CompareTo("123");</p><p class="p">有人会问：“这不可能，没有指定CompareTo方法的TParam类型，肯定会编译出错的”
+我告诉你：不会的，编译器可以帮你完成<strong class="ph b">类型推断</strong>的工作。  <strong class="ph b">注意：</strong> 如果你为一个方法指定了两个泛型参数，而且这两个参数的类型都是T，
+那么如果你想使用类型推断，你必须传递两个相同类型的参数给这个方法 不能一个参数用string类型，另一个用object类型，这会导致编译错误。</p></li>
+<li class="li"><p class="p">逆变和协变</p><p class="p">&nbsp;一般情况下，我们使用泛型时，由T标记的泛型类型是不能更改的 也就是说,如下两种写法都是错误的</p><p class="p">泛型约束</p><p class="p">我们设计了一个泛型类型 很多时候，我们不希望使用者传入任意类型的参数 也就是说，我们希望“约束”一下T的类型
+来看看如下代码：</p><pre class="pre codeblock"><code>public class MyClass&lt;T&gt; where T : IComparable&lt;T&gt;{public intCompareTo(T other)
+        {return 0;
+        }
+    }
+</code></pre><p class="p">上面的代码要求T类型必须实现了IComparable&lt;T&gt;接口 如你所见：泛型的约束通过关键字where来实现。</p><p class="p">泛型方法当然也可以通过类似的方式对泛型参数进行约束 请看如下代码：</p><pre class="pre codeblock"><code>public classMyClass
+{public TParam CompareTo&lt;TParam&gt;(TParam other) where TParam:class{
+        Console.WriteLine(other.ToString());return other;
+    }
+}</code></pre><p class="p">上面代码中用了class关键字约束泛型参数TParam；具体稍后解释。</p><p class="p"><strong class="ph b">注意1：</strong> 如果我有一个类型也定义为MyClass&lt;T&gt;但没有做约束， 那么这个时候，做过约束的MyClass&lt;T&gt;将与没做约束的MyClass&lt;T&gt;冲突，编译无法通过
+ <strong class="ph b">注意2：</strong> 当你重写一个泛型方法时，如果这个方法指定了约束 在重写这个方法时，不能再指定约束了  <strong class="ph b">注意3：</strong> 虽然我上面的例子写的是接口约束，但你完全可以写一个类型，比如说BaseClass 而且，只要是继承自BaseClass的类型都可以当作T类型使用，你不要试图约束T为Object类型，编译不会通过的。（傻子才这么干）
+ <strong class="ph b">注意4：</strong> 有两个特殊的约束：class和struct。 where T : class &nbsp; 约束T类型必须为引用类型
+where T : struct &nbsp;约束T类型必须为值类型  <strong class="ph b">注意5：</strong> 如果你没有对T进行class约束，
+那么你不能写这样的代码：T obj = null; &nbsp;这无法通过编译，因为T有可能是值类型的。 如果你没有对T进行struct约束，也没有对T进行new约束
+那么你不能写这样的代码：T obj = new T(); &nbsp;这无法通过编译，因为值类型肯定有无参数构造器，而引用类型就不一定了。
+如果你对T进行了new约束：where T : new(); &nbsp;那么new T()就是正确的，因为new约束要求T类型有一个公共无参构造器。
+ <strong class="ph b">注意6：</strong> 就算没有对T进行任何约束，也有一个办法来处理值类型和引用类型的问题 T temp = default(T);
+如果T为引用类型，那么temp就是null；如果T为值类型，那么temp就是0；</p><p class="p"><strong class="ph b">注意7：</strong> 试图对T类型的变量进行强制转化，一般情况下会报编译期错误。
+但你可以先把T转化成object再把object转化成你要的类型（一般不推荐这么做，你应该考虑把T转化成一个约束兼容的类型） 你也可以考虑用as操作符进行类型转化，这一般不会报错，但只能转化成引用类型。</p><p class="p">关于泛型约束的内容，我在这篇文章里也有提到 <a class="xref" href="http://www.cnblogs.com/liulun/archive/2013/02/26/2909985.html" target="_blank" rel="external noopener">30分钟linq教程</a></p></li>
+<li class="li"><p class="p">逆变和协变</p><p class="p">&nbsp;一般情况下，我们使用泛型时，由T标记的泛型类型是不能更改的 也就是说,如下两种写法都是错误的</p><pre class="pre codeblock"><code>var a = new List&lt;object();
+List&lt;stringb = a;var c = new List&lt;string();
+List&lt;objectd = c;</code></pre><p class="p">注意：这里没有写强制转换，即使写了强制转换也是错误的，编译就无法通过</p><p class="p">然而泛型提供了逆变和协变的特性， 有了这两种特性，这种转换就成为了可能。</p><p class="p"><strong class="ph b">逆变：</strong> 泛型类型T可以从基类型更改为该类的派生类型，
+用in关键字标记逆变形式的类型参数， 而且这个参数一般作输入参数。</p><p class="p"><strong class="ph b">协变：</strong> 泛型类型T可以从派生类型更改为它的基类型，
+用out关键字来标记协变形式的类型参数， 而且这个参数一般作为返回值</p><p class="p">如果我们定义了一个这样的委托：</p><p class="p">public
+delegate TResult MyAction&lt;in T,out TResult&gt;(T obj);</p><p class="p">那么，就可以让如下代码通过编译（不用强制转换）</p><p class="p">var a = new MyAction&lt;object, ArgumentException&gt;(o =&gt; new ArgumentException(o.ToString()));
+MyAction&lt;string, Exception&gt; b = a;</p><p class="p">这就是逆变和协变的威力。</p><p class="p"><strong class="ph b">注意：</strong> 只有接口和委托的泛型类型才可以使用逆变和协变的特性</p><p class="p">参考资料</p><p class="p"><a class="xref" href="http://www.cnblogs.com/mgen/archive/2012/03/15/2397191.html" target="_blank" rel="external noopener">Mgen的博客</a> CLR VIA C#(第三版)</p></li>
+</ol>
+<p class="p">参见：</p>
+<ul class="ul">
+<li class="li"><p class="p"><a class="xref" href="https://www.codeproject.com/Articles/793345/An-Example-of-Generics-Using-Csharp-in-ASP-NET" target="_blank" rel="external noopener">An Example of Generics Using C# in ASP.NET - CodeProject</a></p></li>
+<li class="li"><p class="p"><a class="xref" href="http://www.cnblogs.com/liulun/archive/2013/05/02/3033599.html" target="_blank" rel="external noopener">30分钟泛型教程</a></p></li>
+</ul>
+</div>
+<nav role="navigation" class="related-links"><div class="familylinks"><div class="parentlink"><strong>父主题：</strong> <a class="link" href=".NET%E5%BC%80%E5%8F%91.html">.Net开发</a></div></div></nav></article></main></body></html>

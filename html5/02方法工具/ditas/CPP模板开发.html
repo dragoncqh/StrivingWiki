@@ -1,0 +1,2026 @@
+<!DOCTYPE html
+  SYSTEM "about:legacy-compat">
+<html lang="zh-cn"><head><meta charset="UTF-8"><meta name="copyright" content="(C) 版权 2024"><meta name="generator" content="DITA-OT"><meta name="description" content=""><title>C++模板开发</title><link rel="stylesheet" type="text/css" href="../../commonltr.css">
+<link rel="stylesheet" type="text/css" href="../../common-extended.css"></head><body id="C模板开发-06A2205E"><main role="main"><article role="article" aria-labelledby="ariaid-title1">
+<h1 class="title topictitle1" id="ariaid-title1">C++模板开发</h1>
+
+
+<div class="body conbody"><p class="shortdesc"></p>
+<p class="p">众多C++程序员对模板技术望而却步，原因诸如：难学难用，编译错误冗长且混乱，事倍功半。</p>
+<p class="p">虽然难学，但理解和掌握模板的好处足够抵消困难。模板除了封装通用的函数或类之外，还有许多用处。</p>
+<p class="p">虽然C++和STL(Stankdard Template Library)在技术上同气连枝。但本文暂时只介绍核心级别的模板技术。下一篇将会介绍一些高级有趣点的模板技术，和一些STL知识</p>
+<section class="section"><h2 class="title sectiontitle">语法</h2><p class="p">基本语法格式是<strong class="ph b"><code class="ph codeph">&lt; Content &gt;</code></strong>，其中Content可以是：</p><ol class="ol">
+<li class="li"><p class="p">class类 T&nbsp;/&nbsp;typename类型名 T: T泛指某数据类型，包括int ,double或UDT。</p></li>
+<li class="li"><p class="p">一个映射到T的数据类型</p></li>
+<li class="li"><p class="p">一个整型的定义</p></li>
+<li class="li"><p class="p">一个映射到上述整型定义的常量constant/指针pointer或引用reference</p></li>
+</ol><p class="p">举例如下：</p><pre class="pre codeblock"><code>//打印一个整数*2的结果的函数
+void PrintTwice(int data)
+{
+    cout &lt;&lt; "Twice is: " &lt;&lt; data * 2 &lt;&lt; endl;         
+}
+//通过传递一个整数入参来调用
+PrintTwice(120); // 240
+//如果你想打印一个双精度类型数*2的结果的函数，要重载上述函数为:
+void PrintTwice(double data)
+{
+    cout &lt;&lt; "Twice is: " &lt;&lt; data * 2 &lt;&lt; endl;         
+}
+//如果使用模板技术，则可以把上述两个函数统一写为：
+void PrintTwice(TYPE data)
+{
+    cout&lt;&lt;"Twice: " &lt;&lt; data * 2 &lt;&lt; endl;
+}</code></pre><pre class="pre codeblock"><code>//typename 与 classs 意义相同。仅由于历史原因稍有区别。
+template&lt;typename TYPE&gt;
+TYPE Twice(TYPE data)
+{
+   return data * 2;
+}</code></pre></section>
+<section class="section"><h2 class="title sectiontitle">Function函数模板</h2><div class="p">以下为使用了模板技术的函数PrintTwice<pre class="pre codeblock"><code><strong class="ph b">template&lt;class TYPE&gt;</strong>//表示此为一个函数模板，TYPE在编译时的类型由具体入参的类型决定，TYPE即被称为模板类型参数template type parameter.
+void PrintTwice(TYPE data)
+{
+    cout&lt;&lt;"Twice: " &lt;&lt; data * 2 &lt;&lt; endl;
+}
+
+//当入参分别为int和double类型时，编译器会实例化模板生成如下语句：
+void PrintTwice(int data) { ... }
+void PrintTwice(double data) { ... }</code></pre></div><p class="p">由于编译/链接器在编译时会根据具体需要的数据类型生成具体的函数，这样就有可能比原始的把所有类型都重载的函数语句更短，生成更小的EXE。某种程度上可称为按需编译。</p><div class="p"><pre class="pre codeblock"><code>template&lt;class T&gt;
+T Add(T n1, T n2)
+{
+    T result;
+    result = n1 + n2;return result;
+}</code></pre></div><ul class="ul">
+<li class="li"><p class="p">T&nbsp;is having a default constructor (so that&nbsp;T result;&nbsp;is
+valid)</p></li>
+<li class="li"><p class="p">T&nbsp;supports the usage of&nbsp;operator +&nbsp;(so that&nbsp;&lt;code&gt;n1+n2&nbsp;is
+valid)</p></li>
+<li class="li"><p class="p">T&nbsp;has an&nbsp;accessible&nbsp;copy/move-constructor (so
+that&nbsp;return&nbsp;statement succeeds)</p></li>
+</ul></section>
+<section class="section"><h2 class="title sectiontitle">Pointers指针,References引用和Arrays数组模板 </h2><div class="p"><pre class="pre codeblock"><code>template&lt;class T&gt;
+double GetAverage(T tArray[], int nElements) //不需要写成T*或T[]
+{
+    T tSum = T(); // tSum = 0
+
+    for (int nIndex = 0; nIndex &lt; nElements; ++nIndex)
+    {
+        tSum += tArray[nIndex];
+    }
+
+    // Whatever type of T is, convert to double
+    return double(tSum) / nElements;
+}
+  
+
+int main()
+{
+    int  IntArray[5] = {100, 200, 400, 500, 1000};
+    float FloatArray[3] = { 1.55f, 5.44f, 12.36f};
+
+    cout &lt;&lt; GetAverage(IntArray, 5);
+    cout &lt;&lt; GetAverage(FloatArray, 3);
+}</code></pre></div><div class="p">以下使用T&amp;<pre class="pre codeblock"><code>template&lt;class T&gt;
+void TwiceIt(T&amp; tData)
+{
+    tData *= 2// tData = tData + tData;
+}
+//调用：
+int x = 40;
+TwiceIt(x); // Result comes as 80</code></pre></div></section>
+<section class="section"><h2 class="title sectiontitle">多种类型入参的函数模板 </h2><div class="p"><pre class="pre codeblock"><code>template&lt;class T1, class T2&gt;
+void PrintNumbers(const T1&amp; t1Data, const T2&amp; t2Data)
+{
+     cout &lt;&lt; "First value:" &lt;&lt; t1Data;
+     cout &lt;&lt; "Second value:" &lt;&lt; t2Data;
+}
+//And we can simply call it as:
+PrintNumbers(10, 100);    // int, int
+PrintNumbers(14, 14.5);   // int, double
+PrintNumbers(59.66, 150); // double, int</code></pre></div><div class="p"><pre class="pre codeblock"><code>template&lt;class Type&gt;
+void Show(Type tData) {}
+// This will produce (instantiate) 'Show(int)'
+Show ( 1234 );
+
+// But you want it to produce 'Show(double)'
+Show&lt;double&gt; ( 1234 ); </code></pre></div></section>
+<section class="section"><h2 class="title sectiontitle">函数模板和模板函数 Function Template - Template Function</h2><div class="p">后者是前者的实例化。<pre class="pre codeblock"><code>template&lt;class T&gt; 
+void Show(T data) 
+{ }
+//上面函数模板的实例化的模板函数在编译器生成后实际为：
+void Show&lt;double&gt;(double x){}
+//而不是void Show(double data){}</code></pre></div></section>
+<section class="section"><h2 class="title sectiontitle">显式指定模板参数</h2><div class="p"><pre class="pre codeblock"><code>template&lt;class T1, class T2&gt;
+void PrintNumbers(const T1&amp; t1Data, const T2&amp; t2Data)
+{}
+PrintNumbers&lt;double, double&gt;(10, 100);    // int, int
+PrintNumbers&lt;double, double&gt;(14, 14.5);   // int, double
+PrintNumbers&lt;double, double&gt;(59.66, 150); // double, int
+//实际生产的模板函数为：
+void PrintNumbers&lt;double, double&gt;(const double&amp; t1Data, const T2&amp; t2Data)
+{}</code></pre></div></section>
+<section class="section"><h2 class="title sectiontitle">函数模板的默认参数 </h2><div class="p"><pre class="pre codeblock"><code>template&lt;class T&gt;
+void PrintNumbers(T array[], intarray_size, T filter = T())
+{for(int nIndex = 0; nIndex &lt; array_size; ++nIndex)
+   {if ( array[nIndex] != filter) // Print if not filtered
+           cout &lt;&lt; array[nIndex];
+   }
+}
+//调用
+int Array[10] = {1,2,0,3,4,2,5,6,0,7};
+PrintNumbers(Array, 10);
+//初始化为int filter = 0：
+void PrintNumbers(int array[], int array_size, int filter = int())
+{}</code></pre></div></section>
+<section class="section"><h2 class="title sectiontitle">Class类模板 </h2><p class="p">类模板实际上更多地被使用与设计，用于定义一个可复用的通用类型。常用于链表、栈、队列等类似容器/数据结构。</p><div class="p"><pre class="pre codeblock"><code>template&lt;class T&gt;
+class Item
+{
+    T Data;
+public:
+    Item() : Data( T() )
+    {}
+
+    void SetData(T nValue)
+    {
+        Data = nValue;
+    }
+
+    T GetData() const
+    {
+        return Data;
+    }
+
+    void PrintData()
+    {
+        cout &lt;&lt; Data;
+    }
+};
+//调用：
+Item&lt;int&gt; item1;//类模板必须显式指定类型
+item1.SetData(120);
+item1.PrintData();
+//实际生产的函数为：
+Item&lt;int&gt;::Item() - constructor
+void Item&lt;int&gt;::SetData(int) method
+void Item&lt;int&gt;::PrintData() const method</code></pre></div></section>
+<section class="section"><h2 class="title sectiontitle">类模板的多种类型 </h2><div class="p"><pre class="pre codeblock"><code>struct Point
+{
+    int x;
+    int y;
+};
+//
+struct Money
+{
+    int Dollars;
+    int Cents;
+};
+//上面两个类似的结构可以用模板来简化。不需要引入继承来复杂化。
+template&lt;class Type1, class Type2&gt;
+struct Pair
+{
+    // In public area, since we want the client to use them directly.
+    Type1 first;
+    Type2 second;
+};
+//调用：
+/ Assume as Point struct
+Pair&lt;int,int&gt; point1;
+
+// Logically same as X and Y members
+point1.first = 10;
+point1.second = 20;
+//调用：
+Pair&lt;int, double&gt; SqRoot;
+
+SqRoot.first = 90;
+SqRoot.second = 9.4868329</code></pre></div><div class="p"><pre class="pre codeblock"><code>
+//初始化各成员到其默认值
+Pair() : first(Type1()), second(Type2())
+{}
+//初始化各成员到指定值
+Pair(const Type1&amp; t1, const Type2&amp; t2) : 
+  first(t1), second(t2)
+  {}
+//初始化复制一个旧Pair对象
+Pair(const Pair&lt;Type1, Type2&gt;&amp; OtherPair) : 
+  first(OtherPair.first),
+  second(OtherPair.second)
+ {}
+//上面的旧Pair对象的模板参数必须指定，如下错误：
+Pair(const Pair&amp; OtherPair) // ERROR: Pair requires template-types
+//实例：指定参数初始化和 复制初始化
+Pair&lt;int,int&gt; point1(12,40);
+Pair&lt;int,int&gt; point2(point1);
+//初始化复制的前后对象要类型一致，如下错误：
+Pair&lt;int,float&gt; point2(point1);  // ERROR: Different types, no conversion possible.
+//可以定义两个Pair类型的==操作符的实现
+bool operator == (const Pair&lt;Type1, Type2&gt;&amp; Other) const
+{
+  return first == Other.first &amp;&amp; 
+         second == Other.second;
+}
+//调用：
+if (point1 == point2) // Both objects must be of same type.</code></pre></div><div class="p">家庭作业：实现以下方法：<ul class="ul">
+<li class="li"><p class="p">All remaining 5 relational operators</p></li>
+<li class="li"><p class="p">Assignment operator</p></li>
+<li class="li"><p class="p">Swap&nbsp;method</p></li>
+<li class="li"><p class="p">Modify both constructors (except copy-constructor), and combine
+them into one so that they take both parameters as default. This means,
+implement only one constructor that can take 0,1 or 2 arguments.</p></li>
+<li class="li"><p class="p">再把上述方法都实现在一个三参数的tuple类模板中</p></li>
+</ul>如上，我们只用了一个模板函数就很方便地实现了constructors, copy-constructor, comparison
+operators, swap等方法。</div></section>
+<section class="section"><h2 class="title sectiontitle">非类型模板参数 </h2><div class="p"><pre class="pre codeblock"><code>//整型数据类型包括：int, char, long, long long, unsigned variants and enums. 
+//非整型数据类型包括：float, double
+//只有整型数据类型才能作模板中的非类型普通参数
+template&lt;class T, int SIZE&gt;
+class Array{};
+//调用时只允许传入在编译时已编译为常数的表达式，如：
+100, 100+99, 1&lt;&lt;3 (数据类型为floats/doubles也可以，因为会被转化为整型)，不允许传入函数表达式abs(-120)
+//调用如下：
+Array&lt;int, 10&gt; my_array;
+
+//非类型参数作用：
+//1,可分配类中静态常量成员的初始值
+template&lt;class T, int SIZE&gt;
+class Array
+{
+ static const int Elements_2x = SIZE * 2; 
+};
+//2,可指定一个方法的默认值
+void DoSomething(int arg = SIZE); // Non-const can also appear as default-argument...
+//3,可指定数组长度
+private:
+   T TheArray[SIZE];
+// Initialize with default (i.e. 0 for int)
+void Initialize()
+{ 
+    for(int nIndex = 0; nIndex &lt; SIZE; ++nIndex)
+        TheArray[nIndex] = T();
+}
+//实现数组元素访问符[]
+T operator[](int nIndex) const //只读
+{
+  if (nIndex&gt;0 &amp;&amp; nIndex&lt;SIZE)//检查数组索引是否有效
+  {
+    return TheArray[nIndex];
+  }
+  return T();
+}
+
+T&amp; operator[](int nIndex)
+{
+   return TheArray[nIndex];//未检验索引，要谨慎
+}
+//加总所有Array元素
+T Accumulate() const
+{
+  T sum = T();
+  for(int nIndex = 0; nIndex &lt; SIZE; ++nIndex)
+  {
+     sum += TheArray[nIndex];//+=仅在string中实现，要谨慎，或对+=再写一个实现重载
+  }
+  return sum;
+}</code></pre></div></section>
+<section class="section"><h2 class="title sectiontitle">类模板的模板类参数 </h2><p class="p">模板类template class是类模板class template的一个实例化。</p><div class="p"><pre class="pre codeblock"><code>//类模板：
+template&lt;class T1, class T2&gt;
+class Pair{};
+//模板类
+Pair&lt;int,int&gt;
+//模板类在编译时的实际生成代码：
+class Pair&lt;int,int&gt;{};
+//模板类的一个具体实例化对象
+Pair&lt;int,int&gt; IntPair;
+
+//使用模板类为参数的类模板
+Pair&lt;int, Pair&lt;int,int&gt; &gt; PairOfPair;
+//上述在编译时实际初始化两个模板类：
+Pair&lt;int,int&gt; - A
+Pair&lt;int, Pair&lt;int,int&gt; &gt; -- B
+//为了简化，可以写成：
+typedef Pair&lt;int,int&gt; IntIntPair;
+...
+Pair&lt;int, IntIntPair&gt; PairOfPair;
+//初始化分配：
+PairOfPair.first = 10;
+PairOfPair.second.first = 10;
+PairOfPair.second.second= 30;
+
+//还可以混合使用上面定义过的Array和Pair，请理解：
+Array&lt; Pair&lt;int, double&gt;, 40&gt; ArrayOfPair;
+Pair&lt;int, Array&lt;double, 50&gt; &gt; PairOfArray;//注意两个&gt;&gt;中间最好加个空格以避免老式编译器误会为&gt;&gt;运算符</code></pre></div></section>
+<section class="section"><h2 class="title sectiontitle">类模板的默认模板参数 </h2><div class="p">函数模板没有默认模板参数。而类模板有默认模板参数。 如下：<pre class="pre codeblock"><code>//修改上述类模板Array
+template&lt;class T, int SIZE=100&gt;
+class Array
+{
+private:
+   T TheArray[SIZE];
+   ...
+};
+//调用：
+Array&lt;int&gt; IntArray;
+//上述调用时默认初始化为：你也可以直接如下显式调用
+Array&lt;int, 100&gt; IntArray;
+
+//混合使用：
+template&lt;class T = int, 
+					int SIZE=100&gt;
+class Array
+{
+    T TheArray[SIZE];
+    ...
+};
+//请理解：
+Array&lt;&gt;            IntArray1;
+Array&lt;int&gt;         IntArray2;
+Array&lt;float, 40&gt;   FlaotArray3;
+//由于类模板只会初始化一次，所以上述语句等价于：
+Array&lt;&gt;          IntArray1;
+Array&lt;int&gt;       IntArray2
+Array&lt;int, 100&gt;  IntArray3;</code></pre></div></section>
+<section class="section"><h2 class="title sectiontitle">在另外一个类型中默认初始化一个模板类型</h2><div class="p"><pre class="pre codeblock"><code>
+//修改Pair:Type2现在默认值为Type1类型
+template&lt;class Type1, class Type2 = Type1&gt;
+class Pair
+{
+    Type1 first;
+    Type2 second;
+};
+//调用：
+Pair&lt;int&gt; IntPair;
+//等价于调用：
+Pair&lt;int,int&gt; IntPair;
+
+//修改Pair:第一个参数也可以设置默认值：
+template&lt;class Type1=int, class Type2 = Type1&gt;
+class Pair
+{
+    Type1 first;
+    Type2 second;
+};
+//两个等价调用：
+Pair&lt;&gt; IntPair;
+class Pair&lt;int,int&gt;{};
+
+//修改Pair:非类型参数也可以在另外一个非类型参数中设置默认值：
+template&lt;class T, int ROWS = 8, int COLUMNS = ROWS&gt;
+class Matrix
+{
+    T TheMatrix[ROWS][COLUMNS];
+};
+//但是要把被依赖的那个非类型参数放到左边前面去，如下会报错：
+template&lt;class Type1=Type2, class Type2 = int&gt;
+class Pair{};
+
+template&lt;class T, int ROWS = COLUMNS, int COLUMNS = 8&gt;
+class Matrix
+</code></pre></div></section>
+<section class="section"><h2 class="title sectiontitle">类方法模板</h2><div class="p">在类方法中使用函数模板技术，本文称为类方法模板。<pre class="pre codeblock"><code>class IntArray
+{
+    int TheArray[10];
+public:
+    template&lt;typename T&gt;
+    void Copy(T target_array[10])
+    {
+       for(int nIndex = 0; nIndex&lt;10; ++nIndex)
+       {
+          target_array[nIndex] = TheArray[nIndex];
+          // Better approach: 
+            //target_array[nIndex] = static_cast&lt;T&gt;(TheArray[nIndex]);
+       }
+    }
+};
+
+//调用：
+IntArray int_array;
+float float_array[10];
+
+int_array.Copy(float_array);
+
+//修改上述方法模板为：
+template&lt;int ARRAY_SIZE&gt;
+class IntArray
+{
+    int TheArray[ARRAY_SIZE];
+public:
+    template&lt;typename T&gt;
+		//把int数组转化为任意类型的其他数组
+    void Copy(T target_array[ARRAY_SIZE])
+    {
+       for(int nIndex = 0; nIndex&lt;ARRAY_SIZE; ++nIndex)
+       {
+            target_array[nIndex] = static_cast&lt;T&gt;(TheArray[nIndex]);
+       }
+    }
+};
+
+//显式指定模板参数类型也可以用于方法模板：
+template&lt;class T&gt;
+class Convert
+{   
+   T data;
+public: 
+   Convert(const T&amp; tData = T()) : data(tData)
+   { }
+
+   template&lt;class C&gt;   
+   bool IsEqualTo( const C&amp; other ) const      
+   {        
+       return data == other;   
+   }
+};
+
+//调用：类模板中，显式指定模板参数类型
+Convert&lt;int&gt; Data;
+float Data2 = 1 ;
+
+bool b = Data.IsEqualTo(Data2);
+
+//调用：方法模板中，显式指定模板参数类型
+bool b = Data.IsEqualTo&lt;double&gt;(Data2);
+
+//强大的用法：实现强制转化运算符()
+template&lt;class T&gt;
+operator T() const
+{
+    return data;
+} 
+
+//上述Convert的调用：
+Convert&lt;int&gt; IntData(40);
+float FloatData;
+double DoubleData;
+
+ 
+FloatData = IntData;
+DoubleData = IntData;
+
+//上述调用在编译时的实际生成代码：
+Convert&lt;int&gt;::operator&lt;float&gt; float();
+Convert&lt;int&gt;::operator&lt;double&gt; double();</code></pre>方法模板在提供了强大的扩展伸缩性的同时，也会带来滥用时的大量错误，需要正确使用。</div></section>
+<section class="section"><h2 class="title sectiontitle">小结</h2><p class="p">上述所涵盖的内容摘要：</p><ol class="ol">
+<li class="li"><p class="p">为避免不必要的代码重复和代码维护问题，特别是当代码完全相同时，我们可以使用模板。模板比使用C / C ++宏或函数/类(运行于void-pointers之上)要好得多。</p></li>
+<li class="li"><p class="p">模板不仅类型安全，而且还减少了不必要的代码膨胀(不会被引用的部份也由编译器生成生成了代码，但根本原因是本身代码未简化）。</p></li>
+<li class="li"><p class="p">函数模板用于放置不属于类的一部份的代码，并且对于不同的数据类型的代码是几乎相同的。一般编译器会自动确定类型，否则你就要指定类型。当然你也可显式指定类型。</p></li>
+<li class="li"><p class="p">类模板可以封装任何数据类型为相同的实现。它可以是数组，字符串，队列，链表，线程安全的原子实现等。类模板可以方便地指定默认模板类型，注意这个在函数模板中不支持。</p></li>
+</ol><p class="p">接下来是更有趣也更艰深的模板概念，其重要性以及与C ++语言的其他功能的绑定，并且还将简单涉及STL</p></section>
+<section class="section"><h2 class="title sectiontitle">基础类型的需求</h2></section>
+<section class="section"><h2 class="title sectiontitle">需求：函数模板</h2><div class="p"><pre class="pre codeblock"><code>
+using std::cout
+template&lt;typename T&gt;
+void DisplayValue(T tValue)
+{
+   std::cout &lt;&lt; tValue;
+}
+
+//调用：隐式调用了&lt;&lt;运算符的重载
+DisplayValue(20); // &lt;int&gt;
+DisplayValue("This is text"); // &lt;const char*&gt;
+DisplayValue(20.4 * 3.14); // &lt;double&gt;
+implicit 
+
+//定义Currency结构
+struct Currency 
+{
+   int Dollar;
+   int Cents;
+};
+
+//使用Currency调用DisplayValue：
+Currency c;
+c.Dollar = 10;
+c.Cents = 54;
+ 
+DisplayValue(c);
+//则在编译中初始化代码如下：
+std::cout &lt;&lt; tValue; // tValue is now of Currency type
+//C++编译器会报错误如下：
+error C2679: binary '&lt;&lt;' : no operator found which takes a right-hand operand of type 'Currency' (or there is no acceptable conversion)
+//GCC编译器会报错如下：
+In function 'void DisplayValue(T) [with T = Currency]': 
+16: instantiated from here 
+2: error: no match for 'operator&lt;&lt;' in 'std::cout &lt;&lt; tValue'
+//上述两种多达百来行的报错虽表面不同，但实指同一错误：ostream::operator &lt;&lt; 没有针对Currency类型的重载。因此你可以有以下解决方案：
+1，不使用Currency于DisplayValue中，另外再写个DisplayCurrencyValue，但这实在是对模板技术的反动。
+2，修改ostream类，添加新成员，如使用Currency类型的operator&lt;&lt;运算符。但ostream是C++的标准头部文件，不能随意改动。但你可以使用全局函数来使用ostream和Currency类型；
+3，修改Currency类，实现cout&lt;&lt;tValue；
+总而言之，上述三个解决方案分别如下：
+ostream::operator&lt;&lt;(Currency value); (Simplified syntax)
+ostream::operator&lt;&lt;(std::string value);
+ostream::operator&lt;&lt;(double value);
+//以下为第三个解决方案的代码：
+struct Currency
+{
+  int Dollar;
+  int Cents;
+
+  operator double()
+  {
+    return Dollar + (double)Cents/100;
+  }
+};
+//这样，使用ostream::operator&lt;&lt;就提供了一个把Currency转成一种底层类型的桥梁。则上面的std::cout &lt;&lt; tValue;会在编译中扩展为：
+std::cout &lt;&lt; tValue.operator double(); 
+// std::cout &lt;&lt; (double)tValue;
+
+//这样，之前报错的语句可以运行成功了：
+Currency c; 
+DisplayValue(c);
+
+//上面一个简单的函数调用，在编译中可分为三步：
+1，初始化Currency类型的DisplayValue
+2，当T的具体参数类型传入后，调用Currency类的复制型建构器；
+3，在调用cout&lt;&lt;operator时寻找最佳匹配，最后采用Currency::operator double
+
+//同样的，之前的PrintTwice也可以使用Currency类型了
+template&lt;typename TYPE&gt;
+void PrintTwice(TYPE data)
+{
+    cout&lt;&lt;"Twice: " &lt;&lt; data * 2 &lt;&lt; endl;
+}
+//调用：
+PrintTwice(c); // c is of Currency type
+//等价于：
+cout&lt;&lt;"Twice: " &lt;&lt; data.operator double() * 2 &lt;&lt; endl;
+
+//修改Currency，去掉operator double()部分：
+struct Currency
+{
+  int Dollar;
+  int Cents;
+
+  /*REMOVED : operator double();*/
+ 
+  double operator*(int nMultiplier)
+  {
+    return (Dollar+(double)Cents/100) * nMultiplier;
+  }
+};
+
+//修改之后，DisplayValue就会报cout&lt;&lt;tValue错了
+//如果同时保留double和*运算符，PrintTwice会使编译器会产生如下混淆：
+cout&lt;&lt;"Twice: " &lt;&lt; data * 2 &lt;&lt; endl; 
+// Ambiguity: What to call - conversion operator or operator* ?
+虽然编译器实际上不会报错，它并不需要最佳匹配。所以在实践中，建议不要写非必要的运算符重载实现，最好只写一个。所以之前Currency的operator*重载就是不必要的。
+
+//再来一个函数模板：
+template&lt;typename T&gt;
+T Add(T n1, T n2)
+{
+   return n1 + n2;
+}
+
+//就需要在Currency中重载operator+
+Currency operator+(Currency); // No consts, for simplification
+//否则如下调用，即使Currency中有double重载(因double无法转为Currency)，也会报错：
+Currency c1, c2, c3; 
+c3 = Add(c1,c2); 
+//编译报错:
+error C2440: 'return' : cannot convert from 'double' to 'Currency'
+
+//家庭作业：找出对于以下模板，Currency所需要的底层数据类型转换并实现重载：
+template&lt;typename T&gt;
+double GetAverage(T tArray[], int nElements)
+{
+   T tSum = T(); // tSum = 0
+   for (int nIndex = 0; nIndex &lt; nElements; ++nIndex)
+   {
+     tSum += tArray[nIndex];
+   }
+   
+   // Whatever type of T is, convert to double
+   return double(tSum) / nElements;
+}
+
+</code></pre></div></section>
+<section class="section"><h2 class="title sectiontitle">需求：类模板</h2><p class="p">如你所知类模板比函数模板更为普遍。</p><p class="p">相对非函数模板,STL、Boost和其他标准库里面有更多的类模板。由此接下来我们会讲更多的有关类模板的技巧。类模板有更多的底层类型的需求。但是这更依赖于你对类模板本身有什么要求</p><p class="p">例如如果你在模板安装中不需要调用min/max等等价方法那么这些底层类型就不需要提供相关的operator操作符重载。</p><p class="p">大多类模板对底层类型有以下三种要求：</p><div class="p"><ol class="ol">
+<li class="li"><p class="p">默认建构方法</p></li>
+<li class="li"><p class="p">Copy复制建构方法</p></li>
+<li class="li"><p class="p">Assignment分配操作符</p></li>
+</ol></div><p class="p">而根据类模板自身的需求还可能需要：</p><ol class="ol">
+<li class="li"><p class="p">析构方法</p></li>
+<li class="li"><p class="p">Move移动建构器和Move assignment移动分配操作符(用于R- Value右值类型的顶层引用)</p></li>
+</ol><p class="p">为简单起见，本文不会涉及第2组基本需求。</p><p class="p">那我们从底层类型开始理解第1组基本需求的意思。然后再解释更多相关类型需求。注意所有由底层类型提供的被需求的方法都必须是可访问public属性。比如在Currency类中一个protected保护访问的操作符对其他调用该类模板的类型是没用的。由于Currency本身的保护属性，从一个集合到另外一个集合的分配符并不会被成功编译。</p><p class="p"></p><p class="p">我们再来看在第1部分中使用过的类。以下是一个名为item的类模板，可以容纳任何类型。</p><p class="p"></p><pre class="pre codeblock"><code>template&lt;typename T&gt;
+class Item
+{
+   T Data;
+public:
+   Item() : Data( T() ) {}
+   void SetData(T nValue)
+   {
+      Data = nValue;
+   }
+   T GetData() const
+   {
+    return Data;
+   }
+ 
+   void PrintData()
+   {
+      cout &lt;&lt; Data;
+   }
+};</code></pre><p class="p">The mandatory requirement, as soon as you instantiate&nbsp;Item&nbsp;for
+particular type, is having default constructor in type&nbsp;T. Therefore,
+when you do:</p><code class="ph codeph">Item&lt;int&gt; IntItem; </code><p class="p">The type&nbsp;int&nbsp;must
+have default constructor (i.e.&nbsp;int::int()), since this class'
+template constructor would be calling default constructor for underlying
+type:</p><code class="ph codeph">Item() : Data( T() ) {}</code><p class="p">We all know that&nbsp;int&nbsp;type
+has its default constructor, which initializes the variable with zero.
+When you instantiate it for another type, and that type is&nbsp;<em class="ph i">not</em>&nbsp;having default constructor, the compiler would be upset.
+To understand this, let's craft a new class:</p><pre class="pre codeblock"><code>class Point
+{
+   int X, Y;
+public:
+   // No default constructor 
+   Point(int x, int y);
+};</code></pre><p class="p">As you know, following call would fail to compile
+(commented code would compile).</p><pre class="pre codeblock"><code>Point pt; // ERROR: No default constructor available
+// Point pt(12,40);</code></pre><p class="p">Similarly, following instantiation
+would also fail:</p><code class="ph codeph">Item&lt;Point&gt; PointItem; </code><p class="p">When you use&nbsp;Point&nbsp;directly, without using non-default
+constructor, the compiler will report it, and you would able to correct
+it - since the source (line) would be reported correctly.</p><p class="p">But,
+when you use it against&nbsp;Item&nbsp;class template, the compiler
+would the report the error near the&nbsp;Itemimplementation. For&nbsp;PointItem&nbsp;example
+mentioned above, Visual C++ reports it at following line:</p><pre class="pre codeblock"><code>Item () : Data( T() ) 
+{}</code></pre><p class="p">And the error is reported as:</p><p class="p">error C2512:
+'Point::Point' : no appropriate default constructor available&nbsp;
+: while compiling class template member function 'Item&lt;T&gt;::Item(void)'&nbsp;
+with&nbsp; [&nbsp; T=Point&nbsp; ]&nbsp; : see reference to class
+template instantiation 'Item&lt;T&gt;' being compiled&nbsp; with&nbsp;
+[&nbsp; T=Point&nbsp; ]</p><p class="p">Which is very small error message, as
+far as C++ template error reporting is concerned. Most often, the&nbsp;<strong class="ph b">first error</strong>&nbsp;would tell the whole story, and the&nbsp;<strong class="ph b">last error</strong>&nbsp;reference ("<em class="ph i">see reference to class...</em>")
+shows the actual cause of the error. Depending on your compiler, the
+error may be easy to understand, or may be quite elusive to get to
+the actual cause of the error. The quickness and ability of finding
+and fixing the bug/error would depend on your experience with template
+programming.</p><p class="p">So, to use&nbsp;Point&nbsp;class, as a template
+type parameter for&nbsp;Item, you must provide the default constructor
+in it. Yes, a single constructor taking zero, one or two parameter
+would also work:</p><code class="ph codeph">Point(int x = 0, int y = 0 );</code><p class="p">But, the constructor must be public (or accessible, by other means).</p><p class="p"><strong class="ph b">Alright.</strong>&nbsp;Let's see if&nbsp;SetData&nbsp;and&nbsp;GetData&nbsp;methods
+would work for type&nbsp;Point. Yes, both of them would work since&nbsp;Point&nbsp;has
+a (compiler provided) copy constructor and assignment operator.</p><p class="p">If you implement assignment operator in class&nbsp;Point&nbsp;(the
+underlying type for&nbsp;Item), that particular implementation will
+be called by&nbsp;Item&nbsp;(yes, the compiler will generate the relevant
+code). The reason is simple:&nbsp;Item::SetData&nbsp;is assigning
+the value:</p><pre class="pre codeblock"><code>void SetData(T nValue) // Point nValue
+{
+   Data = nValue; // Calling assignement operator.
+}</code></pre><p class="p">If you put the implementation of assignment operator
+of&nbsp;Point&nbsp;class in private/protected area:</p><p class="p">Hide&nbsp;&nbsp;&nbsp;Copy
+Code</p><pre class="pre codeblock"><code>class Point
+{
+...
+private:
+void operator=(const Point&amp;);
+};</code></pre><p class="p">And make a call to&nbsp;Item::SetData:</p><pre class="pre codeblock"><code>Point pt1(12,40), pt2(120,400);
+Item&lt;Point&gt; PointItem;
+ 
+PointItem.SetData(pt1);</code></pre><p class="p">&nbsp;</p><p class="p">It would cause
+a compiler error, starting with something like:</p><p class="p">error C2248:
+'Point::operator =' : cannot access private member declared in class
+'Point'</p><p class="p">99:7: error: 'void Point::operator=(const Point&amp;)'
+is private</p><p class="p">The compiler would point you the location of error
+(inside&nbsp;SetData), as well as the actual source of error (call
+from&nbsp;main). Actual error messages, and sequence of messages shown
+would depend on compiler, but most modern compiler will attempt to
+give detailed error so that you can find the actual source of error.</p><p class="p">This example shows that special method of underlying type&nbsp;T&nbsp;are
+called, depending on how/what call is being made. Remember that special
+members (constructors, assignment operators etc) may be called implicitly
+- while returning from function, passing value to function, using
+expressions and so on. It is therefore recommended that underlying
+type (type&nbsp;T) should have these special methods implemented in
+accessible region of class.</p><p class="p">This example also demonstrates how
+different classes and functions are involved in one function call.
+In this case, only&nbsp;Point&nbsp;class, the class template&nbsp;Item&nbsp;and
+function&nbsp;main&nbsp;are involved.</p><p class="p"><strong class="ph b">Similarly</strong>, when
+you make a call to&nbsp;Item&lt;Point&gt;::GetItem&nbsp;method, the copy
+constructor would be called (of&nbsp;Point&nbsp;class). The reason
+is simple -&nbsp;GetItem&nbsp;is returning a copy of data stored.
+A call to&nbsp;GetItem&nbsp;may not always call copy-constructor,
+as RVO/NRVO, move-semantics etc may come into picture. But you should
+always make the copy-constructor of underlying type accessible.</p><p class="p">The method&nbsp;Item&lt;&gt;::PrintData&nbsp;would&nbsp;<strong class="ph b">not</strong>&nbsp;succeed for&nbsp;Point&nbsp;type, but would succeed for&nbsp;Currency,
+as underlying type for&nbsp;Item. Class&nbsp;Point&nbsp;doesn't have
+conversion, or any possible call, to the&nbsp;cout&lt;&lt;&nbsp;call.
+Please do yourself a favor - make&nbsp;Point&nbsp;class&nbsp;cout-able!</p></section>
+<section class="section"><h2 class="title sectiontitle">声明和实现的分离</h2><p class="p">Till now I have shown the entire
+implementation of template-code in one source-file. Treat the source-file
+as one header file, or being implemented in same file containing main
+function. As any C/C++ programmer would know, we put declarations
+(or say, interfaces) in header file, and the respective implementation
+in one or more source files. The header file would be included by
+both - respective implementation file, and by one or more client of
+that interface.</p><p class="p">&nbsp;</p><p class="p">At the compilation unit level,
+the given implementation file would get compiled, and an object file
+for the same would be generated. When linking (i.e. while generating
+the final executable/DLL/SO), the linker would gather all those generated
+object files and would produce final binary image. All good, all fine,
+unless linker gets upset by missing symbols or duplicate symbols being
+defined.</p><p class="p">&nbsp;</p><p class="p">Come to templates, it is not exactly the
+same way. For better understanding let me first throw you some code:</p><p class="p">&nbsp;</p><p class="p">Sample.H</p><pre class="pre codeblock"><code>template&lt;typename T&gt;
+void DisplayValue(T tValue);
+</code></pre><p class="p">Sample.CPP</p><pre class="pre codeblock"><code>template&lt;typename T&gt;
+void DisplayValue(T tValue)
+{
+    std::cout &lt;&lt; tValue;
+}</code></pre><p class="p">Main.cpp</p><pre class="pre codeblock"><code>#include "Sample.H"
+ 
+int main()
+{
+  DisplayValue(20);
+  DisplayValue(3.14);
+}</code></pre><p class="p">Depending on the compiler and IDE you use, you would
+put both CPP files for the build. Surprisingly, you will encounter
+linker errors like:</p><p class="p">&nbsp;</p><p class="p">unresolved external symbol
+"void __cdecl DisplayValue&lt;double&gt;(double)" (??$DisplayValue@N@@YAXN@Z)</p><p class="p">unresolved external symbol "void __cdecl DisplayValue&lt;int&gt;(int)"
+(??$DisplayValue@H@@YAXH@Z)</p><p class="p">(.text+0xee): undefined reference
+to `void DisplayValue&lt;int&gt;(int)'</p><p class="p">(.text+0xfc): undefined
+reference to `void DisplayValue&lt;double&gt;(double)'</p><p class="p">When you
+closely look at the errors, you would find out that linker could not
+find implementation for following routines:</p><p class="p">&nbsp;</p><pre class="pre codeblock"><code>void DisplayValue&lt;int&gt; (int);
+void DisplayValue&lt;double&gt; (double);</code></pre><p class="p">Despite the fact
+that you have provided implementation of template function DisplayValue
+via source file Sample.CPP.</p><p class="p">&nbsp;</p><p class="p">Well, here is the secret.
+You know that template function gets instantiated only when you make
+a call to it, with particular data-type(s). The compiler compiles
+Sample.CPP file separately having definition of DisplayValue. The
+compilation of Sample.CPP is done in separate translation unit. Compilation
+of Main.cpp is done in another translation unit. These translation
+units produce two object files (say Sample.obj and Main.obj).</p><p class="p">&nbsp;</p><p class="p">When the compiler works on Sample.CPP, it does not find
+any references/calls to DisplayValue, and it doesn't instantiate DisplayValue
+for any type. Reason is simple, as explained earlier - On-Demand-Compilation.
+Since the translation-unit for Sample.CPP doesn't demand any instantiation
+(for any data-type), it doesn't do second-phase compilation for function
+template. No object code is generated for DisplayValue&lt;&gt;.</p><p class="p">&nbsp;</p><p class="p">In another translation-unit, Main.CPP gets compiled
+and object code gets generated. While compiling this unit, the compiler
+sees a valid interface declaration for DisplayValue&lt;&gt;, and performs
+its job without any issue. Since, we have called DisplayValue with
+two different types, compiler intelligently produces following declarations
+by itself:</p><p class="p">&nbsp;</p><pre class="pre codeblock"><code>void DisplayValue&lt;int&gt;(int tValue);
+void DisplayValue&lt;double&gt;(double tValue); </code></pre><p class="p">And as
+per its normal behavior, the compiler assumes definitions of these
+symbols in some other translation-unit (i.e. object code), and delegates
+further responsibility to the linker. This way, Sample.obj and Main.obj
+files get generated, but none of them do contain implementation of
+DisplayValue - and hence the linker produces set of errors.</p></section>
+<section class="section"><h2 class="title sectiontitle">解决方案</h2><p class="p">The simplest solution, which works
+for all modern compiler is using the Inclusion Model. Another model,
+not supported by most major compiler vendors is Separation Model.</p><p class="p">&nbsp;</p><p class="p">Till now, whenever I explained about template stuff
+with code written in same file, I used inclusion model. In simple
+terms, you put all template related code in one file (generally a
+header file). The client would just include the given header file,
+and entire code would be compiled in one translation unit. Yet, it
+would follow on-demand-compilation process.</p><p class="p">&nbsp;</p><p class="p">For
+the example given above, Sample.H would contain the definition (implementation)
+of DisplayValue:</p><p class="p">&nbsp;</p><p class="p">Sample.H</p><pre class="pre codeblock"><code>// BOTH: Interface and Implementation
+template&lt;typename T&gt; 
+void DisplayValue(T tValue) 
+{
+   std::cout &lt;&lt; tValue;
+}</code></pre><p class="p">Main.CPP would just include this header file. The
+compiler will be happy, and the linker will also be happy. If you
+prefer, you may put all declarations, followed by definitions of all
+functions later in the same file. For example:</p><p class="p">&nbsp;</p><pre class="pre codeblock"><code>template&lt;typename T&gt;
+void DisplayValue(T tValue);
+ 
+template&lt;typename T&gt;
+void DisplayValue(T tValue)
+{
+   std::cout &lt;&lt; tValue;
+}</code></pre><p class="p">It has following advantages:</p><p class="p">&nbsp;</p><p class="p">Logical
+grouping of all declarations, and all implementations.</p><p class="p">No compiler
+errors if a template function A needs to use B, and B also needs to
+use A. You would have already declared the prototypes for the other
+function.</p><p class="p">Non-inlining of class methods. Till now, I have elaborated
+entire template class within the class' declaration body. Separating
+out the method implementation, is discussed later.</p><p class="p">Since you
+can logically divide interface and implementation, you can also figuratively
+divide them into Dot-H and Dot-CPP files:</p><p class="p">&nbsp;</p><pre class="pre codeblock"><code>template&lt;typename T&gt; 
+void DisplayValue(T tValue);
+
+#include "Sample.CPP"</code></pre><p class="p">Sample.H is giving prototype for
+DisplayValue, and at the end of file, it is including Sample.CPP.
+Don't worry, it is perfectly valid C++ and would work with your compiler.
+Note that, your project/build now must not add Sample.CPP for compilation
+process.</p><p class="p">&nbsp;</p><p class="p">The client (Main.CPP) will include the
+header, which is adding the code of Sample.CPP into it. In this case,
+just one translation unit (for Main.cpp) will do the trick.</p><pre class="pre codeblock"><code></code></pre><code class="ph codeph"></code></section>
+<section class="section"><h2 class="title sectiontitle">分离类实现</h2><p class="p">The section demands more attention
+from the readers. Implementing a method outside a class requires complete
+type-specification. For example, let's implement Item::SetData outside
+the class definition.</p><p class="p">&nbsp;</p><pre class="pre codeblock"><code>template&lt;typename T&gt;
+class Item
+{
+   ...
+  void SetData(T data);
+};
+ 
+template&lt;typename T&gt;
+void Item&lt;T&gt;::SetData(T data)
+{
+   Data = data;
+}</code></pre><p class="p">Note the expression Item&lt;T&gt; while mentioning the
+class for which method is being defined. Implementing SetData method
+with Item::SetData will not work, since Item is not a simple class,
+but a class template. The symbol Item is not a type, but some instantiation
+of Item&lt;&gt; is a type, and therefore the expression Item&lt;T&gt;.</p><p class="p">&nbsp;</p><p class="p">For instance, when you instantiate Item with type
+short, and use SetData method for it,</p><p class="p">&nbsp;</p><pre class="pre codeblock"><code>Item&lt;short&gt; si;
+si.SetData(20);</code></pre><p class="p">the compiler would generate source-code
+like this:</p><p class="p">&nbsp;</p><pre class="pre codeblock"><code>void Item&lt;short&gt;::SetData(short data)
+{
+   Data = data;
+}</code></pre><p class="p">Here, the formed class name is Item&lt;short&gt; and
+SetData is being defined for this class type.</p><p class="p">&nbsp;</p><p class="p">Let's
+implement other methods outside the class body:</p><p class="p">&nbsp;</p><pre class="pre codeblock"><code>template&lt;typename T&gt;
+T Item&lt;T&gt;::GetData() const
+{
+   return Data;
+}
+ 
+template&lt;typename T&gt;
+void Item&lt;T&gt;::PrintData()
+{
+   cout &lt;&lt; Data;
+}</code></pre><p class="p">Clearly notice that template&lt;typename T&gt; is required
+in all cases, and Item&lt;T&gt; is also required. When implementing GetData,
+the return type is T itself (as it should be). In PrintData implementation,
+though T is not used, Item&lt;T&gt; specification is needed anyway.</p><p class="p">&nbsp;</p><p class="p">And finally, here is the constructor implemented
+outside class:</p><p class="p">&nbsp;</p><pre class="pre codeblock"><code>template&lt;typename T&gt;
+Item&lt;T&gt;::Item()  /*: Data( T() ) */
+{
+}</code></pre><p class="p">Here, the symbol Item&lt;T&gt; is the class, and Item()is
+the method of this class (i.e. the constructor). We need not to (or
+cannot, depending on compiler) use Item&lt;T&gt;::Item&lt;T&gt;() for the
+same. Constructor (and destructor) are special member methods of class,
+and not class types, and therefore they shouldn't be used as type,
+in this context.</p><p class="p">&nbsp;</p><p class="p">Only for simplicity I commented
+default initialization of Data with the default constructor-call for
+type T. You should uncomment the commented part, and understand the
+meaning.</p><p class="p">&nbsp;</p><p class="p">If the template class has one or more
+default types/non-types as template parameters, we just need to specify
+them while declaring the class:</p><p class="p">&nbsp;</p><pre class="pre codeblock"><code>template&lt;typename T = int&gt; // Default to int
+class Item
+{
+... 
+void SetData(T data);
+};
+ 
+void Item&lt;T&gt;::SetData() { }</code></pre><p class="p">We cannot/need-not specify
+the default template parameters, at the implementation stage:</p><p class="p">&nbsp;</p><pre class="pre codeblock"><code>void Item&lt;T = int&gt;::SetData() {} // ERROR</code></pre><p class="p">That would simply be an error. The rule and reasoning is very
+much similar to a C++ function taking default argument(s). We only
+specify default parameter(s) when declaring the interface of a function,
+and not when (separately) implementing the function. Eg:</p><p class="p">&nbsp;</p><pre class="pre codeblock"><code>void Allocate(int nBytes = 1024);
+void Allocate(int nByte /* = 1024* / )  // Error, if uncommented.
+{ }</code></pre><p class="p">Implementing Method Templates Outside Class</p><p class="p">For this, first consider a simple example by a code snippet:</p><p class="p">&nbsp;</p><pre class="pre codeblock"><code>Item&lt;int&gt; IntItem;
+Item&lt;short&gt; ShortItem; 
+IntItem.SetData(4096);
+ 
+ShortItem = IntItem;</code></pre><p class="p">The important line of discussion
+is the one which is marked bold. It tries to assign Item&lt;int&gt; object
+to Item&lt;short&gt; instance, which is not possible, since these two
+are different types. Of course, we could have used SetData on one
+and GetData on another object. But what if we needed the assignment
+to work?</p><p class="p">&nbsp;</p><p class="p">For this, you can implement a custom assignment
+operator, which would itself be on top of templates. That would be
+classified as method template, and it was already covered in first
+part. This discussion is only for outside-class implementation. Anyway,
+here is the in-class implementation:</p><p class="p">&nbsp;</p><pre class="pre codeblock"><code>template&lt;typename U&gt;
+void operator = (U other)
+{
+ Data = other.GetData();
+}</code></pre><p class="p">Where U is the type of other class (another instantiation
+of Item). I didn't use const and reference specification for other
+argument, only for simplicity. When ShortItem = IntItem takes place,
+following code is generated:</p><p class="p">&nbsp;</p><pre class="pre codeblock"><code>void operator = (Item&lt;int&gt; other) 
+{
+   Data = other.GetData();
+}</code></pre><p class="p">Note that other.GetData() returns int, and not short,
+since source object other is of type Item&lt;int&gt;. If you call this
+assignment operator with non-convertible types (such as int* to int),
+it would cause compiler error as these two types are not implicitly
+convertible. One should not use any type of typecasting within template
+code, for these kind of conversions. Let the compiler report error
+to the client of your template.</p><p class="p">&nbsp;</p><p class="p">One more interesting
+thing worth mentioning here. If you code above' assignment operator
+like this:</p><p class="p">&nbsp;</p><pre class="pre codeblock"><code>template&lt;typename U&gt;
+void operator = (U other)
+{
+ Data = other.Data;
+}</code></pre><p class="p">It simply won't compile - the compiler would complain
+that Data is private! You would wonder why?</p><p class="p">Reason is quite
+simple: this class (Item&lt;short&gt;), and the other class (Item&lt;int&gt;)
+are actually two different classes and have no connection between
+them. By standard C++ rule, only same class can access private data
+of current class. Since Item&lt;int&gt; is another class, it doesn't
+give private access to Item&lt;short&gt; class, and hence the error!
+That's the reason I had to use GetData method instead!</p><p class="p">&nbsp;</p><p class="p">Anyway, here is how we implement a method template outside the
+class declaration.</p><p class="p">&nbsp;</p><pre class="pre codeblock"><code>template&lt;typename T&gt;
+template&lt;typename U&gt;
+void Item&lt;T&gt;::operator=( U other )
+{
+   Data = other.GetData();
+}</code></pre><p class="p">Note that we need to use template specification with
+template keyword two times - one for class template, and one for method
+template. Following will not work:</p><p class="p">&nbsp;</p><pre class="pre codeblock"><code>template&lt;typename T, class U&gt;
+void Item&lt;T&gt;::operator=( U other )</code></pre><p class="p">Reason is simple
+- class template Item does not take two template-arguments; it takes
+only one. Or, if we take it other way around - method template (i.e.
+assignment operator) doesn't take two template arguments. Class and
+methods are two separate template-entities, and need to be classified
+individually.</p><p class="p">&nbsp;</p><p class="p">You should also notice that &lt;&lt;code&gt;class
+T&gt; comes first, followed by &lt;class U&gt;. Studying it by the left-to-right
+parsing logic of the C++ language, we see that class Item comes first
+then the method. You may treat the definition as (see tabs):</p><p class="p">&nbsp;</p><pre class="pre codeblock"><code>template&lt;typename T&gt;
+    template&lt;typename U&gt;
+void Item&lt;T&gt;::operator=( U other )
+{ }</code></pre><p class="p">The separation of two-template specification is
+definitely not dependent on the original parameter names used in class
+and method declarations. By this, I mean U and T can exchange positions,
+and it would compile fine. You can also name the way you like - other
+than T or U.</p><p class="p">&nbsp;</p><pre class="pre codeblock"><code>template&lt;typename U&gt;
+template&lt;typename T&gt;
+void Item&lt;U&gt;::operator=( T other )
+{ }</code></pre><p class="p">The order of arguments must match, however. But,
+as you can understand, using the same name is recommended for readability.</p><p class="p">&nbsp;</p><p class="p">Read and understand enough? Well, then it is time
+to test yourself by writing some template code! I just need the following
+to work:</p><p class="p">&nbsp;</p><pre class="pre codeblock"><code>const int Size = 10;
+Item&lt;long&gt; Values[Size]; 
+ 
+for(int nItem = 0; nItem &lt; Size; ++nItem)
+    Values[nItem].SetData(nItem * 40);
+ 
+Item&lt;float&gt; FloatItem;
+FloatItem.SetAverageFrom(Values, Size);</code></pre><p class="p">The method-template
+SetAverageFrom would calculate the average from the Item&lt;&gt; array
+being passed. Yes, the argument (Values) may be of any underlying
+type Item-array. Implement it outside class body! Irrespective of
+who you are - A super-genuis in C++ templates or if you think this
+task as Rocket-Science tough, you must do it - Why fool yourself?</p><p class="p">&nbsp;</p><p class="p">Additionally, what would you do if Values is an array
+of underlying type Currency?</p><p class="p">&nbsp;</p><p class="p">Most of the template
+implementations would be using inclusion model only, that too only
+in one header file, and all inline code! STL, for example, uses header-only,
+inline implementation technique. Few libraries are using include-other-stuff
+technique - but they require only header to be included by client,
+and they operate on top of inclusion model only.</p><p class="p">&nbsp;</p><p class="p">For most template related code, inlining doesn't harm for few reasons.</p><p class="p">&nbsp;</p><p class="p">One, the template code (class, function, entire-library)
+is generally short and concise, like implementing a class template
+less which calls operator &lt; on the underlying type. Or a collection
+class which puts and reads the data into collection, without doing
+too much of laborious work. Most classes would do small and only-required
+tasks like calling a function-pointer/functor, performing string related
+stuff; and would not do intensive calculations, database or file read,
+sending packet to network, preparing buffer to download and other
+intensive work.</p><p class="p">&nbsp;</p><p class="p">Two, inlining is just a request
+from the programmer to the compiler and compiler would inline/not-inline
+the code on its own discretion. It all depends on code complexity,
+how often it (method) gets called, other possible optimizations around
+it etc. Linker and profile guided optimization (PGO) also play important
+role in code optimization, inlining etc. Therefore, putting entire
+code within class-definition will not do any harm.</p><p class="p">&nbsp;</p><p class="p">Three, not all of the code gets compiled - only the one that gets
+instantiated would get compiled, and this reasoning get more importance
+because of previous two points mentioned. So, don't worry about code
+inlining!</p><p class="p">&nbsp;</p><p class="p">When set of class templates along with
+few helper function templates, the code is just like an arithmetic
+expression for the compiler. For example, you would use std::count_if
+algorithm on a vector&lt;int&gt;, passing a functor, which would call
+some comparison operator. All this, when coupled in single statement,
+may look complicated and seems processor-intensive. But it is not!
+The entire expression, even involving different class templates and
+function templates, is like a simple expression to the compiler -
+specially in a Release build.</p><p class="p">&nbsp;</p><p class="p">Other model, the
+Separation Model, works on top of export keyword, which most compilers
+don't still support. Neither GCC, nor Visual C++ compiler support
+this keyword - both compiler would however say this is reserved keyword
+for future, rather than just throwing non-relevant error.</p><p class="p">&nbsp;</p><p class="p">One concept that logically fits this modeling umbrella is Explicit
+Instantiation. I am deferring this concept and I would be elaborating
+it later. One important thing - Explicit Instantiation and Explicit
+Specialization are two different facets! Both will be discussed later.</p></section>
+<section class="section"><h2 class="title sectiontitle">C++的模板和其他方面</h2><p class="p">Gradually, as you would gain
+firm understanding about the templates, the power of templates in
+C++ and be passionate about templates, you would get clear picture,
+that using templates you can craft your own language subset. You can
+program the C++ language so that it performs some tasks the way you
+like. You can use and abuse the language itself, and ask compiler
+to generate source- code for you!</p><p class="p">&nbsp;</p><p class="p">Fortunately,
+or unfortunately, this section is not about how to abuse the language
+and make compiler do labor-work for you. This section tells how other
+concepts like inheritance, polymorphism, operator overloading, RTTI
+etc. are coupled with templates.</p><p class="p">&nbsp;</p></section>
+<section class="section"></section>
+<section class="section"><h2 class="title sectiontitle">类模板，友元</h2><p class="p">Class Templates, Friends</p><p class="p">Any
+veteran programmer would know the real importance of friend keyword.
+Any newbie or by-the-books mortal may detest friend keyword, saying
+that it breaks encapsulation, and the third category would say "depends".
+Whatever your perspective may be, but I believe that friend keyword
+is useful, if judiciously used wherever required. A custom allocator
+for various classes; a class to maintain the relation between two
+different classes; or an inner class of a class are good candidates
+of being friends.</p><p class="p">&nbsp;</p><p class="p">Let me first give you an example,
+where the friend keyword along with template is almost indispensable.
+If you remember the template-based assignment operator in Item&lt;&gt;
+class, you must also recollect that I had to use GetData from the
+other object of another type (another variant of Item&lt;&gt;). Here
+is the definition (in-class):</p><p class="p">&nbsp;</p><pre class="pre codeblock"><code>template&lt;typename U&gt;
+void operator = (U other)
+{
+ Data = other.GetData();
+}</code></pre><p class="p">The reason is simple: Item&lt;T&gt; and Item&lt;U&gt; would
+be different types, where T and U may be int and short, for example.
+One class cannot access private member of another class. If you implement
+an assignment operator for regular class, you would directly access
+the data of other object. What would you do to access data of other
+class (which is, ironically, the same class!) ?</p><p class="p">&nbsp;</p><p class="p">Since the two specializations of class template belong to same class,
+can we make them friends? I mean, is it possible to make Item&lt;T&gt;
+and Item&lt;U&gt; friends of each other, where T and U are two different
+data-types (convertible)?</p><p class="p">&nbsp;</p><p class="p">Logically, it is like:</p><p class="p">&nbsp;</p><pre class="pre codeblock"><code>class Item_T
+{
+   ...
+   friend class Item_U;
+};</code></pre><p class="p">So that Item_U can access Data (private data) of
+class Item_T! Remember that, in reality, Item_T and Item_U would not
+be just two class-types, but any set of two instantiations on top
+if class template Item.</p><p class="p">&nbsp;</p><p class="p">Self-friendship seems logical,
+but how to achieve that? Following will simply not work:</p><p class="p">&nbsp;</p><pre class="pre codeblock"><code>template&lt;typename t&gt;
+class Item
+{
+   ...
+   friend class Item;
+};</code></pre><p class="p">Since Item is a class template and not a regular
+class, therefore symbol Item is invalid in this context. GCC reports
+following:</p><p class="p">&nbsp;</p><p class="p">warning: class 'Item&lt;t&gt;' is implicitly
+friends with itself [enabled by default]</p><p class="p">error: 'int Item&lt;int&gt;::Data'
+is private</p><p class="p">Amusingly, initially it says it is implicit friend
+with itself, and later it complains about private-access. Visual C++
+compiler is more lenient and silently compiles, and makes them friends.
+Either way, the code is not compatible. We should use code that is
+portable and indicates Item as class template. Since target type is
+unknown, we cannot replace T with any particular data-type.</p><p class="p">&nbsp;</p><p class="p">Following should be used:</p><p class="p">&nbsp;</p><pre class="pre codeblock"><code>template &lt;class U&gt; 
+friend class Item; // No template stuff around 'Item'</code></pre><p class="p">It forward-declares the class, and implies that Item is class template.
+The compiler is now satisfied, without any warnings. And now, following
+code works without the penalty to call the function:</p><p class="p">&nbsp;</p><pre class="pre codeblock"><code>template&lt;typename U&gt;
+void operator = (U other)
+{
+  Data = other.Data; // other (i.e. Item&lt;U&gt; has made 'me' friend.
+}</code></pre><p class="p">Other than this self-friendship notion, the friend
+keyword would be useful along with templates in many other situations.
+Of course, it includes regular course of friendships, like connecting
+a model and a framework class; or a manager class being declared as
+friend by other worker classes. But, in case of templates, an inner
+class of a template-based outer class may have to make outer class
+a friend. Another case where template-based base class would be declared
+as friend by derived class.</p><p class="p">&nbsp;</p><p class="p">At present, I do not
+have more ready and understandable examples to demonstrate friend
+keyword usage, that are specific to class templates.</p></section>
+<section class="section"><h2 class="title sectiontitle">类模板，重载运算符</h2><p class="p">Class templates would use operator-overloading
+idea, more often that a regular class would do. A comparator class
+would use one or more of relational operators, for instance. A collection
+class would use index-operator to facilitate get or set operations
+for element access by index or by key. If you remember class template
+Array from previous part, I used index-operator:</p><p class="p">&nbsp;</p><pre class="pre codeblock"><code>template&lt;typename T, int SIZE&gt;
+class Array
+{
+   T Elements[SIZE];
+   ...
+public:
+   T operator[](int nIndex) 
+   {
+      return Elements[nIndex];
+   }
+};</code></pre><p class="p">For another example, recollect a class template Pair
+discussed in previous part. So, for example, if I use this class template
+as:</p><p class="p">&nbsp;</p><pre class="pre codeblock"><code>int main()
+{
+   Pair&lt;int,int&gt; IntPair1, IntPair2;
+   
+   IntPair1.first = 10;
+   IntPair1.second = 20;
+   IntPair2.first = 10;
+   IntPair2.second = 40;
+ 
+   if(IntPair1 &gt; IntPair2)
+      cout &lt;&lt; "Pair1 is big.";
+}</code></pre><p class="p">That simply won't work and requires operator &gt; to
+be implemented by class template Pair:</p><p class="p">&nbsp;</p><pre class="pre codeblock"><code>// This is in-class implementation
+bool operator &gt; (const Pair&lt;Type1, Type2&gt;&amp; Other) const
+{
+  return first &gt; Other.first &amp;&amp; 
+         second &gt; Other.second;
+}</code></pre><p class="p">Though, same thing was already discussed in first
+part (for operator ==), I added this word only for relevance with
+the concept being elaborated.</p><p class="p">&nbsp;</p><p class="p">Other than these
+regular overloadable operators, like relational operators, arithmetic
+operators etc, templates also employ other rarely used overloadable
+operators: Arrow Operator (- &gt;) and the Pointer Indirection operator
+(*). A simple smart-pointer implementation, on top of class template,
+illustrates the usability.</p><p class="p">&nbsp;</p><pre class="pre codeblock"><code>template&lt;typename Type&gt;
+class smart_ptr
+{
+   Type* ptr;
+public:
+   smart_ptr(Type* arg_ptr = NULL) : ptr(arg_ptr)
+   {}
+ 
+   ~smart_ptr()
+   {
+     // if(ptr) // Deleting a null-pointer is safe
+     delete ptr;
+   }
+};</code></pre><p class="p">The class template smart_ptr would hold up a pointer
+of any type, and would safely delete the memory allocated, in the
+destructor. Usage example:</p><p class="p">&nbsp;</p><pre class="pre codeblock"><code>int main()
+{
+  int* pHeapMem = new int;
+  smart_ptr&lt;int&gt; intptr(pHeapMem);
+  //  *intptr = 10;
+}</code></pre><p class="p">I have delegated the responsibility of memory deallocation
+to the smart_ptr object (intptr). When the destructor of intptr would
+get called, it would delete the memory allocated. Note that the first
+line in main function is just for better clarity. The constructor
+of smart_ptr may be called as:</p><p class="p">&nbsp;</p><pre class="pre codeblock"><code>smart_ptr&lt;int&gt; intptr(new int);</code></pre><p class="p">NOTE: This class (smart_ptr) is only for illustration purpose,
+and it is functionally not equivalent to any of standard smart pointer
+implementations (auto_ptr, shared_ptr, weak_ptr etc.).</p><p class="p">&nbsp;</p><p class="p">Smart pointer would allow any type to be used for safe and sure
+memory-deallocation. You could also use any UDT:</p><p class="p">&nbsp;</p><pre class="pre codeblock"><code>smart_ptr&lt;Currency&gt; cur_ptr(new Currency);</code></pre><p class="p">After
+end of current block (i.e. - {}), the destructor of smart_ptr&lt;&gt;
+would get called, and would invoke delete operator on it. Since the
+type is known at compile time (instantiation is compile-time!), the
+destructor of correct type would be invoked. If you put destructor
+of Currency, that would be called as soon as cur_ptr ceases to exist.</p><p class="p">&nbsp;</p><p class="p">Coming back on track; how would you facilitate following:</p><p class="p">&nbsp;</p><pre class="pre codeblock"><code>smart_ptr&lt;int&gt; intptr(new int);
+*intptr = 10;</code></pre><p class="p">For sure, you would implement pointer
+indirection (unary) operator:</p><p class="p">&nbsp;</p><pre class="pre codeblock"><code>Type&amp; operator*() 
+{
+   return *ptr;
+}</code></pre><p class="p">Distinctly understand that the above definition is
+non-const implementation, and that is the reason it returns reference
+of object (*ptr, not ptr) being held by class instance. Only because
+of the same, assignment of value 10 is allowed.</p><p class="p">&nbsp;</p><p class="p">Had it been implemented as const method, it would not allow assignment
+to succeed. It would generally return a non-referenced object, or
+const-reference of the object being held:</p><p class="p">&nbsp;</p><pre class="pre codeblock"><code>// const Type&amp; operator*() const
+Type operator*() const
+{
+   return *ptr;
+}</code></pre><p class="p">Following code snippet shows its usage:</p><p class="p">&nbsp;</p><pre class="pre codeblock"><code>int main()
+{
+   smart_ptr&lt;int&gt; intptr(new int);
+   *intptr = 10; // Non-const
+ 
+   show_ptr(intptr);
+}
+// Assume it implemented ABOVE main
+void show_ptr(const smart_ptr&lt;int&gt;&amp; intptr)
+{
+   cout &lt;&lt; "Value is now:" &lt;&lt; *intptr; // Const
+} </code></pre><p class="p">You may like to return co&lt;code&gt;nst Type&amp; for
+saving few bytes of program stack, from a const function. But, in
+general, class templates do return value types instead. It keeps the
+design simple, avoids any possible bug from creeping in if underlying
+type has const/non-const blunder in implementation. It also avoids
+any unnecessary reference creation even from small types (like int
+or Currency), which would turn to be more heavier than value type
+returns.</p><p class="p">&nbsp;</p><p class="p">Quite interestingly, you can templatize
+the show_ptr function itself, so that it can display value of any
+underlying type under the smart_ptr object. There is a lot more to
+explicate about template functions/classes that itself take another
+template, but needs a separate discussion area for the same. Keeping
+simple and to-the-point discussion, here is modified show_ptr:</p><p class="p">&nbsp;</p><pre class="pre codeblock"><code>template&lt;typename T&gt;
+void show_ptr(const smart_ptr&lt;T&gt;&amp; ptr)
+{
+   cout &lt;&lt; "Value is now:" &lt;&lt; *ptr; // Const
+} </code></pre><p class="p">For Currency object, the function will call Currency::operator
+double, so that cout will work. Are you awake, or you need to refresh
+stuff about cout and Currency? If in confusion, please read that stuff
+again.</p><p class="p">&nbsp;</p><p class="p">Moving on, lets see what happens when you
+try to do the following.</p><p class="p">&nbsp;</p><pre class="pre codeblock"><code>smart_ptr&lt;Currency&gt; cur_ptr(new Currency);
+cur_ptr-&gt;Cents = 10;
+show_ptr(cur_ptr);</code></pre><p class="p">The bold line, logically correct,
+but will fail. Reason is simple - cur_ptr is not a pointer, but a
+normal variable. Arrow operator can only be called if expression on
+left is a pointer to structure (or class). But, as you see, you are
+using smart_ptr as a pointer-wrapper around Currency type. Therefore,
+this should aesthetically work. Essentially, it means, you need to
+overload arrow operator in class smart_&lt;code&gt;ptr !</p><p class="p">&nbsp;</p><pre class="pre codeblock"><code>Type* operator-&gt;()
+{
+ return ptr;
+}
+ 
+const Type* operator-&gt;() const
+{
+ return ptr;
+}</code></pre><p class="p">Since I do respect your comfort level with the C++
+language, I don't find it necessary to explain about these two different
+overloads implemented. After the implementation of this operator,
+cur&lt;code&gt;_ptr-&gt;Cents assignment will work!</p><p class="p">&nbsp;</p><p class="p">In
+general, operator -&gt; will return a pointer only (of some struct/class).
+But that's not absolutely necessary - operator-&gt; may also return reference/value
+of particular class type. It is not really useful, deep down concept
+and is rarely implement that way, I don't find it worth discussing.</p><p class="p">&nbsp;</p><p class="p">Do apprehend that overloaded operator-&gt; in smart_ptr
+will not cause any compile-time error for smart_ptr&lt;int&gt;, just
+because int cannot have arrow-operator applied to it. The reason is
+simple, you will not call call this operator on smart_ptr&lt;int&gt;
+object, and hence compiler will not (attempt to) compile smart_ptr&lt;&gt;::operator-&gt;()
+for it!</p><p class="p">&nbsp;</p><p class="p">By now, you must have realized importance
+of operator overloading in C++ and in template arena. Under template
+domain, there is much more around operators, and it really helps template
+based development, compiler support, early binding etc.</p></section>
+<section class="section"><h2 class="title sectiontitle">类模板，继承</h2><p class="p">Before discussing the usability of
+inheritance along with template-based classes, I would emphasize different
+modes of inheritance involved. No, it is not about multiple, multilevel,
+virtual or hybrid inheritance, or base class having virtual functions.
+The modes are just around single inheritance:</p><p class="p">&nbsp;</p><p class="p">Class
+template inheriting Regular class</p><p class="p">Regular class inheriting Class
+Template</p><p class="p">Class Template inheriting another Class Template</p><p class="p">In template-based class designs, other than single inheritance,
+multiple inheritance would be more frequent than multilevel, hybrid
+or virtual inheritance. Let me first start off with single inheritance.</p><p class="p">&nbsp;</p><p class="p">You know that class-template is a template for a
+class, which will be instantiated depending on the types(s) and other
+argument it takes. The instantiation would produce a template-class,
+or more distinctly, specialization of that class. The process is known
+as instantiation, and the outcome is known as specialization.</p><p class="p">&nbsp;</p><p class="p">When inheriting, what would you inherit - a class-template
+(Item&lt;T&gt;), or the specialization (Item&lt;int&gt;) ?</p><p class="p">&nbsp;</p><p class="p">These two different models appear same, but are entirely different.
+Let me give you an example.</p><p class="p">&nbsp;</p><pre class="pre codeblock"><code>class ItemExt : public Item&lt;int&gt;
+{
+}</code></pre><p class="p">Here you see that normal class ItemExt is inheriting
+from a specialization (Item&lt;int&gt;), and is not facilitating any
+other instantiation of Item. What does it mean? You might ask.</p><p class="p">&nbsp;</p><p class="p">First consider this : The empty class ItemExt, in
+itself, can be classified as:</p><p class="p">&nbsp;</p><pre class="pre codeblock"><code>typedef Item&lt;int&gt; ItemExt;</code></pre><p class="p">Either way (typedef or inheritance), when you use ItemExt, you
+don't need to (or say, you cannot) specify the type:</p><p class="p">&nbsp;</p><pre class="pre codeblock"><code>ItemExt int_item;</code></pre><p class="p">int_item is nothing but
+a derived-class object of type Item&lt;int&gt;. This mean, you cannot
+create object of other underlying type using the derived class ItemExt.
+The instance of ItemExt will always be Item&lt;int&gt;, even if you add
+new methods/members to derived class. The new class may provide other
+features like printing the value, or comparing with other types etc,
+but class doesn't allow flexibility of templates. By this, I mean,
+you cannot do:</p><p class="p">&nbsp;</p><pre class="pre codeblock"><code>ItemExt&lt;bool&gt; bool_item;</code></pre><p class="p">Since ItemExt is not a class template, but a regular class.</p><p class="p">&nbsp;</p><p class="p">If you are looking for this kind of inheritance,
+you can do so - it all depends on your requirements, and design perspective.</p><p class="p">&nbsp;</p><p class="p">Another type of inheritance would be template-inheritance,
+where you would inherit the class template itself and pass the template-parameters
+to it. Example first:</p><p class="p">&nbsp;</p><pre class="pre codeblock"><code>template&lt;typename T&gt;
+class SmartItem : public Item&lt;T&gt;
+{
+};</code></pre><p class="p">Class SmartItem is another class template which is
+inheriting from Item template. You would instantiate SmartItem&lt;&gt;
+with some type, and same type would be passed to class template Item.
+And all this would happen at compile time. If you instantiate SmartItem
+with char type, Item&lt;char&gt; and SmartItem&lt;char&gt; would be instantiated!</p><p class="p">&nbsp;</p><p class="p">As an another example of template-inheritance, let
+inherit from class template Array:</p><p class="p">&nbsp;</p><pre class="pre codeblock"><code>template&lt;size_t SIZE&gt;
+class IntArray : public Array&lt;int, SIZE&gt;
+{
+};
+int main()
+{
+   IntArray&lt;20&gt; Arr;
+   Arr[0] = 10;
+}</code></pre><p class="p">Note that I have used int as first template argument,
+and SIZE as second template argument to base class Array. The argument
+SIZE is only argument for IntArray, and is second argument for base
+class Array. This is allowed, interesting feature and facilitates
+automatic code generation with the help of compiler. However, IntArray
+would always be array of ints, but the programmer may specify the
+size of array.</p><p class="p">&nbsp;</p><p class="p">Similarly, you may inherit Array
+this way also:</p><p class="p">&nbsp;</p><pre class="pre codeblock"><code>template&lt;typename T&gt;
+class Array64 : public Array&lt;T, 64&gt;
+{
+};
+ 
+int main()
+{
+  Array64&lt;float&gt; Floats;
+  Floats[2] = 98.4f;
+}</code></pre><p class="p">Though, in the examples given above, the derived class
+itself do not do anything extra, inheritance is very-much required.
+If you think following template-based typedef will do the same, you
+are wrong!</p><p class="p">&nbsp;</p><pre class="pre codeblock"><code>template&lt;typename T&gt;
+typedef Array&lt;T, 64&gt; Array64;
+
+typedef&lt;size_t SIZE&gt;
+typedef Array&lt;int, SIZE&gt; IntArray;</code></pre><p class="p">Template based
+typedefs are not allowed. Although I do not see any reason why compilers
+cannot provide such feature. On top of templates typedefs can behave
+different depending on the context (i.e. based on template parameters).
+But template-based typedefs at global level are not allowed.</p><p class="p">&nbsp;</p><p class="p">Though, not specific to the template-inheritance discussion,
+you may achieve typedef without using inheritance also. But in that
+case too, you need to define a new class.</p><p class="p">&nbsp;</p><pre class="pre codeblock"><code>template&lt;size_t SIZE&gt;
+struct IntArrayWrapper
+{
+   typedef Array&lt;int, SIZE&gt; IntArray;
+};</code></pre><p class="p">Usage is slightly different:</p><p class="p">&nbsp;</p><pre class="pre codeblock"><code>IntArrayWrapper&lt;40&gt;::IntArray Arr;
+Arr[0] = 10;</code></pre><p class="p">The choice entirely depends on the requirement,
+flexibility, readability, some coding-standards and by personal choice.
+The second version is quite cumbersome, in my opinion.</p><p class="p">&nbsp;</p><p class="p">But, if inheritance is desired, and you are going to provide extra
+features on top of base-template, and/or there is "is-a"relationship
+between base and derived classes, you should use template-inheritance
+model.</p><p class="p">&nbsp;</p><p class="p">Note that, in almost all cases, template
+based classes wouldn't have virtual functions; therefore, there is
+no added penalty on using inheritance. Inheritance is just a data-type
+modeling, and in simple cases, derived class would also be POD (Plain
+Old Data). Virtual functions, with templates, will be described later.</p><p class="p">&nbsp;</p><p class="p">By now, I have elaborate two models of inheritance:</p><p class="p">&nbsp;</p><p class="p">Regular class inheriting class template</p><p class="p">Class
+template inheriting another class template</p><p class="p">I also explicated
+the difference between template-inheritance (where you pass the template
+argument(s) to base), and instantiation-inheritance where you inherit
+from very specific type of template instantiation (called specialization).
+Note that both IntArray and Array64 would be classified as template-inheritance,
+since at least one template-argument is keeping the specialization
+to happen, and would happen only when derived type is instantiated
+with specific arguments.</p><p class="p">&nbsp;</p><p class="p">Note that only ItemExt
+is an example of 'Regular class inheriting class template'. All other
+examples given are 'class -template inheriting class-template'.</p><p class="p">&nbsp;</p><p class="p">Now the third type. Can a class-template inherit
+a regular class?</p><p class="p">Who said No? Why not!</p><p class="p">&nbsp;</p><p class="p">I
+don't find or craft any example where base class would be (absolutely)
+basic, without any stain of template. It is actually unreasonable
+and would be a bad design to represent "is-a" relationship from a
+non-template base class. Initially, I thought of giving an example
+where base class would be singly-linked list, and derived class, based
+on template would be somewhat smarter (say doubly) linked list.</p><p class="p">&nbsp;</p><p class="p">The bad example:</p><p class="p">&nbsp;</p><pre class="pre codeblock"><code>class SinglyLinkedList
+{
+ // Assume this class implements singly linked list
+ // But uses void* mechanism, where sizeof data is 
+ // specified in constructor.
+};
+
+template&lt;class T&gt;
+class SmartLinkedList : public SinglyLinkedList
+{
+};</code></pre><p class="p">Now, you can say a SmartLinkedList&lt;&gt; object is-a
+SinglyLinkedList, which defeats the whole purpose of templates. A
+template-based class must not depend on non-template class. Templates
+are abstraction around some data-type for some algorithm, programming-model,
+a data-structure.</p><p class="p">&nbsp;</p><p class="p">In fact, templates do avoid inheritance
+feature of OOP, altogether. It represents most of the abstractions
+by a single class. By this I do not mean templates would not use inheritance.
+In fact, many features around templates rely on inheritance feature
+of C++ - but it would not use inheritance-of-features, as in classical
+sense of Object-Oriented-Programming.</p><p class="p">&nbsp;</p><p class="p">Class Templates
+would use inheritance of rules, inheritance of modeling, inheritance
+of designs and so on. One example would be make a base class, having
+copy-constructor and assignment-operator private, without having any
+data-members in it. Now, you can inherit this Rule class, and make
+all desired classes non-copyable!</p><p class="p">&nbsp;</p><p class="p">Let me finish
+all major aspects of C++ along with templates, then I would show you
+some truly intriguing techniques using templates!</p></section>
+<section class="section"><h2 class="title sectiontitle">函数指针和回调函数</h2><p class="p">As you do know function-pointer
+is one of the mechanism in C/C++ language to achieve dynamic-polymorphism.
+Not necessarily, but generally coupled with callback-feature - you
+set particular user-defined function as a callback, that would be
+called later. The actual function to be called is determined at runtime,
+and hence late-binding of specific callable function occurs.</p><p class="p">&nbsp;</p><p class="p">To understand, let us consider simple code-snippet.</p><p class="p">&nbsp;</p><pre class="pre codeblock"><code>typedef void (*DisplayFuncPtr)(int);
+
+void RenderValues(int nStart, int nEnd, DisplayFuncPtr func)
+{
+   for(;nStart&lt;=nEnd; ++nStart)
+       func(nStart); // Display using the desired display-function
+}
+ 
+void DisplayCout(int nNumber)
+{
+   cout &lt;&lt; nNumber &lt;&lt; " ";
+}
+
+void DisplayPrintf(int nNumber)
+{
+   printf("%d ", nNumber);
+}
+
+int main()
+{
+   RenderValues(1,40, DisplayCout); // Address-Of is optional
+   RenderValues(1,20, &amp;DisplayPrintf);
+
+   return 0;
+}</code></pre><p class="p">In this code, DisplayFuncPtr gives the prototype of
+the desired function, and is only for better readability. Function
+RenderValues will display the numbers using the given function. I
+called this function with different callbacks (DisplayCout and DisplayPrintf)
+from main function. Late-binding occurs at the following statement.</p><p class="p">&nbsp;</p><pre class="pre codeblock"><code>func(nStart);</code></pre><p class="p">Here func may
+point to either of the two Display-functions (or any other UDF). This
+type of dynamic-binding has several issues:</p><p class="p">&nbsp;</p><p class="p">The
+prototype of callback function must exactly match. If you change void
+DisplayCout(int) to void DisplayCout(float), the compiler will get
+upset:</p><p class="p">error C2664: 'RenderValues' : cannot convert parameter
+3 from 'void (__cdecl *)(double)' to 'DisplayFuncPtr'</p><p class="p">Even though
+the return value of func is not used by RenderValues, compiler will
+not allow any callback function returning non-void.</p><p class="p">And this
+one troubles me a lot! The calling convention must also match. If
+function specifies cdecl as callback function, a function implemented
+as stdcall (__stdcall), will not be allowed.</p><p class="p">Since function-pointers
+and callbacks comes from the C language itself, compilers have to
+impose these restrictions. Compiler just cannot allow incorrect function
+to avoid call-stack to get corrupted.</p><p class="p">&nbsp;</p><p class="p">And here
+is template based solution to overcome all the mentioned issues.</p><p class="p">&nbsp;</p><pre class="pre codeblock"><code>template&lt;typename TDisplayFunc&gt;
+void ShowValues(int nStart, int nEnd, TDisplayFunc func)
+{
+   for(;nStart&lt;=nEnd; ++nStart)
+       func(nStart); // Display using the desired display-function
+}</code></pre><p class="p">You can happily supply any of the functions to ShowValues
+templated-based function:</p><pre class="pre codeblock"><code>void DisplayWithFloat(float);
+int DisplayWithNonVoid(int);
+void __stdcall DisplayWithStd(int);
+
+...
+
+ShowValues(1,20, DisplayWithFloat);
+ShowValues(1,40, DisplayWithNonVoid);
+ShowValues(1,50, DisplayWithStd);</code></pre><p class="p">Yes, you would get
+float to int conversion warning for first function. But return type
+and calling convention would not matter. In fact, any function that
+can be called with int argument would be allowed in this case. You
+can modify the third function taking double, returning a pointer:</p><p class="p">&nbsp;</p><pre class="pre codeblock"><code>int* __stdcall DisplayWithStd(double);</code></pre><p class="p">The reason is simple. Actual type of TDisplayFunc is determined
+at compile time, depending on the type-of argument passed. In case
+of function-pointer implementation, there is exactly one implementation.
+But in case of function templates, there would be different instantiations
+of ShowValues, depending on unique function-prototypes you instantiate
+it with.</p><p class="p">&nbsp;</p><p class="p">Along with the concerns mentioned above
+for normal C-style function-pointer/callback approach, following are
+also not allowed as display-function argument:</p><p class="p">&nbsp;</p><p class="p">Functors, i.e. Function objects - A class may implement operator()
+with required signature. For example:</p><pre class="pre codeblock"><code>struct DisplayHelper
+{
+   void operator()(int nValue)
+   {
+   }
+};</code></pre><p class="p">The following code is illegal.</p><p class="p">&nbsp;</p><pre class="pre codeblock"><code>DisplayHelper dhFunctor;
+RenderValues(1,20,dhFunctor); // Cannot convert...</code></pre><p class="p">But
+when you pass the dhFunction (a functor, aka function-object) to function
+template ShowValues, the compiler will make no complains. As I said
+earlier TDisplayFunc may be any type that can be called with int argument.</p><p class="p">&nbsp;</p><pre class="pre codeblock"><code>ShowValues(1,20, dhFunctor);</code></pre><p class="p">Lambdas - Locally defined functions (C++11 feature). Lambdas will
+also be not allowed as function-pointer argument to C-style function.
+Following is erroneous.</p><pre class="pre codeblock"><code>RenderValues(1,20, [](int nValue)
+{
+   cout &lt;&lt; nValue;
+} );</code></pre><p class="p">But it is perfectly valid for ShowValues function
+template.</p><p class="p">&nbsp;</p><pre class="pre codeblock"><code>ShowValues(1,20, [](int nValue)
+  {
+   cout &lt;&lt; nValue;
+ });</code></pre><p class="p">Of-course, using lambda requires C++11 complaint
+compiler (VC10 and above, GCC 4.5 and above).</p><p class="p">&nbsp;</p><p class="p">Interestingly,
+the function template may be crafted in different way - where you
+need not to pass a functor as function parameter. Instead, you can
+pass it as template argument itself.</p><p class="p">&nbsp;</p><pre class="pre codeblock"><code>template&lt;typename TDisplayFunc&gt;
+void ShowValuesNew(int nStart, int nEnd)
+{
+   TDisplayFunc functor; // Create functor here
+
+   for(;nStart&lt;=nEnd; ++nStart)
+      functor(nStart);
+}
+
+...
+ 
+ShowValuesNew&lt;DisplayHelper&gt;(1,20); // 1 template, 2 function arguments</code></pre><p class="p">In this case, I have passed struct DisplayHelper as template type
+argument. The function itself now takes only two arguments. The creation
+of functor is now done by template function itself. The only disadvantage
+is that you can now only pass struct or classes, having operator()
+defined in it. You cannot pass a normal function to ShowValuesNew.
+You can however pass a lambda's type using decltype keyword.</p><p class="p">&nbsp;</p><pre class="pre codeblock"><code>auto DispLambda = [](int nValue)
+{
+   printf("%d ", nValue);
+};</code></pre><p class="p">&nbsp;</p><p class="p">ShowValuesNew&lt;decltype(DispLambda)&gt;(1,20);</p><p class="p">Since the type of any lambda is around std::function, which is
+a class type, and hence object creation (TDisplayFunc functor;) is
+allowed.</p><p class="p">&nbsp;</p><p class="p">By now, you have realized that function-pointer
+approach is very restrictive. The only advantage is code-size reduction
+and possibility of putting a function into some library, and later
+call that function passing different callbacks. The callable callback
+is truly late-bound. Since the core function is defined at one place,
+compiler does not have much of liberty to optimize the code based
+on functions (callbacks) passed, especially of core-function resides
+in other library (DLL/SO). Of course, if the core function is large,
+and restrictive nature is desired/acceptable, you would use function-pointer
+approach.</p><p class="p">&nbsp;</p><p class="p">Template based approach, on the other
+side, do advocate for early-binding. Early binding is the core and
+heart of template based programming. As mentioned before, template
+code would generally not be intensive and big, like huge data-processing,
+a gaming engine, batch image processing, security subsystem - but
+a helper for all these systems. Therefore, early-bound nature actually
+helps in optimizing the code, since everything is under the compiler-territory.</p></section>
+<section class="section"><h2 class="title sectiontitle">模板和虚函数</h2><p class="p">Virtual functions and templates don't
+go together - they are into different leagues. Reason is simple -
+One employs late-binder and other one employs early-binder. Do very
+well remember that templates are compile-time, unlike generics in
+other managed languages (like C#). The type of a generic is determined
+at runtime, depending on how it is instantiated. But in case of templates,
+type is determined at compile time only. There are many other differences,
+pros and cons of templates and generics, but I am deferring that explanation.</p><p class="p">&nbsp;</p><p class="p">Just for a logical understanding of this separation,
+consider following code.</p><p class="p">&nbsp;</p><pre class="pre codeblock"><code>class Sample
+{
+public:
+   template&lt;class T&gt;
+   virtual void Processor()  // ERROR!
+   {  
+   }
+};</code></pre><p class="p">It asks Sample::Processor&lt;T&gt; method template to
+be virtual, which does not make any sense. How the sample class it
+to be used and inherited. So, for example, if you make new class SampleEx
+and inherit it from Sample, and attempt implement this virtual function.
+Which specialization would you override? A Processor&lt;int&gt; or Processor&lt;string&gt;,
+for example?</p><p class="p">&nbsp;</p><p class="p">Since there are possibilities of infinite
+specializations of Processor method that can be overridden, depending
+on how method-template Processor is being called (via base of any
+of derived classes) - the virtual keyword loses its meaning. Compiler
+cannot create virtual-function-table for such design. Also, compiler
+cannot enforce derived class to implement all those infinite implementations,
+if base class declares the given method-template as pure-virtual!</p><p class="p">&nbsp;</p><p class="p">ATL library, from Microsoft, uses template based
+design on top of inheritance principle - but without virtual functions.
+For performance reasons, it uses templates, and not virtual functions
+- it means ATL uses more of static-binding, rather than dynamic-binding.</p><p class="p">&nbsp;</p><p class="p">How would you utilize template based classes, having
+inheritance, but without virtual-functions? And yet facilitate that
+base class would know and call methods of derived class?</p><p class="p">&nbsp;</p><p class="p">Before I explicate that feature, do remember that such classes
+will not be complete without derived classes. By this I don't mean
+abstract classes or pure-virtuals. Class templates, as you know, gets
+compiled only when instantiated with particular type - and this rule
+holds true for all of the methods in class. Similar way, base class
+will not be complete without its partner in crime -derived class.
+It also means that such classes cannot be exported from a library,
+whereas normal classes (even abstract) may be exported from a library.</p><p class="p">&nbsp;</p><p class="p">Let me start it with normal inheritance model - a
+base class, having pure virtual function, and a derived class implementing
+it.</p><p class="p">&nbsp;</p><pre class="pre codeblock"><code>class WorkerCore
+{
+public:
+   void ProcessNumbers(int nStart, int nEnd)
+   {
+      for (;nStart&lt;=nEnd; ++nStart)
+      {
+         ProcessOne(nStart);
+      }
+   }
+
+   virtual void ProcessOne(int nNumber) = 0;
+};
+
+class ActualWorker : public WorkerCore
+{
+   void ProcessOne(int nNumber) 
+   {
+      cout &lt;&lt; nNumber * nNumber;
+   }
+};
+
+...
+ 
+WorkerCore* pWorker =new ActualWorker;
+pWorker-&gt;ProcessNumbers(1,200);</code></pre><p class="p">You know that WorkerCore
+class is abstract, and a pointer of this type may point to derived
+class. ProcessOne is the function that would be doing actual work.
+The binding with actual function (in ProcessNumbers) depends where
+this pointer is actually pointing. This is very-much utilizing late-binding
+feature of the language.</p><p class="p">&nbsp;</p><p class="p">For this trivial task,
+you don't want heavy runtime penalty - you would prefer early-binding.
+And there the nifty feature, templates, come to rescue! Carefully
+understand the following code.</p><p class="p">&nbsp;</p><pre class="pre codeblock"><code>template&lt;class TDerived&gt;
+class WorkerCoreT 
+{
+public:
+   void ProcessNumbers(int nStart, int nEnd)
+   {
+     for (;nStart&lt;=nEnd; ++nStart)
+     {
+        TDerived&amp; tDerivedObj = (TDerived&amp;)*this;
+    
+        tDerivedObj.ProcessOne(nStart);
+     }
+   }
+};
+class ActualWorkerT : public WorkerCoreT&lt;ActualWorkerT&gt;
+{
+public:
+   void ProcessOne(int nNumber)
+   {
+      cout &lt;&lt; nNumber * nNumber;
+   }
+};</code></pre><p class="p">First understand the bold ones:</p><p class="p">&nbsp;</p><p class="p">TDerived in base class: Specifies the actual type of derived class.
+The derived class, when inheriting, must specify it.</p><p class="p">Typecasting
+in ProcessNumbers: Since we only WorkerCoreT is actually a TDerived
+object, we can safely typecast this to TDerived. And then call ProcessOne
+method using the object-reference.</p><p class="p">&lt;ActualWorkerT&gt; specification:
+The derived class itself tells the base that "Here I am". This line
+is important, otherwise type of TDerived would be wrong, and so the
+typecasting.</p><p class="p">Important thing to know that ProcessOne is not
+a virtual function, not even a regular member in base class. The base
+class just assumes it exists in derived class, and makes a call to
+it. If ProcessOne doesn't exist in derived class, the compiler will
+simply raise an error:</p><p class="p">&nbsp;</p><p class="p">'ProcessOne' : is not a
+member of 'ActualWorkerT'</p><p class="p">&nbsp;</p><p class="p">Even though there is
+typecasting involved, there is no runtime penalty involved, no runtime
+polymorphism, function-pointer drama etc. The said function exists
+in derived class, is accessible from base class, and is not restricted
+to be void (int). It could be, as mentioned in function-pointers section,
+int (float), or anything else that can be called with int parameter.</p><p class="p">&nbsp;</p><p class="p">The only thing is that a pointer of type WorkerCoreT
+cannot simply point to derived class, and make a successful call to
+ProcessOne. And you can justify that such thing doesn't make sense
+- either take early binding, or late, not both.</p></section>
+<section class="section"><h2 class="title sectiontitle">模板和宏(略)</h2></section>
+<section class="section"><h2 class="title sectiontitle">函数重载(略)</h2></section>
+<section class="section"><h2 class="title sectiontitle">STL简介</h2><p class="p">STL stands for Standard Template Library,
+which is a part of C++ Standard Library. From programmer's point of
+view, even though it is (optional) part of C++ Library, most of other
+features (classes, functions) are dependent on STL itself. As the
+"template" word suggests, STL is mainly on top of C++ templates -
+there are class templates and function templates.</p><p class="p">&nbsp;</p><p class="p">STL contains set of collection classes for representing arrays,
+linked lists, trees, sets, maps etc. It also contains helper functions
+to act on container classes (like finding maximum, sum or a particular
+element), and other auxiliary functions. Iterators are important classes
+that allow iteration over collection classes. First let me give simple
+example.</p><p class="p">&nbsp;</p><pre class="pre codeblock"><code>vector&lt;int&gt; IntVector;</code></pre><p class="p">Here vector is a class template, which is functionally equivalent
+to arrays. It takes one (mandatory) argument - the type. The above
+statement declares IntVector to be a vector&lt;&gt; of type int. Few
+points:</p><p class="p">&nbsp;</p><p class="p">vector, along with other elements of STL,
+comes under std namespace.</p><p class="p">To use vector, you need to include
+vector header (and not vector.h)</p><p class="p">vector stores its elements
+in contiguous memory- meaning that any element can be directly accessed.
+Yes, very much same as array.</p><p class="p">Stepped up example:</p><p class="p">&nbsp;</p><pre class="pre codeblock"><code>#include &lt;vector&gt;
+int main()
+{
+   std::vector&lt;int&gt; IntVector;
+ 
+   IntVector.push_back(44);
+   IntVector.push_back(60);
+   IntVector.push_back(79);
+
+   cout &lt;&lt; "Elements in vector: " &lt;&lt; IntVector.size();
+}</code></pre><p class="p">About the bold-marked content:</p><p class="p">&nbsp;</p><p class="p">The header that must be included to use vector class.</p><p class="p">Namespace
+specification: std.</p><p class="p">vector::push_back method is used to add
+elements to vector. Initially there are no elements in vector, you
+insert using push_back. Other techniques also exist, but push_back
+is paramount.</p><p class="p">To determine current size (not capacity) of vector,
+we use vector::size method. Thus the program will display 3.</p><p class="p">If you were to implement vector, you would implement it like:</p><p class="p">&nbsp;</p><pre class="pre codeblock"><code>template&lt;typename Type&gt;
+class Vector
+{ 
+  Type* pElements; // Allocate dynamically, depending on demands.
+  int ElementCount; // Number of elements in vector
+
+public:
+  Vector() : pElements(NULL), ElementCount(0)
+  {}
+
+  size_t size() const { return ElementCount; };
+
+  void push_back(const Type&amp; element); // Add element, allocate more if required.
+};</code></pre><p class="p">No rocket science here, you know all of it. Implementation
+of push_back would be to allocate additional memory, if required,
+and set/add the element to given location. This rises obvious question:
+How much memory to allocate on each new-element insertion? And here
+comes the Capacity subject.</p><p class="p">&nbsp;</p><p class="p">vector also has, not
+frequently used method: capacity. Capacity of vector is currently
+allocated memory (in element count), and can be retrieved using this
+function. Initial capacity, or the additional memory allocated on
+each push_back depends on implementation (how VC or GCC or other compiler
+vendors implement it). Method capacity will always return more or
+equal value, than the size method would return.</p><p class="p">&nbsp;</p><p class="p">I request you to implement push_back and capacity methods. Add any
+more data members or methods you may want to add.</p><p class="p">&nbsp;</p><p class="p">One major advantage of vector is that it can be used like standard
+array; except that the size of array (i.e. element count of vector)
+is not constant. It may vary. You may think of it as dynamically allocated
+array, where you allocate desired memory (re-allocate if needed),
+keep track of size of array, check for memory allocation failure and
+need to free memory at the end. std::vector handles it all, yet for
+all data-types that meet the "Requirements of this class template".</p><p class="p">&nbsp;</p><p class="p">Having said that vector is functionally equivalent
+to array, following is valid code. (Yes, there has to be at least
+3 elements in vector for this code to work).</p><p class="p">&nbsp;</p><pre class="pre codeblock"><code>IntVector[0] = 59; // Modify First element
+
+cout &lt;&lt; IntVector[1]; // Display Second element
+ 
+int *pElement = &amp;IntVector[2]; // Hold Third element
+cout &lt;&lt; *pElement; // Third</code></pre><p class="p">It clearly means that
+vector has operator[] overloaded, which is like:</p><p class="p">&nbsp;</p><pre class="pre codeblock"><code>Type&amp; operator[](size_t nIndex)
+{
+    return pElements[nIndex]; 
+}
+
+const Type&amp; operator[](size_t nIndex)
+{
+    return pElements[nIndex];
+}</code></pre><p class="p">I have not shown the basic validations here. Important
+to note the two overloads based on const. Class std::vector also has
+the two overloads - one which returns the reference of actual element,
+other one returns const-reference. Former will allow modification
+of actual element stored(See "Modify First element" comment above),
+and latter will not allow modification.</p><p class="p">&nbsp;</p><p class="p">What about
+showing all the elements of a vector? Well, the following code will
+work for vector&lt;int&gt; :</p><p class="p">&nbsp;</p><pre class="pre codeblock"><code>for (int nIndex = 0 ; nIndex &lt; IntVector.size(); nIndex++)
+{
+   cout &lt;&lt; "Element [" &lt;&lt; nIndex &lt;&lt; 
+                    "] is " &lt;&lt; IntVector[nIndex] &lt;&lt; "\n";
+}</code></pre><p class="p">Nothing important to explain here, until I explicate
+the flaws with this type of collection-iteration code. Anyway, we
+can utilize function template feature to write-up a function that
+can display any type of vector. Here it is:</p><pre class="pre codeblock"><code>template&lt;typename VUType&gt;  // Vector's Underlying type!
+void DisplayVector(const std::vector&lt;VUType&gt;&amp; lcVector)
+{
+   for (int nIndex = 0 ; nIndex &lt; lcVector.size(); nIndex++)
+   {
+      cout &lt;&lt; "Element [" &lt;&lt; nIndex &lt;&lt; "] is " &lt;&lt; lcVector[nIndex] &lt;&lt; "\n";
+   }
+}</code></pre><p class="p">Now this templated vector-iteration code can display
+any vector - vector&lt;float&gt;, vector&lt;string&gt; or vector&lt;Currency&gt;,
+as long as cout can display the type, or the underlying type can make
+it cout-able. Please understand the bold-marked content yourself!</p><p class="p">&nbsp;</p><p class="p">Following code is added only for better grip and
+understanding.</p><p class="p">&nbsp;</p><pre class="pre codeblock"><code>...
+IntVector.push_back(44);
+IntVector.push_back(60);
+IntVector.push_back(79);
+ 
+DisplayVector(IntVector);  // DisplayVector&lt;int&gt;(const vector&lt;int&gt;&amp;);</code></pre><p class="p">&nbsp;</p><p class="p">Would the implementation of DisplayVector work for
+all type containers, like sets and maps? It won't! I will cover up
+it soon.</p><p class="p">&nbsp;</p><p class="p">Another container in STL is set. A set&lt;&gt;
+would store only unique elements of type T. You need to include &lt;set&gt;
+header to use it. An example:</p><p class="p">&nbsp;</p><pre class="pre codeblock"><code>std::set&lt;int&gt; IntSet;
+
+IntSet.insert(16);
+IntSet.insert(32);
+IntSet.insert(16);
+IntSet.insert(64);
+
+cout &lt;&lt; IntSet.size();</code></pre><p class="p">Usage is very similar to
+vector, except that you need to use insert method. Reason is simple
+and justified: New element may be placed anywhere in set, not just
+at the end - and you can't force an element to be inserted at end.</p><p class="p">&nbsp;</p><p class="p">The output of this code snipped will be 3, and not
+4. Value 16 is being inserted twice, and set will ignore the second
+insertion request. Only 16, 32 and 64 would exist in IntSet.</p><p class="p">&nbsp;</p><p class="p">Well, this article is not about STL, but about templates.
+I briefed about set class also for a reason I am going to explain.
+You may find relevant documentation, articles, sample code etc on
+the net for STL. Use following keywords to search your favorites:
+vector, map, set, multimap, unordred_map, count_if, make_pair, tuple,
+for_each etc.</p><p class="p">&nbsp;</p><p class="p">Let me bring attention to the subject
+I have to elaborate.</p><p class="p">&nbsp;</p><p class="p">How would you iterate through
+all elements of a set ? Following code is not going to work for set.</p><p class="p">&nbsp;</p><pre class="pre codeblock"><code>for (int nIndex = 0; nIndex &lt; IntSet.size(); nIndex)
+{
+   cout &lt;&lt; IntSet[nIndex];  // ERROR!
+}</code></pre><p class="p">Unlike vector class, set does not define operator[].
+You cannot access any element based on its index - the index doesn't
+exist for set. The order of elements in set are ascending: from smaller
+to larger. There exist weak-strict ordering, comparer class etc, but
+lets consider his (ascending) as default behavior for the subject
+in hand.</p><p class="p">&nbsp;</p><p class="p">So, at some point, if elements of set&lt;int&gt;
+are (40,60,80), and later you insert 70, the sequence of elements
+would become (40, 60, 70, 80). Therefore, logically, index is inappropriate
+for set.</p><p class="p">&nbsp;</p><p class="p">And here comes another important facet
+of STL: Iterators. All container classes do have support for iterators,
+so that elements of collection can be iterated through. Different
+kind of iterators are represented by various classes. First let me
+present you a sample code to iterator a standard-array.</p><p class="p">&nbsp;</p><pre class="pre codeblock"><code>int IntArray[10] = {1,4,8,9,12,12,55,8,9};
+ 
+for ( int* pDummyIterator = &amp;IntArray[0]; // BEGIN 
+      pDummyIterator &lt;= &amp;IntArray[9];   // Till LAST element
+      pDummyIterator++)
+{
+    cout &lt;&lt; *pDummyIterator &lt;&lt; " ";
+}</code></pre><p class="p">Using simple pointer arithmetic, the code is displaying
+values of all elements of array. Similarly, iterators can be used
+to iterate a vector:</p><p class="p">&nbsp;</p><pre class="pre codeblock"><code>vector&lt;int&gt;::iterator lcIter;
+
+for (lcIter = IntVector.begin(); 
+     lcIter != IntVector.end(); 
+     ++lcIter)
+{
+    cout &lt;&lt; (*lcIter);
+}</code></pre><p class="p"> Carefully understand about the bold-marked content:</p><p class="p">iterator is a class. Specifically a typedef inside vector&lt;int&gt;.
+Thus, a variable of type vector&lt;int&gt;::iterator may only iterate
+a vector&lt;int&gt;, and not vector&lt;float&gt; or set&lt;int&gt;. How exactly
+iterator is typedef'd, shouldn't matter you or any STL programmer.</p><p class="p">begin and end are methods that return iterator of same type. An
+instance of vector&lt;Currency&gt; would return vector&lt;Currency&gt;::iterator,
+when you invoke begin or end on it.</p><p class="p">begin returns an iterator
+that points to the first element of container. Think it of as &amp;IntArray[0].</p><p class="p">Method end returns an iterator that points to the next-to-last
+element of container. Think it of as &amp;IntArray[SIZE], where IntArray
+is of SIZE size. You know that, for size 10 array, &amp;IntArray[10]
+would be (logically) pointing to next element of &amp;IntArray[9].</p><p class="p">The expression ++lcIter calls operator++ on iterator object, which
+moves the iterator to point to the next element of collection. It
+is very much same as ++ptr pointer arithmetic,.</p><p class="p">The loop starts
+with iterator pointing to begin, and goes till it points to end.</p><p class="p">The expression *lcIter calls the unary operator* on iterator,
+which returns the reference/const-reference of element currently pointed.
+For example above, it simply returns int.</p><p class="p">You may not be able
+to grasp this complex iterator concept, so easily, so soon. You should
+regularly play with iterators - let the compiler bring you some weird
+errors, let your program crash down or disturb your debugger and cause
+assertions. More you bring these errors and assertions, the more you
+learn!</p><p class="p">&nbsp;</p><p class="p">Exactly the same way, you may iterate a
+set:</p><p class="p">&nbsp;</p><pre class="pre codeblock"><code>set&lt;int&gt;::iterator lcIter;
+for (lcIter = IntSet.begin(); 
+     lcIter != IntSet.end(); 
+     ++lcIter)
+{
+   cout &lt;&lt; (*lcIter);
+}</code></pre><p class="p">If I ask you to write up iteration-loop for:</p><pre class="pre codeblock"><code>vector&lt;float&gt;
+set&lt;Currency&gt;
+vector&lt;Pair&gt;</code></pre><p class="p">Soon you would realize you need to change
+only container-type and/or the underlying type and rest of the code
+remain same! You may tempt to write a function template, which would
+take the container and the underlying-type as its template type arguments.
+Something like:</p><p class="p">&nbsp;</p><pre class="pre codeblock"><code>template&lt;typename Container, typename Type&gt;
+void DisplayCollection(const Container&lt;Type&gt;&amp; lcContainer)
+{
+   Container&lt;Type&gt;::iterator lcIter;
+   for (lcIter = lcContainer.begin();  lcIter != lcContainer.end();  ++lcIter)
+   {
+     cout &lt;&lt; (*lcIter);
+   } 
+}</code></pre><p class="p">Seems logically correct, but that's not going to compile.
+Similar to DisplayVector function, this function attempts to take
+lcContainer argument, having Container as collection-class, and its
+underlying type as Type. It won't be easy to understand why it won't
+work, but it's not that much odd to understand why it won't work.</p><p class="p">&nbsp;</p><p class="p">The syntax of DisplayVector was:</p><p class="p">&nbsp;</p><pre class="pre codeblock"><code>template&lt;typename VUType&gt;
+void DisplayVector(const std::vector&lt;VUType&gt;&amp; lcVector)</code></pre><p class="p">Where the actual type being passed to function is complete expression:
+vector&lt;VUType&gt;&amp;. The type being passed was not just: vector&amp;</p><p class="p">&nbsp;</p><p class="p">The syntax of DisplayCollection is something like:</p><p class="p">&nbsp;</p><pre class="pre codeblock"><code>template&lt;typename Container, typename Type&gt;
+void DisplayCollection(const Container&lt;Type&gt;&amp; lcContainer)</code></pre><p class="p">Here the type being passed to function (not template) is complete:
+Container&lt;Type&gt;&amp;. Suppose if could call it as:</p><p class="p">&nbsp;</p><pre class="pre codeblock"><code>vector&lt;float&gt; FloatVector;</code></pre><p class="p">&nbsp;</p><p class="p">The (first) type being passed to template is just: vector, which
+is not a complete type. Some specialization of vector (like vector&lt;float&gt;)
+would make it qualified for being a complete type. Since first template
+(type) argument cannot be classified as type, we cannot use it that
+way. Though there exist techniques to pass class-template itself (like
+just vector), and make it complete type based on other arguments/aspects.
+Anyway, here is modified DisplayCollection prototype:</p><p class="p">&nbsp;</p><pre class="pre codeblock"><code>template&lt;typename Container&gt;
+void DisplayCollection(const Container&amp; lcContainer);</code></pre><p class="p">Yes, just that simple! But the implementation now demands some
+changes. So, lets implement it gradually.</p><p class="p">&nbsp;</p><pre class="pre codeblock"><code>template&lt;typename Container&gt;
+void DisplayCollection(const Container&amp; lcContainer)
+{
+   cout &lt;&lt; "Items in collection: " &lt;&lt; lcContainer.size() &lt;&lt; "\n";
+}</code></pre><p class="p">All STL containers do have size method implemented,
+and they do return size_t. So, irrespective which container is being
+passed (set, map, deque etc) - the method size will work.</p><p class="p">&nbsp;</p><p class="p">The iteration of collection:</p><p class="p">&nbsp;</p><pre class="pre codeblock"><code>Container::const_iterator lcIter;
+
+for (lcIter = lcContainer.begin(); 
+     lcIter != lcContainer.end(); 
+     ++lcIter)
+{
+    cout &lt;&lt; (*lcIter);
+}</code></pre><p class="p">Few things to learn:</p><p class="p">&nbsp;</p><p class="p">Since the
+argument (lcContainer) is being passed with const qualifier, it is
+rendered as non-mutable object in this function. It means you cannot
+insert, delete or (re)assign anything to the container. If a vector
+is being passed, lcContainer.push_back would be an error, since object
+is const. Further it means that you cannot iterate it using mutable
+iterator.</p><p class="p">&nbsp;</p><p class="p">Using iterator class, you can change
+the contents. It is thus referred as mutable-iterator.</p><p class="p">Use const_iterator
+when you don't need to change, or you cannot use mutable-iterator.
+When object/container itself is const (non-mutable), you must use
+const_iterator.</p><p class="p">Important! An object of const_iterator is not
+same as constant object of iterator.</p><p class="p">That means: const_iterator
+!= const iterator - note the space!</p><p class="p">How the compiler would return
+iterator or const_iterator, when I am calling same methods: begin
+and end?</p><p class="p">&nbsp;</p><p class="p">Valid question, and simple answer:</p><p class="p">&nbsp;</p><pre class="pre codeblock"><code>class SomeContainerClass
+{
+   iterator begin();
+   iterator end();
+ 
+   const_iterator begin() const;
+   const_iterator end() const;
+};</code></pre><p class="p">When object is const, the const version of method
+is called - simple C++ rule!</p><p class="p">&nbsp;</p><p class="p">Now, one more important
+point to consider. The code given above, will not compile on all compilers
+(specifically the following line):</p><p class="p">&nbsp;</p><pre class="pre codeblock"><code>Container::const_iterator lcIter</code></pre><p class="p">Visual C++ 2008 compiles it fine, but GCC reports following error:</p><p class="p">error: need 'typename' before 'Container::const_iterator' because
+'Container' is a dependent scope</p><p class="p">To understand the reasoning,
+consider following class:</p><p class="p">&nbsp;</p><pre class="pre codeblock"><code>class TypeNameTest
+{
+public:
+   static int IteratorCount;
+   typedef long IteratorCounter;
+};
+
+int main()
+{
+   TypeNameTest::IteratorCounter = 10; // ERROR
+   TypeNameTest::IteratorCount var;    //ERROR
+}</code></pre><p class="p">Using ClassName::Symbol notation, we can access both
+typedef symbol and and statically defined symbol. For simple classes,
+the compiler is able to distinguish, the programmer is able to resolve
+and there is no potential ambiguity.</p><p class="p">&nbsp;</p><p class="p">But in case
+of template functions, where the the underlying type itself is dependent
+on template type argument (like const_iterator being based on Container),
+the compiler must be told that specified symbol is actually a type,
+and not a static symbol of given class. And there we use typename
+keyword to classify the symbol as a type.</p><p class="p">&nbsp;</p><p class="p">Therefore
+we should (must) use typename keyword:</p><p class="p">&nbsp;</p><pre class="pre codeblock"><code>typename Container::const_iterator lcIter; // const_iterator is a type, not static symbol in Container</code></pre><p class="p">Why can't we use class keyword instead, and why does VC++ compile
+it fine?</p><p class="p">Ah! Compiler vendors and their tendency to follow some
+non-standards. VC++ doesn't need typename, GCC needs it (and tells
+you!). GCC will even accept class in-place of typename, VC will not
+accept class. But thankfully, both adhere to the standards and do
+accept typename keyword!</p><p class="p">&nbsp;</p><p class="p">The new C++ standard (C++11)
+brings up some respite, specially while working with STL, templates
+and complicated iterator definitions. The auto keyword. The iteration
+loop can be modified as:</p><p class="p">&nbsp;</p><pre class="pre codeblock"><code>for (auto lcIter = lcContainer.begin();  lcIter != lcContainer.end();  ++lcIter)
+{
+   cout &lt;&lt; (*lcIter);
+}</code></pre><p class="p">The actual type of lcIter will be determined automatically,
+at compile-time. You may read about auto keyword on the Internet,
+your favorite author's book or may refer my article.</p></section>
+<section class="section"><h2 class="title sectiontitle">模板和库文件开发</h2><p class="p">As you know that the template code
+doesn't directly go to object file, it gets compiled (second phase
+compilation) only when instantiated with appropriate template parameters.
+Since the actual code generation (i.e. specialization) happens only
+by instantiating a function/class template with appropriate template-arguments,
+the function/class template cannot be exported through a library.</p><p class="p">&nbsp;</p><p class="p">When you attempt to export a function template, such
+as DisplayCollection, through a library (.LIB, .DLL or .SO), the compiler
+and linker may depict that it exported the given function. Linker
+may throw a warning or error that some symbols (e.g. DisplayCollection)
+was not exported or not found. Since there were no call to function
+template(s) in the library itself, no actual code was generated, and
+thus nothing actually was exported.</p><p class="p">&nbsp;</p><p class="p">When you later
+use that library in other project, you would get set of linker errors
+that some symbols were not found. To recollect this problem, read
+this section again.</p><p class="p">&nbsp;</p><p class="p">It is therefore not possible
+to export template code from a library, without disclosing the source
+code, and delivering it (generally via header-files). Though, it is
+very much possible to expose source-code for only the templated-stuff,
+and not the core library stuff, which may be playing with void-pointers,
+and sizeof keyword. The core library may actually be made private
+by exporting it from the library, since core stuff may not be template-based.</p><p class="p">&nbsp;</p><p class="p">External Templates, a feature still pending to be
+part of C++ standard, is not supported by major compilers.</p><p class="p">&nbsp;</p><p class="p">Some libraries may export entire class for particular template
+arguments using Explicit Instantiation feature.</p></section>
+<section class="section"><h2 class="title sectiontitle">显式实例化</h2><p class="p">This feature is particularly important
+if you are exposing your template-based library, either by header-only
+implementation, or through wrapper-mode implementation (hiding core,
+but exposing features via templates). With Explicit Instantiation,
+you can instruct the compiler (and thus, the linker) to generate the
+code for specific template arguments. It means you are demanding a
+specialization of template, without actually instantiating it in your
+code. Consider a simple example.</p><p class="p">&nbsp;</p><pre class="pre codeblock"><code>template class Pair&lt;int, int&gt;;</code></pre><p class="p">This statement simply asks the compiler to instantiate Pair with
+&lt;int,int&gt; arguments for all method of Pair class. That means, compiler
+will generate code for:</p><p class="p">&nbsp;</p><p class="p">Data-members - first and
+second.</p><p class="p">All three constructors (as mentioned in this and previous
+article).</p><p class="p">Operators &gt; and == (as mentioned).</p><p class="p">To verify
+this, you may look at the generated binary (executable, DLL/SO), using
+appropriate tool On Windows, you may use Dependency Walker to see
+if code was generated or not. A simpler method exist to assert if
+compiler/linker are actually performing explicit instantiation - Let
+the compiler break on failure. For example:</p><p class="p">&nbsp;</p><pre class="pre codeblock"><code>template struct Pair&lt;Currency, int&gt;;</code></pre><p class="p">Would make
+the type of first as Currency. Compiler will attempt to generate code
+for all methods, and would fail on operator ==, saying that it (Currency)
+doesn't have operator defined:</p><p class="p">&nbsp;</p><pre class="pre codeblock"><code>bool operator == (const Pair&lt;Type1, Type2&gt;&amp; Other) const
+{
+ return first == Other.first &amp;&amp;  // ERROR Currency.operator== isn't available.
+        second == Other.second;
+}</code></pre><p class="p">It fails on this method, just because it comes before
+any other method that fails (before operator&lt; in this case).</p><p class="p">&nbsp;</p><p class="p">This was just the example to check if compiler is
+actually generating code for all methods or not. But the main question
+is: Why would you want to utilize this feature?</p><p class="p">&nbsp;</p><p class="p">For example, you expose a string class (like std::string, or CString).
+And that class is on top of a template argument - the character type
+- ANSI or Unicode. A very simple definition of String class template:</p><p class="p">&nbsp;</p><pre class="pre codeblock"><code>template&lt;typename CharType&gt;
+class String
+{
+    CharType m_str[1024];
+public:
+    CharType operator[](size_t nIndex)
+    {
+       return m_str[nIndex];
+    }
+ 
+    size_t GetLength() const
+    {
+        size_t nIndex = 0;
+        while(m_str[nIndex++]);
+
+        return nIndex;
+    }
+};</code></pre><p class="p">And a pretty simple usage example:</p><pre class="pre codeblock"><code>String&lt;char&gt; str;
+str.GetLength();</code></pre><p class="p">And you know that it will produce only
+following:</p><p class="p">&nbsp;</p><pre class="pre codeblock"><code>String&lt;char&gt;::m_str
+String&lt;char&gt;::String - default compiler provided constructor.
+String&lt;char&gt;::GetLength method</code></pre><p class="p">If you were to put
+String into some library, you may put entire String class into header,
+and ship the header. Here is question is not at all about private-stuff,
+encapsulation etc, it about unnecessary increase in size of different
+executables produced.</p><p class="p">&nbsp;</p><p class="p">There would be thousands
+of binaries (DLLs, SOs, executables), and almost all of them would
+be using String class. Wouldn't it be better if you could pack them
+into one library? Yes, I mean the non-templated traditional approach?</p><p class="p">&nbsp;</p><p class="p">To do so, you just ask explicit instantiation for
+all types you are supposed to export through library.</p><p class="p">&nbsp;</p><pre class="pre codeblock"><code>template class String&lt;char&gt;;
+template class String&lt;wchar_t&gt;;</code></pre><p class="p">For programmer's
+convinience, you may typedef different String types. The std::string
+type is, in fact, typedef'd and exported in this manner:</p><p class="p">&nbsp;</p><pre class="pre codeblock"><code>typedef basic_string&lt;char, ... &gt; string;
+typedef basic_string&lt;wchar_t, ... &gt; wstring;
+
+// Explicit Instantiation
+template class /*ATTR*/ basic_string&lt;char, ...&gt;;
+template class /*ATTR*/ basic_string&lt;wchar_t, ... &gt;;</code></pre><p class="p">The base class is basic_string, which is class template. Few arguments
+not shown here only for simplicity, and vendors may have different
+signature of reset of template arguments (for basic_string). Second
+group shows explicit instantiations for these types. The commented
+part, /*ATTR*/ - would depend on compiler vendor. It may be an expression
+that these instantiations do actually go in library being compiled,
+or are only acting as header-only. In VC++ implementation, these two
+instantiations are actually in a DLL.</p></section>
+<section class="section"><h2 class="title sectiontitle">总结</h2></section>
+<section class="section"><p class="p">一般类的定义和实现组织方式：将定义放在.h文件中，实现放在.cpp文件中。</p><p class="p">&nbsp;</p><p class="p">&nbsp;&nbsp;&nbsp;&nbsp; C++中的模板是C++在发展过程中新添的新生力量，template的声明和实现不同于一般的类定义与实现和函数的声明与定义，故在含有模板的C++程序的组织方式就不同于一般的定义与实现相分离的方式。</p><p class="p">&nbsp;</p><p class="p">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 我曾经遇到的问题：&nbsp; 当在GUN中编译时老是无法通过，错误信息大概是无法找到函数。然后将程序搬到VC6下编译，同样出现连接错误。</p><p class="p">&nbsp;</p><p class="p">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 问题原因：</p><p class="p">&nbsp;</p><p class="p">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; C++标准中说明：在使用模板时C++支持两种程序组织方式：包含模式与分离模式。包含模式也就是将类的定义与实现同放在.h
+文件中，分离模式也就是将定义与实现分离，也就是我采用的方式。但很多编译器不支持分离模式，只支持包含模式。</p><p class="p">&nbsp;</p><p class="p">&nbsp;&nbsp;&nbsp; 通常采用的解决方法：</p><p class="p">&nbsp;</p><p class="p">&nbsp;&nbsp;&nbsp;
+1. 干脆直接使用包含模式，即将模板类的定义与实现同写在.h文件中。（我不太喜欢这种写法）</p><p class="p">&nbsp;</p><p class="p">&nbsp;&nbsp;&nbsp;
+2. 使用分离模式，但是在使用时不引用模板类的头文件，而是引用模板类的实现文件。（不太符合一般习惯）</p><p class="p">&nbsp;</p><p class="p">&nbsp;&nbsp;&nbsp; 3. 使用分离模式，在模板类头文件中引用实现文件。（这个方法我在VC6和Dev C++下都没有成功，不知道是哪里出了问题）</p><p class="p">&nbsp;</p><p class="p">&nbsp;&nbsp;&nbsp; 4. 使用分离模式，在模板类中头文件中实例化一个你需要对象。（十分笨拙的方法，不利于使用）</p><p class="p">&nbsp;</p><p class="p">&nbsp;&nbsp;&nbsp; 5. 使用分离模式，但是另外定义.h文件，在这个文件中引用模板的头文件和实现文件，在使用时引用这个另外定义的.h文件。（觉得这个方法还不错，不过也不知道有什么缺点）[ZengSai：这样做的缺点是编译文件会变得很大，显然要降低编译和链接速度。]</p></section>
+<section class="section"><h2 class="title sectiontitle">参见</h2><ol class="ol">
+<li class="li"><p class="p"></p></li>
+<li class="li"><p class="p">模板文章</p></li>
+<li class="li"><p class="p"><a class="xref" href="http://www.codeproject.com/Articles/257589/An-Idiots-Guide-to-Cplusplus-Templates-Part" target="_blank" rel="external noopener">http://www.codeproject.com/Articles/257589/An-Idiots-Guide-to-Cplusplus-Templates-Part</a></p></li>
+<li class="li"><p class="p"><a class="xref" href="http://www.codeproject.com/Articles/268849/An-Idiots-Guide-to-Cplusplus-Templates-Part" target="_blank" rel="external noopener">http://www.codeproject.com/Articles/268849/An-Idiots-Guide-to-Cplusplus-Templates-Part</a></p></li>
+<li class="li"><p class="p"><a class="xref" href="https://blog.csdn.net/LostSpeed/article/details/8301526" target="_blank" rel="external noopener">c++模板的应用</a></p></li>
+<li class="li"><p class="p"><a class="xref" href="http://www.runoob.com/w3cnote/c-templates-detail.html" target="_blank" rel="external noopener">C++ 模板详解</a></p></li>
+<li class="li"><p class="p">7<a class="xref" href="http://c.biancheng.net/cpp/biancheng/cpp/rumen_14/" target="_blank" rel="external noopener"><strong class="ph b">C++模板</strong></a></p><p class="p">7.1&nbsp;<a class="xref" href="http://c.biancheng.net/cpp/biancheng/view/136.html" target="_blank" rel="external noopener"><strong class="ph b">C++函数模板</strong></a></p><p class="p">7.2&nbsp;<a class="xref" href="http://c.biancheng.net/cpp/biancheng/view/2992.html" target="_blank" rel="external noopener"><strong class="ph b">C++类模板</strong></a></p><p class="p">7.3&nbsp;<a class="xref" href="http://c.biancheng.net/cpp/biancheng/view/3275.html" target="_blank" rel="external noopener"><strong class="ph b">大话C++模板编程（透彻）</strong></a></p></li>
+<li class="li"><p class="p"><a class="xref" href="https://www.codeproject.com/Articles/2798/Practical-uses-for-C-templates" target="_blank" rel="external noopener">Practical uses for C++ templates - CodeProject</a></p></li>
+<li class="li"><p class="p"><a class="xref" href="https://www.codeproject.com/Articles/351/Templates-and-MFC" target="_blank" rel="external noopener">Templates and MFC - CodeProject</a></p></li>
+</ol><pre class="pre codeblock"><code></code></pre><ul class="ul">
+<li class="li"><p class="p">模板文章</p><ul class="ul">
+<li class="li"><p class="p"><a class="xref" href="http://www.codeproject.com/Articles/257589/An-Idiots-Guide-to-Cplusplus-Templates-Part" target="_blank" rel="external noopener">http://www.codeproject.com/Articles/257589/An-Idiots-Guide-to-Cplusplus-Templates-Part</a></p></li>
+<li class="li"><p class="p"><a class="xref" href="http://www.codeproject.com/Articles/268849/An-Idiots-Guide-to-Cplusplus-Templates-Part" target="_blank" rel="external noopener">http://www.codeproject.com/Articles/268849/An-Idiots-Guide-to-Cplusplus-Templates-Part</a></p></li>
+</ul></li>
+<li class="li"><p class="p">实现一个单例模板</p></li>
+<li class="li"><p class="p">template&lt; classFunction, class... Args &gt; explicitThread(Function&amp;&amp;
+f, Args&amp;&amp;... args);</p></li>
+<li class="li"><p class="p">成员函数模板(类模板中的成员函数也是模板)&nbsp;<a class="xref" href="http://en.cppreference.com/w/cpp/language/member_template" target="_blank" rel="external noopener">http://en.cppreference.com/w/cpp/language/member_template</a></p></li>
+</ul><p class="p">template&lt;typename T1&gt; struct string{// member template
+functiontemplate&lt;typenameT2&gt;int compare(constT2&amp;);// constructors
+can be templates tootemplate&lt;typenameT2&gt;string(const std::basic_string&lt;T2&gt;&amp;
+s) { /*...*/ } }; // out of class definition of string&lt;T1&gt;::compare&lt;T2&gt;
+ template&lt;typename T1&gt; // for the enclosing class template template&lt;typename
+T2&gt; // for the member template int string&lt;T1&gt;::compare(const T2&amp;
+s) { /* ... */ }</p><p class="p">模板参数类型声明为class... Args怎么用？</p><ul class="ul">
+<li class="li"><p class="p">实现一个unique_ptr,unique_ptr的Deleter 模板参数实现，如何自定义Deleter</p></li>
+<li class="li"><p class="p">noncopyable模板实现</p></li>
+</ul></section>
+</div>
+<nav role="navigation" class="related-links"><div class="familylinks"><div class="parentlink"><strong>父主题：</strong> <a class="link" href="CPP%E5%BC%80%E5%8F%91.html">C++开发</a></div></div></nav></article></main></body></html>

@@ -1,0 +1,80 @@
+<!DOCTYPE html
+  SYSTEM "about:legacy-compat">
+<html lang="zh-cn"><head><meta charset="UTF-8"><meta name="copyright" content="(C) 版权 2024"><meta name="generator" content="DITA-OT"><meta name="description" content="T4模板作为VS2008的一部分出现，他以<# #&gt; 、<#= #&gt;接近于ASP.NET的语言在模板中插入一段段的动态代码块，可以像asp或者ASP.NET一样简单的更让人贴切，相对于CodeDom就更简洁，但是没有了语言层次的抽象，不具有语言独立性，我们必须为同一个功能的模板在不同的语言上写不同的模板，但是在开发中往往c#模板就足够了，以及更简单化所以得到了更多人的青睐。"><title>T4模板</title><link rel="stylesheet" type="text/css" href="../../commonltr.css">
+<link rel="stylesheet" type="text/css" href="../../common-extended.css"></head><body id="T4模板-85226F44"><main role="main"><article role="article" aria-labelledby="ariaid-title1">
+<h1 class="title topictitle1" id="ariaid-title1">T4模板</h1>
+
+
+<div class="body conbody"><p class="shortdesc">T4模板作为VS2008的一部分出现，他以&lt;# #&gt; 、&lt;#= #&gt;接近于ASP.NET的语言在模板中插入一段段的动态代码块，可以像asp或者ASP.NET一样简单的更让人贴切，相对于CodeDom就更简洁，但是没有了语言层次的抽象，不具有语言独立性，我们必须为同一个功能的模板在不同的语言上写不同的模板，但是在开发中往往c#模板就足够了，以及更简单化所以得到了更多人的青睐。</p>
+<p class="p"></p>
+<p class="p">T4优势：</p>
+<p class="p">1：更加贴切：采用的是类似于ASP、ASP.NET的语言块，是的我们的开发更贴切，采用模板方式更加简洁，快速。</p>
+<p class="p">2：可维护性：由于是基于文件，不像codedom编译成为dll方式，我们可以随时修改Template文件、重构。</p>
+<section class="section"><h2 class="title sectiontitle">T4最佳实践</h2><p class="p">IMHO the two most important concepts
+when writing complex templates is</p><ol class="ol">
+<li class="li"><p class="p"><strong class="ph b">Separating the model and the view</strong>&nbsp;- This helps
+keeping the template logic to a minimum (often a cause of maintenance
+problem). Personally I don't think this requires a framework, it only
+requires that you do it.</p></li>
+<li class="li"><p class="p"><strong class="ph b">Partial is your friend</strong>&nbsp;- I use T4 in general to
+generate skeleton code from the model. Specific behavior might not
+be worth the effort to put in the model, better often to allow that
+behavior come in through the use of partial classes or methods.</p></li>
+</ol><p class="p">Not as important but nice</p><ol class="ol">
+<li class="li"><p class="p"><strong class="ph b">Make the code searchable</strong>&nbsp;- I don't rely on T4 Addons
+because I find none of them good enough, with the lack of IntelliSense
+in order to navigate the code I have to make the code searchable.
+It can be as simple as instead of calling a Column property Name,
+I call it ColumnName.</p></li>
+<li class="li"><p class="p"><strong class="ph b">Insert "tags" in the output</strong>&nbsp;- Makes it easier finding
+the code that generated that part of the output.</p></li>
+</ol><p class="p">Example separating model/view:</p><pre class="pre codeblock"><code>&lt;#
+    // Model for Dependency Pooperties
+    Model = new []
+    {
+        new ClassDefinition ("MyDataGrid")
+            {
+                P ("CultureInfo"            , "CultureInfo"),
+                P ("Pen"                    , "CellBorderPen"),
+                P ("IEnumerable&lt;object&gt;"    , "Rows"),
+                C ("WColumnDefinition"      , "Columns"),
+            },
+    };
+#&gt;
+// Include the view
+&lt;#@ include file="..\T4\DependencyProperties.ttinclude" #&gt;</code></pre><p class="p">The view then iterates over the model and generate the dependency
+properties.</p><p class="p">The behavior of the dependency properties are then
+implemented as partial methods</p><pre class="pre codeblock"><code>partial void Changed_Columns(
+        ObservableCollection&lt;WColumnDefinition&gt; oldValue, 
+        ObservableCollection&lt;WColumnDefinition&gt; newValue
+        )
+    {
+        HookUpColumns(oldValue, null);
+        HookUpColumns(newValue, this);            
+    }</code></pre><p class="p">Note that putting this specific behavior into
+the model would significantly complicate the model.</p><p class="p">Finally;
+it takes time even for a competent programmer to write metaprograms
+competently. It took me several attempts before I arrived at a style
+which I believe is maintainable but for me it was worth the effort
+as I am able to ship quality faster.</p><p class="p">I hope this helps...</p><p class="p">PS. I don't Think anyone would argue T4 is ever elegant but it's
+darn useful nonetheless.</p></section>
+<section class="section"><h2 class="title sectiontitle">T4 toolbox</h2><strong class="ph b">T4 ToolBox是</strong>一个CodePlex上开源的工具，它包含一些可以直接使用的代码生成器，比如Enum
+SQL View、AzMan wrapper、LINQ to SQL classes、LINQ to SQL schema和Entity
+Framework DAL等。</section>
+<section class="section"><h2 class="title sectiontitle">参见</h2><ul class="ul">
+<li class="li"><p class="p"><a class="xref" href="https://damieng.com/blog/2009/11/06/multiple-outputs-from-t4-made-easy-revisited" target="_blank" rel="external noopener">Multiple outputs from T4 made easy – revisited</a></p></li>
+<li class="li"><p class="p"><a class="xref" href="http://www.cnblogs.com/K_tommy/archive/2013/04/06/T4.html" target="_blank" rel="external noopener">使用T4模板批量生成代码</a></p></li>
+<li class="li"><p class="p"><a class="xref" href="https://www.codeproject.com/Articles/42036/Project-Metadata-Generation-using-T" target="_blank" rel="external noopener">Project Metadata Generation using T4 </a></p></li>
+<li class="li"><p class="p"><a class="xref" href="https://www.codeproject.com/articles/1081015/autogenerate-datacontracts-for-wcf-from-poco-class" target="_blank" rel="external noopener"> Autogenerate DataContracts for WCF from POCO Classes</a></p></li>
+<li class="li"><p class="p"><a class="xref" href="https://www.codeproject.com/articles/417283/creating-enums-from-database-lookup-tables" target="_blank" rel="external noopener">Creating Enums from Database Lookup Tables</a></p></li>
+<li class="li"><p class="p"><a class="xref" href="http://www.developerhandbook.com/c-sharp/t4-templates-for-lookup-tables/" target="_blank" rel="external noopener">Use T4 Templates to create enumerations from your
+database lookup tables</a></p></li>
+<li class="li"><p class="p"><a class="xref" href="http://idisposable.co.uk/2010/03/using-t4-to-generate-enums-from-database-lookup-tables/" target="_blank" rel="external noopener">Using T4 to generate enums from database lookup tables</a></p></li>
+<li class="li"><p class="p"><a class="xref" href="http://earlz.net/view/2012/11/21/0346/how-to-unit-test-t4-code-generators" target="_blank" rel="external noopener">How to unit test T4 code generators</a></p></li>
+<li class="li"><p class="p"><a class="xref" href="https://docs.microsoft.com/en-us/archive/msdn-magazine/2012/may/t4-templates-managing-complexity-in-t4-code-generation-solutions" target="_blank" rel="external noopener">T4 Templates - Managing Complexity in T4 Code-Generation
+Solutions</a></p>：管理T4模板的大型复杂的解决方案</li>
+<li class="li"><p class="p"><a class="xref" href="https://stackoverflow.com/questions/13116123/is-there-anything-out-there-to-make-t4-code-more-clean" target="_blank" rel="external noopener">Is there anything out there to make T4 code more…
+clean?</a></p></li>
+</ul></section>
+</div>
+<nav role="navigation" class="related-links"><ul class="ullinks"><li class="link ulchildlink"><strong><a href="%E8%B0%83%E7%94%A8T4%E8%BF%90%E8%A1%8C%E6%97%B6%E6%96%87%E6%9C%AC%E6%A8%A1%E6%9D%BF.html">调用T4运行时文本模板</a></strong><br>在C# Console程序中调用T4的运行时文本模板生成代码</li></ul><div class="familylinks"><div class="parentlink"><strong>父主题：</strong> <a class="link" href=".NET%E5%BC%80%E5%8F%91.html">.Net开发</a></div></div></nav></article></main></body></html>

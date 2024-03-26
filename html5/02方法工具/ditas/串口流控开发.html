@@ -1,0 +1,377 @@
+<!DOCTYPE html
+  SYSTEM "about:legacy-compat">
+<html lang="zh-cn"><head><meta charset="UTF-8"><meta name="copyright" content="(C) 版权 2024"><meta name="generator" content="DITA-OT"><meta name="description" content=""><title>串口流控开发</title><link rel="stylesheet" type="text/css" href="../../commonltr.css">
+<link rel="stylesheet" type="text/css" href="../../common-extended.css"></head><body id="串口流控开发-71384678"><main role="main"><article role="article" aria-labelledby="ariaid-title1">
+<h1 class="title topictitle1" id="ariaid-title1">串口流控开发</h1>
+
+
+<div class="body conbody"><p class="shortdesc"></p>
+<section class="section"><p class="p">串口通讯的流控提供了由于某种原因不能进行通讯时阻塞通讯的一种机制。流控可以使数据接收设备在不能接收数据时通知数据发送设备，使其停止发送。
+串口的流控经常采用硬件流控和软件流控两种方式。</p><p class="p">本文将对硬件流控和软件流控进行详细的介绍。在以下的讨论中将计算机简称为数据终端设备（DTE）,通过串行端口与计算机进行数据交换的外设称为数据通讯设备（DCE）。输出流控指
+DTE 输出数据时的流控方式；输入流控指 DTE 输入数据时的流控方式。</p></section>
+<section class="section"><h2 class="title sectiontitle">RS-232C 接口引线以及 DCB 控制结构简介</h2><p class="p"><img class="image" src="../../images/2019-08/rs232_1.png"></p><p class="p">计算机
+9 针 RS-232C 接口引线信号定义、分类及功能如表 1 所示。</p><p class="p">在计算机串口的引线中，除了 TxD、RxD 和信号地其余的控制线不是必需的。DTE
+与 DCE 之间最简单的应用接法，仅需将 DTE 与 DCE 的接收数据引线和发送数据引线交叉连接，信号地相连，其余的控制线均不用。需要硬件流控时可根据需要连接对应的引线。表&nbsp;1&nbsp;&nbsp;&nbsp;
+计算机&nbsp;9 针&nbsp;RS-232C 接口引线信号定义、分类及功能</p><table class="table"><caption></caption><colgroup><col><col><col><col><col></colgroup><tbody class="tbody">
+<tr class="row">
+<td class="entry">引脚号</td>
+<td class="entry">信号名称</td>
+<td class="entry">简称</td>
+<td class="entry">方向</td>
+<td class="entry">信号功能</td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"><p class="p">1</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">数据载波检测&nbsp;</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">DCD</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">DTE←</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">DCE已接收到远程信号</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"><p class="p">2</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">接收数据</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RxD</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">DTE←</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">DTE接收串行信号</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"><p class="p">3</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">发送数据</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">TxD</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">→DCE</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">DTE发送串行信号</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"><p class="p">4</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">数据中断就绪</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">DTR</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">→DCE</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">DTE准备就绪</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"><p class="p">5</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">信号地</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">—</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">—</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">信号地</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"><p class="p">6</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">数传设备就绪&nbsp;</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">DSR</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">DTE←</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">DCE准备就绪</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"><p class="p">7</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">请求发送</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RTS</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">→DCE&nbsp;</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">DTE请求切换到发送方</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"><p class="p">8</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">清除发送</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">CTS</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">DTE←</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">DCE切换到准备接收</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"><p class="p">9</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">振铃指示</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">RI</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">DTE←</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">通知DTE,通信线路已妥</p></td>
+</tr>
+</tbody></table><p class="p">串行通讯程序设计中的重要方面是对串行端口的设置。DCB（Device ControlBlock）结构中定义了</p><p class="p">Windows 平台下串口通信设备的控制设置。串行端口设置就是对 DCB 结构成员进行设置。DCB 结构中的成员可以查看 Microsoft
+Msdn Library。DCB 结构中与硬件流控有关的成员有 fOutxCtsFlow,fOutxDsr-Flow,fDsrSensitivity,fRtsControl,fDtrControl；与软件流控的成员有
+fOut,fInX,XoffChar,XonChar,XoffLim 和 XonLim。当不使用流控时这些成员的值全部为零。</p></section>
+<section class="section"></section>
+<section class="section"><h2 class="title sectiontitle">流控方式分类</h2><ol class="ol">
+<li class="li"><p class="p">硬件流控</p><ol class="ol" type="a">
+<li class="li"><p class="p">RTS/ CTS 方式</p></li>
+<li class="li"><p class="p">DTR/ DSR 方式</p></li>
+</ol></li>
+<li class="li"><p class="p">软件流控</p></li>
+</ol></section>
+<section class="section"><h2 class="title sectiontitle">硬件流控</h2><p class="p">硬件流控使用串行电缆控制线上的电压信号来控制数据的发送和接收。DTE
+和 DCE 在通讯过程中必须使用相同的流控方式。设置 DCB 结构仅仅配置了</p><p class="p">DTE， 必须对 DCE 进行必要的设置以确保
+DTE 和</p><p class="p">DCE 使用相同类型的流控。串口通讯中的硬件流控有两种方式：DTR / DSR 方式和 RTS / CTS
+方式。实际采用的方式和 DCB 结构的初始化有关。DCB结构中fOutxCtsFlow、fOutxDsrFlow、fDsrSensitivty、fRtsCon-</p><p class="p">trol、fDtrControl 几个成员的初始值很关键。不同的值代表不同的流控。</p><p class="p">1) RTS/ CTS 方式。与这种方式有关的
+DCB结构成员为 fOutxCtsFlow 和 fRtsControl。在输入流控中，</p><p class="p">DTE 设置 RTS 控制线为高电平表示
+DTE 准备就绪； 设置 RTS 控制线为低电平表示 DTE 尚未准备就绪。在输出流控中，DCE 设置 CTS 控制线为高电平，表示</p><p class="p">DCE 准备好可以接收数据；置 CTS 控制线为低电平， 表示 DCE 不能接收数据。</p><p class="p">DCB 结构的成员 fRtsControl
+指定 RTS 输入流控。 它可能的取值为 RTS_CONTROL_DISABLE、RTS_CONTROL_ENABLE、RTS_CONTROL_HAND-SHAKE。该成员默认值为
+RTS_CONTROL_HAND-SHAKE。</p><p class="p">当设置它的值为 RTS_CONTROL_HANDSHAKE 时，输入流控过程如下：如接收缓冲区有足够的空间接
+收数据（至少一半的缓冲区是空的）置 RTS 为高，指定DCE 可以开始传输数据；如果接收缓冲区没有足够空间（少于 1 / 4 的缓冲区是空的）置低
+RTS，指定 DCE 阻塞数据的传输。当设置fRtsControl 的值为RTS_CON-TROL_DISABLE、RTS_CONTROL_ENABLE
+时，应用程序可以自由设置 RTS 的状态，在这种情况下，该控制线的状态不影响接收。DCE 在 RTS 为低时阻塞数据的传输；RTS
+为高时恢复数据的传输。</p><p class="p">DCB 结构的成员 fOutxCtsFlow 指定在输出流控中是否监控 CTS 控制线的状态。如果该成员设置为TRUE,而
+CTS 控制线为低，DTE 输出将被阻塞直到该控制线变为高如果该成员被置为 FALSE,CTS 控制线状态不影响数据的传输。CTS
+的状态由 DCE 控制， DTE 仅仅监控该控制线状态，而不能改变它的状态。</p><p class="p">2) DTR/ DSR 方式。与这种方式有关的
+DCB结构成员为 fOutxDsrFlow、fDsrSensitivity 和 fDtrControl。本文介绍 fOutxDsrFlow
+和 fDtrControl。在输出流控中，DCE 设置 DSR 控制线为高电平，表示 DCE 准备好可以接收数据；置 DSR 控制线为低电平，表示
+DCE 不能接收数据。在输入流控中，DTE 设置 DTR 为高表示 DTE 由足够的缓冲区接收数据；否则 DTE 没有足够的缓冲区接收数据。</p><p class="p">DCB 的成员 fOutxDsrFlow 指定在输出流控中是否监控 DSR 控制线的状态。 如果该成员设置为TRUE,而DSR
+控制线为低，输出将被阻塞直到该控制线变为高如果该成员被置为FALSE,DSR 控制线状态不影响数据的传输。DSR 的状态由 DCE
+控制，DTE仅仅监控该控制线状态。</p><p class="p">DCB 的成员 fDtrControl 指定 DTR 输入流控。DTR 控制线的状态有
+DTE 控制。fDtrControl 取值为DTR_CONTROL_HANDSHAKE 使用下面的流控：如果接收缓冲区有足够的空间接收数据（至少一半的缓
+冲区是空的）置 DTR 为高表示数据终端准备好；如果接收缓冲区没有足够空间（少于 1 / 4 的缓冲区是空的&nbsp; ）&nbsp;
+置&nbsp; 低&nbsp;&nbsp; DTR；fDtrControl取值为&nbsp;&nbsp; DTR_CON-TROL_DISABLE、DTR_CONTROL_ENABLE
+程 序 可以自由的改变它的状态， 这时 DTR 的状态不影响接收。在数据输入过程中，DCE 在&nbsp; DTR 置低时阻塞发送；当
+DTR 恢复为高电平时，恢复发送。</p><p class="p">采用硬件流控开发串口通讯程序的过程中，程序运行过程中需要不停改变 RTS,DTR 控制线的状态。可使
+用 Windows API 函数 BOOL EscapeCommFunc- tion(HANDLE hFile, DWORD dwFunc)。该函数根据参数dwFunc
+的值改变控制线 RTS,DTR 的状态。</p></section>
+<section class="section"><h2 class="title sectiontitle">软件流控</h2><p class="p">软件流控使用数据流中的两个特殊的字符，XOFF和 XON，来控制数据的接收和发送。二进制方式传输不能使用软件流控，否则
+XOFF和 XON 出现在二进制数据中影响数据的传输。软件流控适用于文本方式的数据传输。为了使用软件流控，DCB 结构中的成员</p><p class="p">fOutX&nbsp; 和 fInX必须设置为 TRUE。fOutX 控制输出流控，fInX 控制输入流控。程序中可以动态的设置流控使用的字符，XoffChar
+设置输入输出流控中的 XOFF 使用的字符；XonChar 设置 XON 字符。在输入流控中，</p><p class="p">XoffLim 成员设置了发送
+XOFF 字符时输入缓冲区中最小的自由空间数目，当输入缓冲区中自由空间的数目低于设置值，发送XOFF 字符；XonLim 设置了发送
+XON 字符时，输入缓冲区中最小的数据数量，当输入缓冲区中的数据数目小于这个值发送 XON 字符。</p><p class="p">在输出流控中，DTE
+接收到 XOFF 字符，数据发送将被阻塞直到接收到&nbsp; XON 字符；DTE 接收数据不受影响。DCB 控制结构的 fOutX
+成员控制这个功能。</p><p class="p">DTE 接收到 XON 字符，从前由于接收到 XOFF 字符而阻塞的数据发送将恢复。DCB 控制结构的
+fOutX 成员控制这个功能。</p><p class="p">在输入流控中， 当接收缓冲区接近溢出时，DTE自动发送 XOFF 字符。发送 XOFF
+字符的缓冲区自由空间的界限值由 XoffLim 指定。fInX成员控制这项功能。当接收缓冲区有较多的自由空间时，DTE 自动发送 XON
+字符。发送 XON 字符自由空间的界限值由</p><p class="p">XonLim 成员指定。fInX 成员控值这项功能。</p></section>
+<section class="section"><h2 class="title sectiontitle">流控的设置</h2><p class="p">开发串口通讯程序的过程中需要对串行端口进行设置，包括波特率、校验方式、停止位和数据位，也包括
+流控方式的设置。端口设置就是对 DCB 结构成员进行设置。串行端口流控方式的设置采用的方法与设置 串口其他参数的方法相同，主要分为两种。</p><p class="p">第一种方法为使用&nbsp; API 函数：：GetCommState</p><p class="p">（），该函数返回 DCB 结构的当前设置，然后直接修改</p><p class="p">DCB 结构的设置值。该函数的使用方法如下：</p><p class="p">DCB dcb={O};</p><p class="p">If（！：：GetcommState(hComm,&amp;dcb)）</p><p class="p">return FALSE; / / 函数调用发生错误</p><p class="p">else</p><p class="p">/ / 已经取回&nbsp;DCB
+结构当前设置</p><p class="p">第二种方法初始化DCB 结构的方法是手动设置。程序首先分配 DCB 结构，然后将其中的每个成员设置成期望值。</p><p class="p">无论采用哪种方法，要使对 DCB 结构的设置值对串行端口的行为产生影响， 必须调用 API 函数：：</p><p class="p">SetCommState（）。</p></section>
+<section class="section"><h2 class="title sectiontitle">结束语</h2><p class="p">开发串口通讯程序的过程中，可根据实际需要决定是否采用流控，采用硬件流控还是软件流控。使用控
+件 Mscomm32 开发串口通讯程序简单直接，若需要计算机协调与外设的数据传数时，这种方法不能满足要求； 直接调用 WIN32 API
+函数的开发串口通讯程序，可以灵活的对串口进行设置，但需要较多的 Win-dows 编程背景知识。</p></section>
+<section class="section"><h2 class="title sectiontitle">串口通信连接过程实例SERIAL_HANDFLOW参数比较</h2><table class="table"><caption></caption><colgroup><col style="width:30%"><col style="width:18.6%"><col style="width:17.2%"><col style="width:17.2%"><col style="width:17%"></colgroup><tbody class="tbody">
+<tr class="row">
+<td class="entry"><p class="p">连接过程</p></td>
+<td class="entry"><p class="p">无流控：</p></td>
+<td class="entry"><p class="p">Cts/Rts硬流控</p></td>
+<td class="entry"><p class="p">DSR/DTR硬流控</p></td>
+<td class="entry"><p class="p">XonXoff软流控：</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"><p class="p">IOCTL_SERIAL_SET_TIMEOUTS</p><p class="p">&nbsp;ReadIntervalTimeout:&nbsp; </p><p class="p">&nbsp;ReadTotalTimeoutMultiplier: </p><p class="p">&nbsp;ReadTotalTimeoutConstant:</p><p class="p">&nbsp;WriteTotalTimeoutMultiplier:</p><p class="p">&nbsp;WriteTotalTimeoutConstant:</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">2000, </p><p class="p">1000, </p><p class="p">5000, </p><p class="p">1000, </p><p class="p">5000 </p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">2000, </p><p class="p">1000, </p><p class="p">5000, </p><p class="p">1000, </p><p class="p">5000 </p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">2000, </p><p class="p">1000, </p><p class="p">5000, </p><p class="p">1000, </p><p class="p">5000 </p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">2000, </p><p class="p">1000, </p><p class="p">5000, </p><p class="p">1000, </p><p class="p">5000 </p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"><p class="p">IOCTL_SERIAL_SET_BAUD_RATE</p><p class="p">&nbsp;Baud Rate:</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">38400</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">38400</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">38400</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">38400</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"><p class="p">IOCTL_SERIAL_SET_RTS</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">IOCTL_SERIAL_SET_RTS</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">无</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">无</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">无</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"><p class="p">IOCTL_SERIAL_SET_DTR</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">IOCTL_SERIAL_SET_DTR</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">IOCTL_SERIAL_SET_DTR</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">无</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">无</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"><p class="p">IOCTL_SERIAL_SET_LINE_CONTROL</p><p class="p">&nbsp;StopBits:</p><p class="p">&nbsp;Parity:</p><p class="p">&nbsp;DataBits:</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1, </p><p class="p">No,</p><p class="p">8</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1, </p><p class="p">No,</p><p class="p">8</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1, </p><p class="p">No,</p><p class="p">8</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1, </p><p class="p">No,</p><p class="p">8</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"><p class="p">IOCTL_SERIAL_SET_CHARS&nbsp; </p><p class="p">&nbsp;EofChar:</p><p class="p">&nbsp;ErrorChar:</p><p class="p">&nbsp;BreakChar:</p><p class="p">&nbsp;EventChar:</p><p class="p">&nbsp;XonChar:</p><p class="p">&nbsp;XoffChar:</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">0x0,</p><p class="p">0x0,</p><p class="p">0x0,</p><p class="p">0x0,</p><p class="p">0x11,</p><p class="p">0x13 </p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">0x0,</p><p class="p">0x0,</p><p class="p">0x0,</p><p class="p">0x0,</p><p class="p">0x11,</p><p class="p">0x13 </p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">0x0,</p><p class="p">0x0,</p><p class="p">0x0,</p><p class="p">0x0,</p><p class="p">0x11,</p><p class="p">0x13 </p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">0x0,</p><p class="p">0x0,</p><p class="p">0x0,</p><p class="p">0x0,</p><p class="p">0x11,</p><p class="p">0x13 </p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"><p class="p">IOCTL_SERIAL_SET_HANDFLOW </p><p class="p">&nbsp;ControlHandShake: </p><p class="p">&nbsp;FlowReplace: </p><p class="p">&nbsp;XonLimit: </p><p class="p">&nbsp;XoffLimit:</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">0x1, </p><p class="p">0x80000040, </p><p class="p">2048, </p><p class="p">512</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">0x9, </p><p class="p">0x80000080, </p><p class="p">2048, </p><p class="p">512</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">0x12, </p><p class="p">0x80000080, </p><p class="p">2048, </p><p class="p">512</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">0x2, </p><p class="p">0x80000083, </p><p class="p">100, </p><p class="p">100</p></td>
+</tr>
+<tr class="row">
+<td class="entry"><p class="p">IOCTL_SERIAL_SET_DTR</p></td>
+<td class="entry"><p class="p">INVALID PARAMETER</p></td>
+<td class="entry"></td>
+<td class="entry"></td>
+<td class="entry"></td>
+</tr>
+<tr class="row">
+<td class="entry"><p class="p">IOCTL_SERIAL_SET_RTS</p></td>
+<td class="entry"></td>
+<td class="entry"></td>
+<td class="entry"></td>
+<td class="entry"></td>
+</tr>
+<tr class="row">
+<td class="entry"><p class="p">IRP_MJ_CLOSE</p></td>
+<td class="entry"></td>
+<td class="entry"></td>
+<td class="entry"></td>
+<td class="entry"></td>
+</tr>
+</tbody></table></section>
+<section class="section"><h2 class="title sectiontitle">SERIAL_HANDFLOW结构解析</h2><p class="p">SERIAL_HANDFLOW</p><table class="table"><caption></caption><colgroup><col></colgroup><tbody class="tbody">
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"><p class="p">typedef
+struct _SERIAL_HANDFLOW{</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"><p class="p">&nbsp;&nbsp;&nbsp;<em class="ph i">ULONG ControlHandShake;</em></p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"><p class="p">&nbsp;&nbsp;&nbsp;<em class="ph i">ULONG FlowReplace;</em></p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"><p class="p">&nbsp;&nbsp;&nbsp;<em class="ph i">LONG XonLimit;</em></p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"><p class="p">&nbsp;&nbsp;&nbsp;<em class="ph i">LONG XoffLimit;</em></p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"><p class="p">}SERIAL_HANDFLOW,*PSERIAL_HANDFLOW;</p></td>
+</tr>
+</tbody></table><p class="p">Members</p><ul class="ul">
+<li class="li"><p class="p">ControlHandShake</p><p class="p">&nbsp;[out] ControlHandShake is a set
+of flags that defines the modem lines that are used for flow control.
+Can be a combination of the following flags:</p><table class="table"><caption></caption><colgroup><col><col><col></colgroup><tbody class="tbody">
+<tr class="row">
+<td class="entry"><p class="p">Value</p></td>
+<td class="entry"><p class="p">Meaning</p></td>
+<td class="entry"><p class="p">Hex</p></td>
+</tr>
+<tr class="row">
+<td class="entry"><p class="p">SERIAL_DTR_CONTROL</p></td>
+<td class="entry"><p class="p">Enables the DTR line when the device is opened and leaves
+it on.</p></td>
+<td class="entry"><p class="p">0x01</p></td>
+</tr>
+<tr class="row">
+<td class="entry"><p class="p">SERIAL_DTR_HANDSHAKE</p></td>
+<td class="entry"><p class="p">Use the modem signal DTR for input flow control. For the
+real serial port the DTR line is cleared by the controller if the
+receiving buffer reaches the programmed high water mark.</p><p class="p">See
+also description of XonLimit and XoffLimit.</p></td>
+<td class="entry"><p class="p">0x02</p></td>
+</tr>
+<tr class="row">
+<td class="entry"><p class="p">SERIAL_CTS_HANDSHAKE</p></td>
+<td class="entry" rowspan="3"><p class="p">Use the modem signal CTS, DCD or DSR respectively
+for output flow control. For the real serial port if the corresponding
+modem line(s) found as cleared, the controller will hold data transmission.</p></td>
+<td class="entry"><p class="p">0x08</p></td>
+</tr>
+<tr class="row">
+<td class="entry"><p class="p">SERIAL_DCD_HANDSHAKE</p></td>
+<td class="entry"><p class="p">0x20</p></td>
+</tr>
+<tr class="row">
+<td class="entry"><p class="p">SERIAL_DSR_HANDSHAKE</p></td>
+<td class="entry"><p class="p">0x10</p></td>
+</tr>
+<tr class="row">
+<td class="entry"><p class="p">SERIAL_DSR_SENSITIVITY</p></td>
+<td class="entry"><p class="p">Ignore any character arriving when the DSR line is not set.</p></td>
+<td class="entry"><p class="p">0x40</p></td>
+</tr>
+<tr class="row">
+<td class="entry"><p class="p">SERIAL_ERROR_ABORT</p></td>
+<td class="entry"><p class="p">If there exists an error condition the driver aborts everything
+read and writes to or from</p><p class="p">this port.</p></td>
+<td class="entry"><p class="p">0x80000000</p></td>
+</tr>
+</tbody></table></li>
+<li class="li"><p class="p">FlowReplace</p><p class="p">&nbsp;[out] FlowReplace is a set of flags
+defining flow control stuff. Can be a combination of the following
+flags:</p><table class="table"><caption></caption><colgroup><col><col><col></colgroup><tbody class="tbody">
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"><p class="p">Value</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">Meaning</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">Hex</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"><p class="p">SERIAL_AUTO_TRANSMIT</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">Use the
+XON/XOFF protocol based flow control for output.</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">0x01</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"><p class="p">SERIAL_AUTO_RECEIVE</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">Use the
+XON/XOFF protocol based flow control for input.</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">0x02</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"><p class="p">SERIAL_ERROR_CHAR</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">If set,
+the ErrorChar is placed in the stream of received characters on error
+conditions like buffer overflow, frame errors and so on.</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">0x04</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"><p class="p">SERIAL_NULL_STRIPPING</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">If set,
+the reception of a NULL character is ignored.</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">0x08</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"><p class="p">SERIAL_BREAK_CHAR</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">If set,
+the BreakChar is placed in the stream of received characters when
+a break condition was detected.</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">0x10</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"><p class="p">SERIAL_RTS_CONTROL</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">Enables
+the RTS line when the device is opened and leaves it on.</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">0x40</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"><p class="p">SERIAL_RTS_HANDSHAKE</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">Use the
+modem signal RTS for input flow control.</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">0x80 </p></td>
+</tr>
+</tbody></table></li>
+<li class="li"><p class="p">XOnLimit</p><p class="p">&nbsp;[out] Minimum number of bytes allowed
+in the input buffer before flow control is activated to inhibit the
+sender.</p></li>
+<li class="li"><p class="p">XOffLimit</p><p class="p">&nbsp;[out] Maximum number of bytes allowed
+in the input buffer before flow control is activated to allow transmission
+by the sender.</p></li>
+</ul></section>
+<section class="section"><h2 class="title sectiontitle">串口设备驱动相关事件的掩码定义（IOCTL_SERIAL_GET_WAIT_MASK）</h2><p class="p">编写虚拟串口驱动程序等需要处理IOCTL_SERIAL_GET_WAIT_MASK。</p><p class="p">相关掩码的定义请参见DDK&nbsp;C:\WinDDK\7600.16385.1\inc\api\ntddser.h
+文件。</p><div class="p"><pre class="pre codeblock"><code>
+//
+// Defines the bitmask that the driver can used to notify
+// app of various changes in the state of the UART.
+//
+ 
+#define SERIAL_EV_RXCHAR           0x0001  // Any Character received
+#define SERIAL_EV_RXFLAG           0x0002  // Received certain character
+#define SERIAL_EV_TXEMPTY          0x0004  // Transmitt Queue Empty
+#define SERIAL_EV_CTS              0x0008  // CTS changed state
+#define SERIAL_EV_DSR              0x0010  // DSR changed state
+#define SERIAL_EV_RLSD             0x0020  // RLSD changed state
+#define SERIAL_EV_BREAK            0x0040  // BREAK received
+#define SERIAL_EV_ERR              0x0080  // Line status error occurred
+#define SERIAL_EV_RING             0x0100  // Ring signal detected
+#define SERIAL_EV_PERR             0x0200  // Printer error occured
+#define SERIAL_EV_RX80FULL         0x0400  // Receive buffer is 80 percent full
+#define SERIAL_EV_EVENT1           0x0800  // Provider specific event 1
+#define SERIAL_EV_EVENT2           0x1000  // Provider specific event 2
+</code></pre></div></section>
+<section class="section"></section>
+<section class="section"><ol class="ol">
+<li class="li"><p class="p"><a class="xref" href="http://blog.sina.com.cn/s/blog_55c555f10100ewwh.html" target="_blank" rel="external noopener">串口驱动开发 之SERIAL_HANDFLOW</a></p></li>
+<li class="li"><p class="p"><a class="xref" href="https://blog.csdn.net/faithzzf/article/details/54616975" target="_blank" rel="external noopener">串口设备驱动相关事件的掩码定义（IOCTL_SERIAL_GET_WAIT_MASK ...</a></p></li>
+<li class="li"><p class="p"><a class="xref" href="https://www.cnblogs.com/jxnclyk/archive/2010/06/07/1753317.html" target="_blank" rel="external noopener">在C#中使用SerialPort类实现串口通信遇到多线程问题</a></p></li>
+<li class="li"><p class="p"><a class="xref" href="https://blog.csdn.net/songshu5555/article/details/8742652" target="_blank" rel="external noopener">串口流控制DCB结构体解析及设置</a></p></li>
+</ol></section>
+</div>
+<nav role="navigation" class="related-links"><div class="familylinks"><div class="parentlink"><strong>父主题：</strong> <a class="link" href="%E4%B8%B2%E5%8F%A3%E7%BC%96%E7%A8%8B.html">串口编程</a></div></div></nav></article></main></body></html>

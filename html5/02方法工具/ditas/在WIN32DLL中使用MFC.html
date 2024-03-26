@@ -1,0 +1,71 @@
+<!DOCTYPE html
+  SYSTEM "about:legacy-compat">
+<html lang="zh-cn"><head><meta charset="UTF-8"><meta name="copyright" content="(C) 版权 2024"><meta name="generator" content="DITA-OT"><meta name="description" content=""><title>在WIN32 DLL中使用MFC</title><link rel="stylesheet" type="text/css" href="../../commonltr.css">
+<link rel="stylesheet" type="text/css" href="../../common-extended.css"></head><body id="在WIN32DLL中使用MFC-0DBCF06B"><main role="main"><article role="article" aria-labelledby="ariaid-title1">
+<h1 class="title topictitle1" id="ariaid-title1">在WIN32 DLL中使用MFC</h1>
+
+
+<div class="body taskbody"><p class="shortdesc"></p>
+<section class="section prereq"></section>
+<section class="section context">最近用WIN32 DLL，为了方便要用到MFC的一些库，又不想转工程，就网上找了很多方法，发现没有详细的介绍，有的也行不通，现在成功在WIN32
+DLL中使用了MFC，记录一下以防以后用到忘记</section>
+<section><ol class="ol steps"><li class="li step stepexpand"><span class="ph cmd">修改预编译头文件(stdafx.h)</span>
+<div class="itemgroup info"><p class="p">在stdafx.h文件中添加下面代码，包含一些MFC的头文件，这些可以在一个MFC工程中复制过来 </p><pre class="pre codeblock"><code>#define VC_EXTRALEAN		// Exclude rarely-used stuff from Windows headers
+#include &lt;afxtempl.h&gt;       // MFC templates模板支持，在使用CArray时要引入
+#define _ATL_CSTRING_EXPLICIT_CONSTRUCTORS    // 某些 CString 构造函数将为显式的
+
+#include &lt;afxwin.h&gt;         // MFC 核心组件和标准组件
+#include &lt;afxext.h&gt;         // MFC 扩展
+
+#ifndef _AFX_NO_OLE_SUPPORT
+#include &lt;afxole.h&gt;         // MFC OLE 类
+#include &lt;afxodlgs.h&gt;       // MFC OLE 对话框类
+#include &lt;afxdisp.h&gt;        // MFC 自动化类
+#endif // _AFX_NO_OLE_SUPPORT
+
+#ifndef _AFX_NO_DB_SUPPORT
+#include &lt;afxdb.h&gt;            // MFC ODBC 数据库类
+#endif // _AFX_NO_DB_SUPPORT
+
+#ifndef _AFX_NO_DAO_SUPPORT
+#include &lt;afxdao.h&gt;            // MFC DAO 数据库类
+#endif // _AFX_NO_DAO_SUPPORT
+
+#include &lt;afxdtctl.h&gt;        // MFC 对 Internet Explorer 4 公共控件的支持
+#ifndef _AFX_NO_AFXCMN_SUPPORT
+#include &lt;afxcmn.h&gt;            // MFC 对 Windows 公共控件的支持
+#endif // _AFX_NO_AFXCMN_SUPPORT</code></pre></div>
+</li><li class="li step stepexpand"><span class="ph cmd">修改编译配置:VS2003</span>
+<ol type="a" class="ol substeps">
+<li class="li substep substepexpand"><span class="ph cmd">项目-&gt;属性-&gt;常规-&gt;MFC的使用-&gt;在静态库中使用MFC（动态或静态都可以）</span></li>
+<li class="li substep substepexpand"><span class="ph cmd">链接器-&gt;输入-&gt;</span>
+<div class="itemgroup info"><p class="p">先在‘忽略指定库中’忽略掉这两个DLL，分别是uafxcw.lib和libcpmt.lib，如果是DEBUG工程，还需要填入libcmt.lib</p><p class="p">再在'附加依赖项'中以uafxcw.lib libcpmt.lib的顺序填入</p></div>
+</li>
+</ol>
+</li><li class="li step stepexpand"><span class="ph cmd">在你的主文件中加入代码:在最前面加入 </span>
+<div class="itemgroup info"><pre class="pre codeblock"><code>#ifdef _DEBUG
+#undef THIS_FILE
+static char THIS_FILE[] = __FILE__;
+#endif
+
+#define new DEBUG_NEW
+
+/////////////////////////////////////////////////////////////////////////////
+// global data
+
+// The following symbol used to force inclusion of this module for _USRDLL
+#ifdef _X86_
+extern "C" { int _afxForceUSRDLL; }
+#else
+extern "C" { int __afxForceUSRDLL; }
+#endif</code></pre><p class="p">这样不用从CWinApp中派生一个类再外部定义来使用MFC的入口点，可以直接使用原来的写好的DllMain入口点</p><p class="p">否则：在WIN32 DLL中使用MFC类库的话可以不声明DLLMain()函数，如果有操作要放在DLL加载时初始化的话就从CWinApp派生一个类，在项目文件里声明这个对象，在这个CWinApp类的InitInstance()成员函数中做初始化工作</p></div>
+</li><li class="li step stepexpand"><span class="ph cmd">解决链接器错误：</span>
+<div class="itemgroup info"><p class="p">&nbsp;只是在链接那一块还是出了几个错误， error LNK2005: "private: __thiscall
+type_info::type_info。。。  </p><p class="p">最后用的： 附加依赖项：msvcrtd.lib LIBCMTD.lib
+忽略特定库：LIBCMTD.lib;msvcrtd.lib  编译通过了，MFC的类编译器也认识了</p></div>
+</li><li class="li step stepexpand"><span class="ph cmd"></span><br></li></ol></section>
+<section class="section result"></section>
+<section class="example"></section>
+<section class="section postreq"></section>
+</div>
+<nav role="navigation" class="related-links"><div class="familylinks"><div class="parentlink"><strong>父主题：</strong> <a class="link" href="MFC%E5%BC%80%E5%8F%91.html">MFC开发</a></div></div></nav></article></main></body></html>

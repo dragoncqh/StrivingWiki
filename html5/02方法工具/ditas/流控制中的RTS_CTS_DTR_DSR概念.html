@@ -1,0 +1,153 @@
+<!DOCTYPE html
+  SYSTEM "about:legacy-compat">
+<html lang="zh-cn"><head><meta charset="UTF-8"><meta name="copyright" content="(C) 版权 2024"><meta name="generator" content="DITA-OT"><meta name="description" content=""><title>流控制中的RTS_CTS_DTR_DSR概念</title><link rel="stylesheet" type="text/css" href="../../commonltr.css">
+<link rel="stylesheet" type="text/css" href="../../common-extended.css"></head><body id="流控制中的RTS_CTS_DTR_DSR概念-BF98CD75"><main role="main"><article role="article" aria-labelledby="ariaid-title1">
+<h1 class="title topictitle1" id="ariaid-title1">流控制中的RTS_CTS_DTR_DSR概念</h1>
+
+
+<div class="body conbody"><p class="shortdesc"></p>
+<p class="p"></p>
+<p class="p">DTR - Data Terminal Ready</p>
+<p class="p">DSR - Data Set Ready</p>
+<p class="p">RTS - Request To Send</p>
+<p class="p">CTS - Clear To Send</p>
+<p class="p">虽然从单词本义上来说意义似乎比较明确，但是实际上并无任何协议真正成为标准，所以你可以自定义你的协议来与设备通信。</p>
+<p class="p">比如RTS/CTS从字义上来说是用于收发的一对针脚，但是实际上经常被用来做流量控制。设备制造商在流控上各显神通，包括使用DTR，DSR信号和xOn/xOff软流控（实际中不使用连接器管脚而在数据流内插入特殊字符）。</p>
+<p class="p">1980年代中期后，Linux内核不再支持DTR/DSR, 232串口标准也逐渐过时，(同类的TTL UARTs在更早的时候过时了)</p>
+<p class="p">＝＝＝＝＝＝＝＝＝＝＝＝</p>
+<p class="p">先引用一篇网文，作者不详，因几个地方都说自己是原创，我昏了，不知道是谁原创的 流汗</p>
+<p class="p">RS232中RTS和CTS的作用</p>
+<p class="p">问：</p>
+<p class="p">以前挺明白的，今天一下子觉得以前的理解都不对了，以下三种解释哪个对呢？</p>
+<p class="p">解释一：</p>
+<p class="p">RTS：终端我已经准备就绪，有数据就发过来吧</p>
+<p class="p">CTS：来了，接招</p>
+<p class="p">解释二：</p>
+<p class="p">RTS：终端我准备发数据给你，快用CTS应答，准备好没？</p>
+<p class="p">CTS：好了，来吧</p>
+<p class="p">解释三：</p>
+<p class="p">CTS：主机，我有数据，请求接收</p>
+<p class="p">RTS：我是主机，就绪，请求发送。</p>
+<p class="p">我今天弄了个SIM100模块，我将RTS设置无效之后，凡是要发往主机的数据都没有发过来（包括主动 数据RING），指令和指令返回结果都没有返回，都缓存在模块之中，等我将RTS设置有效后，缓存的数据全发来了，包括一大堆指令的执行结果，由此，我觉
+得上面的“解释一”应该正确，而“解释二”应该是错的，但“解释三”是否正确呢？就是说CTS和RTS哪个是发起者呢？</p>
+<p class="p">答：</p>
+<p class="p">一是错的</p>
+<p class="p">二是RS232标准</p>
+<p class="p">三是MODEM的硬件流控</p>
+<p class="p">SIMCOM公司的解释完全正确</p>
+<p class="p">很久很久以前，计算机还没有出现，那时就已经存在了(计算机)史前的串口设备(电传打字机，工控测量设备，通信调制解调器)，为了连接这些串口，EIA制
+定了RS232标准，采用DB25接插件，支持同步和异步串口，D型的接口可以有效防止插反。标准化给使用带来了便利。</p>
+<p class="p">时光荏苒，个人计算机出现了，这些已有的串口设备毫无疑问地成为了最初的外设，自然而然地RS232标准被个人计算机采纳。但是设备制造商倾向于体积更
+小，成本更低的接口，因此，将DB25中未使用的和支持同步模式的引脚去掉，形成DB9。最初的情况相当混乱，因为DB9只定义了信号，却没有指定信号和
+引脚的对应关系，各个制造商只能自行定义。幸运的是，IBM的PC成了工业标准，DB9逐渐统一到IBM的定义上来。</p>
+<p class="p">DB9只有9根线，遵循RS232标准。定义如下：</p>
+<p class="p">DTR,DSR------DTE设备准备好/DCE设备准备好。主流控信号。</p>
+<p class="p">RTS,CTS------请求发送/清除发送。用于半双工时，收发切换。属于辅助流控信号。半双工的意思是说，发的时候不收，收的时候不发。那么怎么区
+分收发呢？缺省时是DCE向DTE发送数据，当DTE决定向DCE发数据时，先有效RTS，表示DTE希望向DCE发送，一般DCE不能马上转换收发状
+态，DTE就通过监测CTS是否有效来判断可否发送，这样避免了DTE在DCE未准备好时发送所导致的数据丢失。</p>
+<p class="p">全双工时，这两个信号一直有效即可。</p>
+<p class="p">随着计算机的日益普及，很多非RS232的串口也要接入PC机，如果为每一种新出现的串口都增加一个新的I/O口显然不现实，因为PC后面板位置有限，因
+此，将RS232串口和非RS232串口都通过RS232口接入是最佳方案。UART的U(通用)指的就是这个意思。早期ROM BIOS和DOS里的通信软件都是为RS232设计的，在没有检测到DCD有效前不会发送数据，因此，就连发送一个字符这样朴素的应用也要给出DCD、
+DTR、DSR等控制信号。因此，串口接头上要将一些控制线短接，或者干脆绕过系统软件自己写通信程序。</p>
+<p class="p">到此，UART的涵义就总结为：通用的 异步 (串行) I/O口。</p>
+<p class="p">就在UART冠以通用二字，准备一统江湖的时候，制造商们不满于它的速度、体积和灵活性(软件可配置)，推出了USB和1394串口。目前，笔记本上的
+UART串口有被取消的趋势，因而有网友发出了“没有串口，吾谁与归”的慨叹，古今多少事，都付笑谈中，USB取代UART是后话，暂且不表。</p>
+<p class="p">话说自从贺氏(Hayes)公司推出了聪明猫(SmartModem)，他们制定的MODEM接口就成了业界标准，自此以后，所有公司制造的兼容猫都符合贺氏标准(连AT指令也兼容，大家一起抄他呗)。</p>
+<p class="p">细观贺氏制定的MODEM串口，与RS232标准大不相同。DTR在整个通信过程中一直保持有效，DSR在MODEM上电后/可以拨号前有效(取决于软件
+对DSR的理解)，在通信过程的任意时刻，只要DTR/DSR无效，通信过程立即终止。在某种意义上，这也可以算是流控，但肯定不是RS232所指的那种
+主流控。如果拘泥于RS232，你是不会理解DTR和DSR的用途的。</p>
+<p class="p">贺氏不但改了DTR和DSR，竟然连RTS和CTS的涵义也重新定义了。因此，RTS和CTS已经不具有最开始的意义了。从字面理解RTS和CTS，是用
+于半双工通信的，当DTE想从收模式改为发模式时，就有效RTS请求发送，DCE收到RTS请求后不能立即完成转换，需要一段时间，然后有效CTS通知
+DTE：DCE已经转到发模式，DTE可以开始发送了。在全双工时，RTS和CTS都缺省置为有效即可。然而，在贺氏的MODEM串口定义中，RTS和
+CTS用于硬件流控，和什么劳什子的全双工/半双工一点关系也没有。</p>
+<p class="p">注意，硬件流控是靠软件实现的，之所以强调“硬件”二字，仅仅是因为硬件流控提供了用于流量情况指示的硬件连线，并不是说，你只要把线连上，硬件就能自己流控。如果软件不支持，光连上RTS和CTS是没有用的。</p>
+<p class="p">RTS和CTS硬件流控的软件算法如下：(RTS有效表示PC机可以收，CTS有效表示MODEM可以收，这两个信号互相独立，分别指示一个方向的流量情况。</p>
+<p class="p">========== 我是分隔线 ==========</p>
+<p class="p">以下是我的几句胡言乱语</p>
+<p class="p">最近在捣鼓一个GSM模块，正好也要用到这东西，就baidu了一把，可以帮助我理解Datasheet的内容。看了上面的内容，我不知道各位明白了几分，如果觉得都明白了，就不用看我废话了。</p>
+<p class="p">还是先引用一些文字，来自Telit公司GM862 QUAD/PY的数据手册</p>
+<p class="p">Pin Signal I/O Function</p>
+<p class="p">20 C103/TXD I Serial data input (TXD) from DTE</p>
+<p class="p">29 C106/CTS O Output for Clear to send signal (CTS) to DTE</p>
+<p class="p">33 C107/DSR O Output for Data set ready signal (DSR) to DTE</p>
+<p class="p">37 C104/RXD O Serial data output to DTE</p>
+<p class="p">43 C108/DTR I Input for Data terminal ready signal (DTR) from DTE</p>
+<p class="p">45 C105/RTS I Input for Request to send signal (RTS) from DTE</p>
+<p class="p">注意上面各个功能的I/O的方向，看到这些缩写的全称，结合信号流向，是不是更容易理解呢 大笑</p>
+<p class="p">DTE是数据发送的主动方，DCE是数据的接受方。</p>
+<p class="p">CTS是让DTE明白的，也就是说DCE需要把自己的CTS给DTE看，让他知道DEC已经准备好接受数据了。</p>
+<p class="p">RTS是DTE给DCE看的，告诉DCE，DTE有数据要发。</p>
+<p class="p">好啦，这个话题就到这里~~ 调皮 还没看懂的同学继续.....</p>
+<p class="p">FROM:<a class="xref" href="http://www.cnblogs.com/CCJVL/archive/2010/02/04/1663565.html" target="_blank" rel="external noopener"><strong class="ph b">串口标准，说说流控制（RTS/CTS/DTR/DSR 你都明白了吗？）</strong></a></p>
+<p class="p">UART中的硬件流控RTS与CTS</p>
+<p class="p">5/23/2013 5:13:04 PM at rock-chips inshenzhen</p>
+<p class="p">最近太忙了，没时间写对Ucos-II的移植，先将工作中容易搞错的一个知识点记录下来，关于CTS与RTS的。</p>
+<p class="p">在RS232中本来CTS 与RTS 有明确的意义，但自从贺氏(HAYES ) 推出了聪明猫(SmartModem)后就有点混淆了，不过现在这种意义为主流意义的，各大芯片制造厂家对UART控制器的流控基本采用HAYES
+MODEM流控解释。</p>
+<p class="p">在RS232中RTS 与CTS 是用来半双工模式下的方向切换，本文不解释；</p>
+<p class="p">如果UART只有RX、TX两个信号，要流控的话只能是软流控；如果有RX，TX，CTS，RTS 四个信号，则多半是支持硬流控的UART；如果有
+RX，TX，CTS ，RTS ，DTR，DSR 六个信号的话，RS232标准的可能性比较大。</p>
+<p class="p">SIMCOM公司对RTS/CTS的解释：</p>
+<p class="p">（要注意区别是不是讲串口支持硬流控的RTS/CTS，别看为益，在和瑞芯微调试硬件流控时，别这个非主流的解释搞得晕头转向的，下面用灰色小字体表示）</p>
+<p class="p">RTS是模块的输入端，用于MCU通知模块，MCU是否准备好，模块是否可向MCU发送信息，RTS的有效电平为低。</p>
+<p class="p">CTS是模块的输出端，用于模块通知MCU，模块是否准备好，MCU是否可向模块发送信息，CTS的有效电平为低</p>
+<p class="p">HAYES Modem中的RTS ，CTS 是用来进 行硬件流控的。现在通常UART的RTC、CTS的含义指后者，即用来做硬流控的。</p>
+<p class="p">硬流控的RTS、CTS：</p>
+<p class="p">（现在做串口使用RTS/CTS必看内容，因为MTK/）</p>
+<p class="p"><strong class="ph b">RTS （Require ToSend，发送请求）</strong>为输出信号，用于指示本设备准备好可接收数据，低电平有效，低电平说明本设备可以接收数据。</p>
+<p class="p"><strong class="ph b">CTS （Clear ToSend，发送允许）</strong>为输入信号，用于判断是否可以向对方发送数据，低电平有效，低电平说明本设备可以向对方发送数据。</p>
+<p class="p">此处有人将CTS翻译为发送允许，我感觉的确比翻译为清除发送好。因为CTS是对方的RTS控制己方的CTS是否允许发送的功能。</p>
+<p class="p">用AP与MODEM采用流控收发串口数据举例：</p>
+<p class="p">CTS 为输入</p>
+<p class="p">RTS 为输出</p>
+<p class="p">AP的CTS对接MODEM的RTS；MODEM的CTS对接AP的RTS。</p>
+<p class="p">默认启动时：</p>
+<p class="p">AP的CTS为高</p>
+<p class="p">AP的RTS为低</p>
+<p class="p">MODEM的CTS 高 但极容易被拉低</p>
+<p class="p">MODEM的RTS 低</p>
+<p class="p">默认休眠时</p>
+<p class="p">MODEM的CTS 高 但极容易被拉低</p>
+<p class="p">MODEM的RTS 高</p>
+<p class="p">其中CTS用电压表测量电压时发现：在测量最初的大概200ms时，为高电平，然后电压值不断下降，变成低电平，这说明CTS悬空时应该为高，这中高电平仅仅是一定量的正电荷而已。</p>
+<p class="p">不知道芯片设计时，规格说明书为什么要写CTS默认为高，CTS仅仅是输入端，不需要什么默认值啊。并且在流控打开情况下，不接CTS与RTS，也
+是可以正常3根线（RXD/TXD/GND）通信的，这说明不接RTS/CTS时，CTS为低电平才对。为何实际使用与芯片规格说明书不一致，可能是被外
+壳金属盖干扰到低电平了，毕竟自己用的模块，CTS是如此靠近低电平的金属保护盖，并且CTS为输入口，没有上拉下拉电平能力。</p>
+<p class="p">AP与MODEM的流控这样通信的：</p>
+<p class="p">AP串口可用时，将AP-RTS拉低，MODEM-CTS检测到AP-RTS为低，知道AP串口已准备好，可以发送数据；</p>
+<p class="p">AP串口不可用时，将AP-RTS拉高，MODEM-CTS检测到AP-RTS为高，知道AP串口还未准备好，就不会放数据。</p>
+<p class="p">MODEM串口可用与不可用时的交互是同样道理。</p>
+<p class="p">没有串口控制器，用中断和普通IO口即可实现RTS与CTS功能。</p>
+<p class="p">RTS用GPIO实现，串口就绪拉低电平，串口忙拉高电平</p>
+<p class="p">CTS用中断实现，检测到低电平，将串口数据发送出去，检测到高电平则保留串口数据直到检测到低电平为止。</p>
+<p class="p">下面是摘录网上有用的参考资料：</p>
+<p class="p">假定A、B两设备通信，A设备的RTS 连接B设备的CTS ；A设备的CTS 连接B设备的RTS 。前一路信号控制B设备的发送，后一路信号控制A设备的发送。对B设备的发送（A设备接收）来说，如果A设备接收缓冲快满的时发出RTS
+信号（意思通知B设备停止发送），B设备通过CTS 检测到该信号，停止发送；一段时间后A设备接收缓冲有了空余，发出RTS 信号，指示B设备开始发送数据。A设备发（B设备接收）类似。上述功能也能在数据流中插入Xoff（特殊字符）和Xon（另一个特殊字符）信号来实现。A设备一旦接收到B设备发送过来的Xoff，立刻停止发
+送；反之，如接收到B设备发送过来的Xon，则恢复发送数据给B设备。同理，B设备也类似，从而实现收发双方的速度匹配。</p>
+<p class="p">半双工的方向切换：RS232中使用DTR（Date Terminal Ready，数据终端准备）与DSR（Data Set Ready
+，数据设备准备好）进行主流控，类似上述的RTS 与CTS 。对半双工的通信的DTE（Date Terminal Equipment，数据终端设备）与DCE（Data
+circuitEquipment ）来说，默认的方向是DTE接收，DCE发送。如果DTE要发送数据，必须发出RTS 信号，请求发送数据。DCE收到后如果空闲则发出CTS
+回应RTS 信号，表示响应请求，这样通信方向就变为DTE-&gt;TCE，同时RTS 与CTS 信号必须一直保持。从这里可以看出，CTS
+，TRS虽然也有点流控的意思（如CTS 没有发出，DTE也不能发送数据），但主要是用来进行方向切换的。</p>
+<p class="p">流控制在串行通讯中的作用</p>
+<p class="p">这里讲到的“流”，当然指的是数据流。数据在两个串口之间传输时，常常会出现丢失数据的现象，或者两台计算机的处理速度不同，如台式机与单片机之间
+的通讯，接收端数据缓冲区已满，则此时继续发送来的数据就会丢失。现在我们在网络上通过MODEM进行数据传输，这个问题就尤为突出。流控制能解决这个问
+题，当接收端数据处理不过来时，就发出“不再接收”的信号，发送端就停止发送，直到收到“可以继续发送”的信号再发送数据。因此流控制可以控制数据传输的
+进程，防止数据的丢失。PC机中常用的两种流控制是硬件流控制（包括RTS/CTS、DTR/CTS等）和软件流控制XON/XOFF（继续/停止），下面分别说明。</p>
+<p class="p">硬件流控制</p>
+<p class="p">硬件流控制常用的有RTS/CTS流控制和DTR/DSR（数据终端就绪/数据设置就绪）流控制。</p>
+<p class="p">硬件流控制必须将相应的电缆线连上，用RTS/CTS（请求发送/清除发送）流控制时，应将通讯两端的RTS、CTS线对应相连，数据终端设备（如
+计算机）使用RTS来起始调制解调器或其它数据通讯设备的数据流，而数据通讯设备（如调制解调器）则用CTS来起动和暂停来自计算机的数据流。这种硬件握
+手方式的过程为：我们在编程时根据接收端缓冲区大小设置一个高位标志（可为缓冲区大小的75％）和一个低位标志（可为缓冲区大小的25％），当缓冲区内数
+据量达到高位时，我们在接收端将CTS线置低电平（送逻辑0），当发送端的程序检测到CTS为低后，就停止发送数据，直到接收端缓冲区的数据量低于低位而
+将CTS置高电平。RTS则用来标明接收设备有没有准备好接收数据。</p>
+<p class="p">常用的流控制还有还有DTR/DSR（数据终端就绪/数据设置就绪）。我们在此不再详述。由于流控制的多样性，我个人认为，当软件里用了流控制时，应做详细的说明，如何接线，如何应用。</p>
+<p class="p">软件流控制</p>
+<p class="p">由于电缆线的限制，我们在普通的控制通讯中一般不用硬件流控制，而用软件流控制。一般通过XON/XOFF来实现软件流控制。常用方法是：当接收端
+的输入缓冲区内数据量超过设定的高位时，就向数据发送端发出XOFF字符（十进制的19或Control-S，设备编程说明书应该有详细阐述），发送端收
+到XOFF字符后就立即停止发送数据；当接收端的输入缓冲区内数据量低于设定的低位时，就向数据发送端发出XON字符（十进制的17或Control-
+Q），发送端收到XON字符后就立即开始发送数据。一般可以从设备配套源程序中找到发送的是什么字符。</p>
+<p class="p">应该注意，若传输的是二进制数据，标志字符也有可能在数据流中出现而引起误操作，这是软件流控制的缺陷，而硬件流控制不会有这个问题。</p>
+<p class="p">FROM <a class="xref" href="https://blog.csdn.net/u010783226/article/details/125188896" target="_blank" rel="external noopener">UART中的硬件流控RTS与CTS</a></p>
+</div>
+<nav role="navigation" class="related-links"><div class="familylinks"><div class="parentlink"><strong>父主题：</strong> <a class="link" href="%E4%B8%B2%E5%8F%A3%E9%80%9A%E4%BF%A1.html">串口通信</a></div></div></nav></article></main></body></html>

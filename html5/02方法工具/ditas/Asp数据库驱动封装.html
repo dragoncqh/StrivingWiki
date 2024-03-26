@@ -1,0 +1,594 @@
+<!DOCTYPE html
+  SYSTEM "about:legacy-compat">
+<html lang="zh-cn"><head><meta charset="UTF-8"><meta name="copyright" content="(C) 版权 2024"><meta name="generator" content="DITA-OT"><meta name="description" content=""><title>asp数据库驱动封装</title><link rel="stylesheet" type="text/css" href="../../commonltr.css">
+<link rel="stylesheet" type="text/css" href="../../common-extended.css"></head><body id="Asp数据库驱动封装-350AF4B2"><main role="main"><article role="article" aria-labelledby="ariaid-title1">
+<h1 class="title topictitle1" id="ariaid-title1">asp数据库驱动封装</h1>
+
+
+<div class="body conbody"><p class="shortdesc"></p>
+<p class="p">一，原理图</p>
+<p class="p"><a class="xref" href="http://www.deepcast.net/wiki/lib/exe/fetch.php?hash=e4517d&amp;media=http%3A%2F%2Fwww.deepcast.net%2Fdeepcast%2FUserFiles%2F2006-8%2F18%2F2006818132531360.gif" target="_blank" rel="external noopener">http://www.deepcast.net/wiki/lib/exe/fetch.php?hash=e4517d&amp;media=http%3A%2F%2Fwww.deepcast.net%2Fdeepcast%2FUserFiles%2F2006-8%2F18%2F2006818132531360.gif</a></p>
+<p class="p">简要介绍（详细介绍待以后对此图完成实例程序以后再附定稿）：</p>
+<p class="p">　　·表现层：网页表单；</p>
+<p class="p">　　·业务层：指令中心、事件中心和实例库；</p>
+<p class="p">　　·数据层：数据字典驱动、数据库驱动、数据库：；</p>
+<p class="p">　　以上都没什么需要多于解释的地方，个人需要重点说明的是下方放在一起的表现层和数据层。</p>
+<p class="p">　　我们通常都是通过业务层来达到传递、连接业务/数据层的目的，但是在这个图的封装模式下，完全背反传统模式。</p>
+<p class="p">　　一切都从数据库开始出发，不论数据库中存在多少个表，表叫做什么名字，也不论一个表中有多少个字段，字段叫什么名字，都在系统启动的时候在自动遍历扫描后生成全局缓存，并且依据这个缓存生成数据字典，最后依据数据字典从表现层攫取并验证所需要的数据。</p>
+<p class="p">　　从另外一个方面可以说，业务层被剥离，离开数据流的传输渠道，加强了其作为指令调用、逻辑处理平台的作用，并且指挥数据层直接从表现层自动更新和修改数据。</p>
+<p class="p">　　从图中可以看到，绿色大箭头和各层内部的小箭头都是指令调用，而真正核心的数据流——黄色箭头部分，则是通过底层封装，完全自动化的完成从表现层到数据库的传输、存取动作。</p>
+<p class="p">　　在整个框架模型中，唯一需要关心数据库的地方，一个是对数据库最开始的系统设计，另外一个是根据实际需要调整程序依据数据库自动输出的表单；在业务层中的数据的存取完全是封装起来的语义操作，不涉及具体的字段。</p>
+<p class="p">二，思路</p>
+<p class="p">原来的方案：我们是首先根据数据库的字段和实际需求设计Web表单，然后从Web表单获取提交的数据集，然后在服务段将提交的数据集和数据库的字段一一对应，然后再一一作过滤和处理……</p>
+<p class="p">现在的方案：直接从数据库生成框架缓存，将每一个表的字段及其相关属性（类型要求、必填、长度、默认值……）储存在全局数组中。当外部提交某张表单时，从对应的全局数组中生成相应的Dictionary对象，然后依据这个和数据表完全映射的Dictionary遍历获取对应的提交值，由此替代了一一对应和读取的繁琐过程。</p>
+<p class="p">数据库除了有与表单交互得到数据，还需要根据参数得出数据并显示的部分</p>
+<p class="p">当外部提交某张表单时，从对应的全局数组中生成相应的Dictionary对象。这一部分的实现有几个步骤，都在Dictionary类中。</p>
+<p class="p">首先，程序抓取到表单的提交动作（Action），然后根据这个动作激活底层驱动；</p>
+<p class="p">然后在字典驱动中，通过Creat()方法获取对应表单在appliction中的数组缓存，其中指定表单的参数是通过在业务逻辑的类自定义传入的，而这些映射着表及其字段的二维数组是在整个程序启动的时候遍历扫描到全局变量中的；</p>
+<p class="p">然后通过GetRequest()方法，依次遍历这个表的每一个字段（这里表现为遍历数组），并且把抓取到数据的字段新建为Dictionary对象，即：ObjDictionary.Add
+Key,Item。</p>
+<p class="p">其后的处理有很多变化，一般是先用ValidTpye()方法遍历和验证抓取到的数据类型，ValidFill()方法验证是否为必填项目等等，最后交给数据访问层组合SQL语句入库。</p>
+<p class="p">实现部分被简化为：</p>
+<div class="p"><pre class="pre codeblock"><code><strong class="ph b">for</strong><strong class="ph b"> i=0 </strong><strong class="ph b">to</strong><strong class="ph b"> </strong>Ubound<strong class="ph b">(KeysArray)-1
+&nbsp;
+　　Key=KeysArray(i,0)
+&nbsp;
+　　Item=Request(md5(Key))
+&nbsp;
+　　objDict.Add Key,Item
+&nbsp;
+</strong><strong class="ph b">next</strong></code></pre></div>
+<p class="p">也就是说，这是和传统方案完全相反的思路，这个思路保证了所获取的数据一定是数据库所需要的数据，数据库要求的数据类型或者必须为空的数据如果出现异常则必然会出错，等等。</p>
+<p class="p">最后在实现表单处理的语句简化为，其他的一切操作都被封装在类中：</p>
+<div class="p"><pre class="pre codeblock"><code><strong class="ph b">Call</strong><strong class="ph b"> System_Initialize()
+&nbsp;
+</strong><strong class="ph b">Dim</strong><strong class="ph b"> objUser </strong>'新建对象<strong class="ph b">
+</strong><strong class="ph b">Set</strong><strong class="ph b"> objUser = </strong><strong class="ph b">new</strong><strong class="ph b"> TUser
+&nbsp;
+　　objUser.Table=</strong><strong class="ph b">"Comm_User"</strong><strong class="ph b"> </strong>'指定数据表<strong class="ph b">
+　　</strong><strong class="ph b">If</strong><strong class="ph b"> objUser.Creat </strong><strong class="ph b">Then</strong><strong class="ph b"> </strong>'建立表的Dictionary对象<strong class="ph b">
+　　　　objUser.ValidAndTransfer() </strong>'获取数据、验证并转入最终的数据驱动层<strong class="ph b">
+　　　　objUser.Update() </strong>'更新该表数据<strong class="ph b">
+　　</strong><strong class="ph b">End</strong><strong class="ph b"> </strong><strong class="ph b">IF</strong><strong class="ph b">
+&nbsp;
+</strong><strong class="ph b">Set</strong><strong class="ph b"> objUser = </strong><strong class="ph b">nothing</strong><strong class="ph b">
+&nbsp;
+</strong><strong class="ph b">Call</strong><strong class="ph b"> System_Terminate()</strong></code></pre></div>
+<p class="p">与之配套的另外一个方面是从缓存的数据表框架中按照实际表单的需要自动生成Web表单，显示在客户端。　</p>
+<p class="p">在SQL Server中遍历当前数据库的所有用户表</p>
+<div class="p"><pre class="pre codeblock"><code><strong class="ph b">SELECT</strong><strong class="ph b"> Table_name
+&nbsp;
+FROM INFORMATION_SCHEMA.TABLES
+&nbsp;
+WHERE (TABLE_TYPE &lt;&gt; </strong>'VIEW')<strong class="ph b">
+&nbsp;
+&nbsp;
+Table_name：表名；
+&nbsp;
+TABLE_TYPE：表的类型；</strong></code></pre></div>
+<p class="p">参见：SQL Server联机手册，T-SQL参考，信息架构视图。</p>
+<p class="p">又及：ACCESS下也可实现相关的功能[1]</p>
+<p class="p">在SQL Server中遍历指定表的字段及属性</p>
+<div class="p"><pre class="pre codeblock"><code><strong class="ph b">SELECT</strong><strong class="ph b"> Column_name,IS_NULLABLE,DATA_TYPE
+&nbsp;
+FROM INFORMATION_SCHEMA.COLUMNS
+&nbsp;
+WHERE (TABLE_NAME = </strong>'myTableName')<strong class="ph b">
+&nbsp;
+&nbsp;
+TABLE_NAME：表名；
+&nbsp;
+Column_name：列名；
+&nbsp;
+IS_NULLABLE：是否允许为空；
+&nbsp;
+DataType：系统数据类型；
+&nbsp;
+ORDINAL_POSITION：列标识号；
+&nbsp;
+COLUMN_DEFAULT：列的默认值；
+&nbsp;
+CHARACTER_OCTET_LENGTH：以字节为单位的最大长度，适于二进制数据、字符数据，或者文本和图像数据。否则，返回 </strong><strong class="ph b">NULL</strong><strong class="ph b">。</strong></code></pre></div>
+<p class="p">从数据库生成当前库所有表全局Array缓存</p>
+<div class="p"><pre class="pre codeblock"><code><strong class="ph b">　strSQL=</strong>"SELECT Table_name FROM INFORMATION_SCHEMA.TABLES WHERE (TABLE_TYPE&lt;&gt;'VIEW')"<strong class="ph b">
+&nbsp;
+　　</strong><strong class="ph b">Set</strong><strong class="ph b"> objRS_table= objConn.Execute(strSQL)
+&nbsp;
+　　</strong><strong class="ph b">do</strong><strong class="ph b"> </strong><strong class="ph b">while</strong><strong class="ph b"> </strong><strong class="ph b">not</strong><strong class="ph b"> objRS_table.EOF
+&nbsp;
+&nbsp;
+&nbsp;
+　　　　strSQL=</strong>"SELECT Column_name,DATA_TYPE,IS_NULLABLE,COLUMN_DEFAULT,CHARACTER_OCTET_LENGTH FROM INFORMATION_SCHEMA.COLUMNS WHERE (TABLE_NAME = '"<strong class="ph b">&amp; objRS_table(</strong>"Table_name"<strong class="ph b">) &amp;</strong>"')"<strong class="ph b">
+&nbsp;
+　　　　</strong><strong class="ph b">set</strong><strong class="ph b"> objRS_column=server.</strong><strong class="ph b">createobject</strong><strong class="ph b">(</strong>"adodb.recordset"<strong class="ph b">)
+&nbsp;
+　　　　objRS_column.</strong><strong class="ph b">open</strong><strong class="ph b"> strSQL,objConn,1,1
+&nbsp;
+　　　　</strong><strong class="ph b">Dim</strong><strong class="ph b"> i,TableTemp
+&nbsp;
+　　　　i=0
+&nbsp;
+　　　　</strong><strong class="ph b">ReDim</strong><strong class="ph b"> TableTemp(objRS_column.RecordCount,4)
+&nbsp;
+&nbsp;
+&nbsp;
+　　　　</strong><strong class="ph b">do</strong><strong class="ph b"> </strong><strong class="ph b">while</strong><strong class="ph b"> </strong><strong class="ph b">not</strong><strong class="ph b"> objRS_column.EOF
+&nbsp;
+　　　　　　TableTemp(i,0)=objRS_column(0)
+&nbsp;
+　　　　　　TableTemp(i,1)=objRS_column(1)
+&nbsp;
+　　　　　　TableTemp(i,2)=objRS_column(2)
+&nbsp;
+　　　　　　TableTemp(i,3)=objRS_column(3)
+&nbsp;
+　　　　　　TableTemp(i,4)=objRS_column(4)
+&nbsp;
+　　　　　　i=i+1
+&nbsp;
+　　　　objRS_column.movenext
+&nbsp;
+　　　　</strong><strong class="ph b">loop</strong><strong class="ph b">
+&nbsp;
+　　　　</strong><strong class="ph b">Set</strong><strong class="ph b"> objRS_column= </strong><strong class="ph b">nothing</strong><strong class="ph b">
+&nbsp;
+　　　　
+&nbsp;
+　　　　application(objRS_table(0))=TableTemp
+&nbsp;
+&nbsp;
+&nbsp;
+　　objRS_table.movenext
+&nbsp;
+　　</strong><strong class="ph b">loop</strong></code></pre></div>
+<p class="p">数据驱动层</p>
+<p class="p">&lt;%</p>
+<p class="p">'<strong class="ph b">&nbsp;</strong><strong class="ph b">'底层A：对DataBase操作的封装。 '返回错误代码头：DB '</strong></p>
+<div class="p"><pre class="pre codeblock"><code><strong class="ph b">Class TDBDriver
+&nbsp;
+　　</strong><strong class="ph b">Public</strong><strong class="ph b"> objDict
+&nbsp;
+&nbsp;
+&nbsp;
+　　</strong><strong class="ph b">Private</strong><strong class="ph b"> Table
+&nbsp;
+　　</strong><strong class="ph b">Private</strong><strong class="ph b"> KeysArray
+&nbsp;
+　　</strong><strong class="ph b">Private</strong><strong class="ph b"> ItemArray
+&nbsp;
+&nbsp;
+&nbsp;
+　　</strong><strong class="ph b">Private</strong><strong class="ph b"> objRS
+&nbsp;
+&nbsp;
+&nbsp;
+　　</strong><strong class="ph b">Private</strong><strong class="ph b"> strSQL
+&nbsp;
+　　</strong><strong class="ph b">Private</strong><strong class="ph b"> SQL_Start
+&nbsp;
+　　</strong><strong class="ph b">Private</strong><strong class="ph b"> SQL_Main
+&nbsp;
+　　</strong><strong class="ph b">Private</strong><strong class="ph b"> SQL_Join
+&nbsp;
+　　</strong><strong class="ph b">Private</strong><strong class="ph b"> SQL_Where
+&nbsp;
+　　</strong><strong class="ph b">Private</strong><strong class="ph b"> SQL_Order
+&nbsp;
+　　</strong><strong class="ph b">Private</strong><strong class="ph b"> SQL_Group
+&nbsp;
+&nbsp;
+&nbsp;
+　　</strong><strong class="ph b">Public</strong><strong class="ph b"> PageSize
+&nbsp;
+&nbsp;
+&nbsp;
+　　</strong><strong class="ph b">Private</strong><strong class="ph b"> ErrorMsg
+&nbsp;
+&nbsp;
+&nbsp;
+　　</strong>'插入一条数据或者更新指定的条目<strong class="ph b">
+　　</strong><strong class="ph b">Public</strong><strong class="ph b"> </strong><strong class="ph b">Function</strong><strong class="ph b"> Update()
+&nbsp;
+　　　　</strong><strong class="ph b">If</strong><strong class="ph b"> objDict.Item(KeysArray(0,0))=</strong><strong class="ph b">""</strong><strong class="ph b"> </strong><strong class="ph b">Then</strong><strong class="ph b">
+&nbsp;
+　　　　　　SQL_Start=</strong><strong class="ph b">"Insert into "</strong><strong class="ph b">&amp; Table
+&nbsp;
+　　　　　　SQL_Main=</strong><strong class="ph b">" ("</strong><strong class="ph b">
+&nbsp;
+　　　　　　　　</strong>'从有数据的部分对应更新入数据库<strong class="ph b">
+　　　　　　　　</strong><strong class="ph b">For</strong><strong class="ph b"> i=1 </strong><strong class="ph b">to</strong><strong class="ph b"> objDict.Count-1
+&nbsp;
+　　　　　　　　　　</strong><strong class="ph b">If</strong><strong class="ph b"> </strong><strong class="ph b">Not</strong><strong class="ph b"> ItemArray(i)=</strong><strong class="ph b">""</strong><strong class="ph b"> </strong><strong class="ph b">Then</strong><strong class="ph b">
+&nbsp;
+　　　　　　　　　　　　SQL_Main= SQL_Main &amp; KeysArray(i,0) &amp;</strong><strong class="ph b">","</strong><strong class="ph b">
+&nbsp;
+　　　　　　　　　　</strong><strong class="ph b">End</strong><strong class="ph b"> </strong><strong class="ph b">If</strong><strong class="ph b">
+&nbsp;
+　　　　　　　　</strong><strong class="ph b">Next</strong><strong class="ph b">
+&nbsp;
+　　　　　　　　</strong>'去掉最后一个“,”<strong class="ph b">
+　　　　　　　　SQL_Main=Left(SQL_Main,Len(SQL_Main)-1)
+&nbsp;
+&nbsp;
+&nbsp;
+　　　　　　　　SQL_Main= SQL_Main &amp;</strong><strong class="ph b">") Values("</strong><strong class="ph b">
+&nbsp;
+　　　　　　　　</strong><strong class="ph b">For</strong><strong class="ph b"> i=1 </strong><strong class="ph b">to</strong><strong class="ph b"> objDict.Count-1
+&nbsp;
+　　　　　　　　　　</strong><strong class="ph b">If</strong><strong class="ph b"> </strong><strong class="ph b">Not</strong><strong class="ph b"> ItemArray(i)=</strong><strong class="ph b">""</strong><strong class="ph b"> </strong><strong class="ph b">Then</strong><strong class="ph b">
+&nbsp;
+　　　　　　　　　　　　</strong><strong class="ph b">If</strong><strong class="ph b"> KeysArray(i,1)=</strong><strong class="ph b">"int"</strong><strong class="ph b"> </strong><strong class="ph b">Then</strong><strong class="ph b">
+&nbsp;
+　　　　　　　　　　　　　　SQL_Main= SQL_Main &amp; objDict.Item(KeysArray(i,0))
+&nbsp;
+　　　　　　　　　　　　</strong><strong class="ph b">Else</strong><strong class="ph b">
+&nbsp;
+　　　　　　　　　　　　　　SQL_Main= SQL_Main &amp;</strong><strong class="ph b">"'"</strong><strong class="ph b">&amp; objDict.Item(KeysArray(i,0)) &amp;</strong><strong class="ph b">"'"</strong><strong class="ph b">
+&nbsp;
+　　　　　　　　　　　　</strong><strong class="ph b">End</strong><strong class="ph b"> </strong><strong class="ph b">if</strong><strong class="ph b">
+&nbsp;
+　　　　　　　　　　　　SQL_Main= SQL_Main &amp;</strong><strong class="ph b">","</strong><strong class="ph b">
+&nbsp;
+　　　　　　　　　　</strong><strong class="ph b">End</strong><strong class="ph b"> </strong><strong class="ph b">If</strong><strong class="ph b">
+&nbsp;
+　　　　　　　　</strong><strong class="ph b">Next</strong><strong class="ph b">
+&nbsp;
+　　　　　　　　</strong>'去掉最后一个“,”<strong class="ph b">
+　　　　　　　　SQL_Main=Left(SQL_Main,Len(SQL_Main)-1)
+&nbsp;
+　　　　　　SQL_Main= SQL_Main &amp;</strong><strong class="ph b">")"</strong><strong class="ph b">
+&nbsp;
+　　　　</strong><strong class="ph b">Else</strong><strong class="ph b">
+&nbsp;
+　　　　　　SQL_Start=</strong><strong class="ph b">"Update "</strong><strong class="ph b">&amp; Table &amp;</strong><strong class="ph b">" Set "</strong><strong class="ph b">
+&nbsp;
+　　　　　　</strong><strong class="ph b">For</strong><strong class="ph b"> i=1 </strong><strong class="ph b">To</strong><strong class="ph b"> objDict.Count-1
+&nbsp;
+　　　　　　　　</strong><strong class="ph b">If</strong><strong class="ph b"> </strong><strong class="ph b">Not</strong><strong class="ph b"> ItemArray(i)=</strong><strong class="ph b">""</strong><strong class="ph b"> </strong><strong class="ph b">Then</strong><strong class="ph b">
+&nbsp;
+　　　　　　　　　　SQL_Main= SQL_Main &amp;</strong><strong class="ph b">" ("</strong><strong class="ph b">&amp; KeysArray(i,0) &amp;</strong><strong class="ph b">"="</strong><strong class="ph b">
+&nbsp;
+　　　　　　　　　　</strong><strong class="ph b">If</strong><strong class="ph b"> KeysArray(i,1)=</strong><strong class="ph b">"int"</strong><strong class="ph b"> </strong><strong class="ph b">Then</strong><strong class="ph b">
+&nbsp;
+　　　　　　　　　　　　SQL_Main= SQL_Main &amp; objDict.Item(KeysArray(i,0))
+&nbsp;
+　　　　　　　　　　</strong><strong class="ph b">Else</strong><strong class="ph b">
+&nbsp;
+　　　　　　　　　　　　SQL_Main= SQL_Main &amp;</strong><strong class="ph b">"'"</strong><strong class="ph b">&amp; objDict.Item(KeysArray(i,0)) &amp;</strong><strong class="ph b">"'"</strong><strong class="ph b">　　
+&nbsp;
+　　　　　　　　　　</strong><strong class="ph b">End</strong><strong class="ph b"> </strong><strong class="ph b">if</strong><strong class="ph b">
+&nbsp;
+　　　　　　　　　　SQL_Main= SQL_Main &amp;</strong><strong class="ph b">"),"</strong><strong class="ph b">
+&nbsp;
+　　　　　　　　</strong><strong class="ph b">End</strong><strong class="ph b"> </strong><strong class="ph b">IF</strong><strong class="ph b">
+&nbsp;
+　　　　　　</strong><strong class="ph b">Next</strong><strong class="ph b">
+&nbsp;
+　　　　　　</strong>'去掉最后一个“,”<strong class="ph b">
+　　　　　　SQL_Main=Left(SQL_Main,Len(SQL_Main)-1)
+&nbsp;
+　　　　　　SQL_Where=</strong><strong class="ph b">" Where "</strong><strong class="ph b">&amp; KeysArray(0,0) &amp;</strong><strong class="ph b">"="</strong><strong class="ph b">&amp; objDict.Item(KeysArray(0,0))
+&nbsp;
+　　　　</strong><strong class="ph b">End</strong><strong class="ph b"> </strong><strong class="ph b">if</strong><strong class="ph b">
+&nbsp;
+&nbsp;
+&nbsp;
+　　　　strSQL=SQL_Start &amp; SQL_Main &amp; SQL_Where
+&nbsp;
+　　　　</strong>'objConn.Execute(strSQL)<strong class="ph b">
+　　　　Response.Write strSQL
+&nbsp;
+　　　　Update=</strong><strong class="ph b">True</strong><strong class="ph b">
+&nbsp;
+　　</strong><strong class="ph b">End</strong><strong class="ph b"> </strong><strong class="ph b">Function</strong><strong class="ph b">
+&nbsp;
+&nbsp;
+&nbsp;
+　　</strong>'删除数据<strong class="ph b">
+　　</strong><strong class="ph b">Public</strong><strong class="ph b"> </strong><strong class="ph b">Function</strong><strong class="ph b"> Delete()
+&nbsp;
+　　　　</strong><strong class="ph b">If</strong><strong class="ph b"> objDict.Item(KeysArray(0,0))=</strong><strong class="ph b">""</strong><strong class="ph b"> </strong><strong class="ph b">Then</strong><strong class="ph b"> </strong><strong class="ph b">Call</strong><strong class="ph b"> ShowError(ErrorMsg,01) :</strong><strong class="ph b">Exit</strong><strong class="ph b"> </strong><strong class="ph b">Function</strong><strong class="ph b">
+&nbsp;
+　　　　SQL_Start=</strong><strong class="ph b">"Delete From "</strong><strong class="ph b">&amp; Table
+&nbsp;
+　　　　SQL_Where=</strong><strong class="ph b">" Where "</strong><strong class="ph b">&amp; KeysArray(0,0) &amp;</strong><strong class="ph b">"="</strong><strong class="ph b">&amp; objDict.Item(KeysArray(0,0))
+&nbsp;
+　　　　strSQL=SQL_Start &amp; SQL_Where
+&nbsp;
+　　　　objConn.Execute(strSQL)
+&nbsp;
+&nbsp;
+&nbsp;
+　　　　Delete=</strong><strong class="ph b">True</strong><strong class="ph b">
+&nbsp;
+　　</strong><strong class="ph b">End</strong><strong class="ph b"> </strong><strong class="ph b">Function</strong><strong class="ph b">
+&nbsp;
+&nbsp;
+&nbsp;
+　　</strong>'返回单条数据<strong class="ph b">
+　　</strong><strong class="ph b">Public</strong><strong class="ph b"> </strong><strong class="ph b">Function</strong><strong class="ph b"> ReturnSingle()
+&nbsp;
+　　　　</strong><strong class="ph b">If</strong><strong class="ph b"> objDict.Item(KeysArray(0,0))=</strong><strong class="ph b">""</strong><strong class="ph b"> </strong><strong class="ph b">Then</strong><strong class="ph b"> </strong><strong class="ph b">Call</strong><strong class="ph b"> ShowError(ErrorMsg,02) :</strong><strong class="ph b">Exit</strong><strong class="ph b"> </strong><strong class="ph b">Function</strong><strong class="ph b">
+&nbsp;
+　　　　SQL_Start=</strong><strong class="ph b">"Select * From "</strong><strong class="ph b">&amp; Table
+&nbsp;
+　　　　SQL_Where=</strong><strong class="ph b">" Where "</strong><strong class="ph b">&amp; KeysArray(0,0) &amp;</strong><strong class="ph b">"="</strong><strong class="ph b">&amp; objDict.Item(KeysArray(0,0))
+&nbsp;
+　　　　strSQL=SQL_Start &amp; SQL_Where
+&nbsp;
+　　　　</strong><strong class="ph b">Set</strong><strong class="ph b"> objRS =objConn.Execute(strSQL)
+&nbsp;
+　　　　</strong><strong class="ph b">If</strong><strong class="ph b"> objRS.EOF </strong><strong class="ph b">or</strong><strong class="ph b"> objRS.BOF </strong><strong class="ph b">Then</strong><strong class="ph b">
+&nbsp;
+　　　　　　</strong><strong class="ph b">Call</strong><strong class="ph b"> ShowError(ErrorMsg,03)
+&nbsp;
+　　　　</strong><strong class="ph b">Else</strong><strong class="ph b">
+&nbsp;
+　　　　　　</strong><strong class="ph b">For</strong><strong class="ph b"> i=1 </strong><strong class="ph b">To</strong><strong class="ph b"> </strong><strong class="ph b">Ubound</strong><strong class="ph b">(objDict.Items)-1
+&nbsp;
+　　　　　　　　objDict.Item(KeysArray(i,0)) = objRS(i)
+&nbsp;
+　　　　　　</strong><strong class="ph b">Next</strong><strong class="ph b">
+&nbsp;
+　　　　</strong><strong class="ph b">End</strong><strong class="ph b"> </strong><strong class="ph b">IF</strong><strong class="ph b">
+&nbsp;
+　　　　</strong><strong class="ph b">Set</strong><strong class="ph b"> objRS =</strong><strong class="ph b">Nothing</strong><strong class="ph b">
+&nbsp;
+　　　　ReturnSingle=objDict
+&nbsp;
+　　</strong><strong class="ph b">End</strong><strong class="ph b"> </strong><strong class="ph b">Function</strong><strong class="ph b">
+&nbsp;
+&nbsp;
+&nbsp;
+　　</strong>'返回分页数据<strong class="ph b">
+　　</strong>'需要继承回传的数据<strong class="ph b">
+　　</strong><strong class="ph b">Public</strong><strong class="ph b"> </strong><strong class="ph b">Function</strong><strong class="ph b"> ReturnList()
+&nbsp;
+　　　　</strong>'必须指定页长、页数<strong class="ph b">
+　　　　</strong><strong class="ph b">If</strong><strong class="ph b"> PageSize=</strong><strong class="ph b">""</strong><strong class="ph b"> </strong><strong class="ph b">Then</strong><strong class="ph b"> </strong><strong class="ph b">Call</strong><strong class="ph b"> ShowError(ErrorMsg,0) :</strong><strong class="ph b">Exit</strong><strong class="ph b"> </strong><strong class="ph b">Function</strong><strong class="ph b">
+&nbsp;
+&nbsp;
+&nbsp;
+　　</strong><strong class="ph b">End</strong><strong class="ph b"> </strong><strong class="ph b">Function</strong><strong class="ph b">
+&nbsp;
+&nbsp;
+&nbsp;
+　　</strong><strong class="ph b">Public</strong><strong class="ph b"> </strong><strong class="ph b">Function</strong><strong class="ph b"> Transfer(ExternalDict)
+&nbsp;
+　　　　</strong><strong class="ph b">Set</strong><strong class="ph b"> objDict=ExternalDict.objDict
+&nbsp;
+　　　　</strong>'参数导入，只是为了书写方便<strong class="ph b">
+　　　　Table=ExternalDict.Table
+&nbsp;
+　　　　KeysArray=ExternalDict.KeysArray
+&nbsp;
+　　　　ItemArray=objDict.Items
+&nbsp;
+　　</strong><strong class="ph b">End</strong><strong class="ph b"> </strong><strong class="ph b">Function</strong><strong class="ph b">
+&nbsp;
+&nbsp;
+&nbsp;
+　　</strong><strong class="ph b">Private</strong><strong class="ph b"> </strong><strong class="ph b">Sub</strong><strong class="ph b"> Class_Initialize()
+&nbsp;
+　　　　ErrorMsg=</strong><strong class="ph b">"DB"</strong><strong class="ph b">
+&nbsp;
+　　　　</strong>'传入FormDriver处理过的Dictionary<strong class="ph b">
+　　</strong><strong class="ph b">End</strong><strong class="ph b"> </strong><strong class="ph b">Sub</strong><strong class="ph b">
+&nbsp;
+&nbsp;
+&nbsp;
+　　</strong><strong class="ph b">Private</strong><strong class="ph b"> </strong><strong class="ph b">Sub</strong><strong class="ph b"> Class_Terminate()
+&nbsp;
+　　　　</strong>'返回FormDriver处理过的Dictionary<strong class="ph b">
+　　</strong><strong class="ph b">End</strong><strong class="ph b"> </strong><strong class="ph b">Sub</strong><strong class="ph b">
+&nbsp;
+</strong><strong class="ph b">End</strong><strong class="ph b"> Class</strong></code></pre></div>
+<p class="p">底层B：对Dictionary操作的封装。</p>
+<p class="p">'返回错误代码头：DC</p>
+<p class="p">'<strong class="ph b">&nbsp;</strong><strong class="ph b">&lt;code vb&gt; Class TDictionaryDriver 　　Public
+Table 　　Public KeysArray 　　Public objDict 　　Private Key 　　Private
+Item 　　Private ErrorMsg 　　'根据系统缓存导入框架 　　'报错信息 　　Public Function Creat()
+　　　　'必须指定数据表 　　　　If Table=”” Then Call ShowError(ErrorMsg,01) :Exit
+Function 　　　　'必须是系统缓存中已经存在的数据表 　　　　If IsNull(application(Table)) Then
+Call ShowError(ErrorMsg,02) :Exit Function 　　　　'导入数据表框架 　　　　KeysArray=application(Table)
+　　End Function 　　'根据数据表框架-获取[过滤]数据 　　'通过加密的方案解决表单字段和数据库字段的异步问题 　　Public
+Function GetRequest() 　　　　for i=0 to Ubound(KeysArray)-1 　　　　　　Key=KeysArray(i,0)
+　　　　　　Item=Request(md5(Key)) 　　　　　　'Item=Request.QueryString(md5(Key))
+　　　　　　'Item=Request.Form(Key) 　　　　　　objDict.Add Key,Item 　　　　next
+　　　　'形成Dictionary对象 　　　　GetRequest=True 　　End Function 　　'根据数据表框架-效验获取的数据
+　　Public Function Valid() 　　　　'注入转换和过滤 　　　　'必填项 　　　　If objDict.Item(KeysArray(0,0))=””
+Then 　　　　　　'对于新增数据，必填项目不能为空 　　　　　　'允许更新操作跳过必填项目遍历进行部分更新 　　　　　　for
+i=1 to Ubound(KeysArray)-1 '跳过主键遍历 　　　　　　　　If Trim(KeysArray(i,2))=“No”
+And objDict.Item(KeysArray(i,0))=”” Then Call ShowError(ErrorMsg,03)
+:Exit Function 　　　　　　next 　　　　End IF 　　　　'字段类型要求 　　　　for i=0 to Ubound(KeysArray)-1
+　　　　　　'效验数据类型要求 　　　　　　If KeysArray(i,1)=“int” Then 　　　　　　　　If IsNumeric(objDict.Item(KeysArray(i,0)))=0
+Then Call ShowError(ErrorMsg,04) :Exit Function 　　　　　　　　If objDict.Item(KeysArray(i,0))&gt;2147483647
+or objDict.Item(KeysArray(i,0))←2147483647 Then Call ShowError(ErrorMsg,05)
+:Exit Function 　　　　　　ElseIf objDict.Item(KeysArray(i,0))&lt;&gt;”” And
+KeysArray(i,1) =“datetime” Then 　　　　　　　　If IsDate(objDict.Item(KeysArray(i,0)))=0
+Then Call ShowError(ErrorMsg,06) :Exit Function 　　　　　　ElseIF KeysArray(i,1)=“bit”
+Then 　　　　　　　　If (Not objDict.Item(KeysArray(i,0))=0) And (Not objDict.Item(KeysArray(i,0))=1)
+Then Call ShowError(ErrorMsg,07) :Exit Function 　　　　　　End If 　　　　　　'效验字段长度
+　　　　　　If IsNumeric(KeysArray(i,4)) And Len(objDict.Item(KeysArray(i,0)))&gt;=KeysArray(i,4)
+Then Call ShowError(ErrorMsg,08) :Exit Function 　　　　　　'默认值 　　　　next
+　　　　Valid=True 　　End Function 　　'从数据库框架和Dictionary还原出完整的表单，该表单需要具体对象类根据实际需求进行进一步处理
+　　'通过加密的方案解决表单字段和数据库字段的异步问题 　　Public Function ReturnForm() 　　　　Dim
+strForm 　　　　strForm=”&lt;form action=”””” method=”“post”” id=”””&amp;
+MD5(Table) &amp;”””&gt;&lt;ul&gt;” &amp;chr(10) 　　　　strForm=strForm &amp;”&lt;li&gt;&lt;input
+id=”””&amp; MD5(KeysArray(0,0)) &amp;””” type=”“hiddden”” value=”””&amp;
+objDict.Item(KeysArray(0,0)) &amp;”””&gt;&lt;/li&gt;” &amp;chr(10) 　　　　　　for
+i=0 to Ubound(KeysArray)-1 　　　　　　'效验数据类型 　　　　　　　　If KeysArray(i,1)=“int”
+Then 　　　　　　　　'Radio 　　　　　　　　'Select 　　　　　　　　'Checkbox 　　　　　　　　　　strForm=strForm
+&amp;”&lt;li&gt;&lt;input id=”””&amp; MD5(KeysArray(i,0)) &amp;””” type=”“text””
+value=”””&amp; objDict.Item(KeysArray(i,0)) &amp;”””&gt;&lt;/li&gt;”&amp;chr(10)
+　　　　　　　　ElseIf KeysArray(i,1) =“datetime” Then 　　　　　　　　　　strForm=strForm &amp;”&lt;li&gt;&lt;input
+id=”””&amp; MD5(KeysArray(i,0)) &amp;””” type=”“text”” value=”””&amp;
+objDict.Item(KeysArray(i,0)) &amp;”””&gt;&lt;/li&gt;”&amp;chr(10) 　　　　　　　　ElseIF
+KeysArray(i,1)=“bit” Then 　　　　　　　　　　strForm=strForm &amp;”&lt;li&gt;&lt;input
+id=”””&amp; MD5(KeysArray(i,0)) &amp;””” type=”“text”” value=”””&amp;
+objDict.Item(KeysArray(i,0)) &amp;”””&gt;&lt;/li&gt;”&amp;chr(10) 　　　　　　　　ElseIF
+KeysArray(i,1)=“text” Then 　　　　　　　　　　strForm=strForm &amp;”&lt;li&gt;&lt;textarea
+id=”””&amp; MD5(KeysArray(i,0)) &amp;””” type=”“text””&gt;”&amp; objDict.Item(KeysArray(i,0))
+&amp;”&lt;/textarea&gt;&lt;/li&gt;”&amp;chr(10) 　　　　　　　　End If 　　　　　　next
+　　　　strForm=strForm &amp;”&lt;/ul&gt;&lt;form&gt;” &amp;chr(10) 　　　　Response.Write
+strForm 　　　　ReturnForm=True 　　End Function 　　Private Sub Class_Initialize()
+　　　　'创建Dictionary对象 　　　　Set objDict=CreateObject(“Scripting.Dictionary”)
+　　　　ErrorMsg=“DC” 　　End Sub 　　Private Sub Class_Terminate() 　　　　'释放Dictionary对象
+　　　　Set objDict=nothing 　　End Sub End Class &lt;/code&gt; '</strong></p>
+<p class="p">'交互层，根据实际需要定制结合对Dictionary和DataBase的操作，定义针对对象的直接操作。</p>
+<p class="p">'返回错误代码头：UR</p>
+<p class="p">'**</p>
+<div class="p"><pre class="pre codeblock"><code><strong class="ph b">Class TUser
+&nbsp;
+　　</strong><strong class="ph b">Public</strong><strong class="ph b"> Table
+&nbsp;
+&nbsp;
+&nbsp;
+　　</strong><strong class="ph b">Private</strong><strong class="ph b"> objDictionary
+&nbsp;
+　　</strong><strong class="ph b">Private</strong><strong class="ph b"> objDataBase
+&nbsp;
+&nbsp;
+&nbsp;
+　　</strong><strong class="ph b">Private</strong><strong class="ph b"> ErrorMsg
+&nbsp;
+&nbsp;
+&nbsp;
+　　</strong><strong class="ph b">Public</strong><strong class="ph b"> </strong><strong class="ph b">Function</strong><strong class="ph b"> Update()
+&nbsp;
+　　　　</strong><strong class="ph b">iF</strong><strong class="ph b"> objDataBase.Update </strong><strong class="ph b">Then</strong><strong class="ph b"> Update=</strong><strong class="ph b">True</strong><strong class="ph b">
+&nbsp;
+　　</strong><strong class="ph b">End</strong><strong class="ph b"> </strong><strong class="ph b">Function</strong><strong class="ph b">
+&nbsp;
+&nbsp;
+&nbsp;
+　　</strong><strong class="ph b">Public</strong><strong class="ph b"> </strong><strong class="ph b">Function</strong><strong class="ph b"> Delete()
+&nbsp;
+　　　　</strong><strong class="ph b">iF</strong><strong class="ph b"> objDataBase.Delete </strong><strong class="ph b">Then</strong><strong class="ph b"> Delete=</strong><strong class="ph b">True</strong><strong class="ph b">
+&nbsp;
+　　</strong><strong class="ph b">End</strong><strong class="ph b"> </strong><strong class="ph b">Function</strong><strong class="ph b">
+&nbsp;
+&nbsp;
+&nbsp;
+　　</strong><strong class="ph b">Public</strong><strong class="ph b"> </strong><strong class="ph b">Function</strong><strong class="ph b"> DrawForm()
+&nbsp;
+　　　　</strong><strong class="ph b">iF</strong><strong class="ph b"> objDictionary.ReturnForm </strong><strong class="ph b">Then</strong><strong class="ph b"> DrawForm=</strong><strong class="ph b">True</strong><strong class="ph b">
+&nbsp;
+　　</strong><strong class="ph b">End</strong><strong class="ph b"> </strong><strong class="ph b">Function</strong><strong class="ph b">
+&nbsp;
+&nbsp;
+&nbsp;
+　　</strong><strong class="ph b">Public</strong><strong class="ph b"> </strong><strong class="ph b">Function</strong><strong class="ph b"> ValidAndTransfer()
+&nbsp;
+　　　　objDictionary.GetRequest()
+&nbsp;
+　　　　</strong><strong class="ph b">If</strong><strong class="ph b"> objDictionary.Valid </strong><strong class="ph b">Then</strong><strong class="ph b">
+&nbsp;
+　　　　　　</strong><strong class="ph b">Call</strong><strong class="ph b"> objDataBase.Transfer(objDictionary)
+&nbsp;
+　　　　</strong><strong class="ph b">Else</strong><strong class="ph b">
+&nbsp;
+　　　　　　</strong><strong class="ph b">Call</strong><strong class="ph b"> ShowError(ErrorMsg,01) :</strong><strong class="ph b">Exit</strong><strong class="ph b"> </strong><strong class="ph b">Function</strong><strong class="ph b">
+&nbsp;
+　　　　</strong><strong class="ph b">End</strong><strong class="ph b"> </strong><strong class="ph b">If</strong><strong class="ph b">
+&nbsp;
+　　</strong><strong class="ph b">End</strong><strong class="ph b"> </strong><strong class="ph b">Function</strong><strong class="ph b">
+&nbsp;
+&nbsp;
+&nbsp;
+　　</strong><strong class="ph b">Public</strong><strong class="ph b"> </strong><strong class="ph b">Function</strong><strong class="ph b"> Creat()
+&nbsp;
+　　　　</strong><strong class="ph b">If</strong><strong class="ph b"> </strong><strong class="ph b">Not</strong><strong class="ph b"> Table=</strong><strong class="ph b">""</strong><strong class="ph b"> </strong><strong class="ph b">Then</strong><strong class="ph b">
+&nbsp;
+　　　　　　objDictionary.Table=Table
+&nbsp;
+　　　　　　objDictionary.Creat()
+&nbsp;
+　　　　</strong><strong class="ph b">End</strong><strong class="ph b"> </strong><strong class="ph b">If</strong><strong class="ph b">
+&nbsp;
+　　　　Creat=</strong><strong class="ph b">True</strong><strong class="ph b">
+&nbsp;
+　　</strong><strong class="ph b">End</strong><strong class="ph b"> </strong><strong class="ph b">Function</strong><strong class="ph b">
+&nbsp;
+&nbsp;
+&nbsp;
+　　</strong><strong class="ph b">Private</strong><strong class="ph b"> </strong><strong class="ph b">Sub</strong><strong class="ph b"> Class_Initialize()
+&nbsp;
+　　　　ErrorMsg=</strong><strong class="ph b">"UR"</strong><strong class="ph b">
+&nbsp;
+　　　　</strong><strong class="ph b">Set</strong><strong class="ph b"> objDictionary= </strong><strong class="ph b">new</strong><strong class="ph b"> TDictionaryDriver
+&nbsp;
+　　　　</strong><strong class="ph b">Set</strong><strong class="ph b"> objDataBase = </strong><strong class="ph b">new</strong><strong class="ph b"> TDBDriver
+&nbsp;
+　　</strong><strong class="ph b">End</strong><strong class="ph b"> </strong><strong class="ph b">Sub</strong><strong class="ph b">
+&nbsp;
+&nbsp;
+&nbsp;
+　　</strong><strong class="ph b">Private</strong><strong class="ph b"> </strong><strong class="ph b">Sub</strong><strong class="ph b"> Class_Terminate()
+&nbsp;
+　　　　</strong><strong class="ph b">Set</strong><strong class="ph b"> objDictionary= </strong><strong class="ph b">Nothing</strong><strong class="ph b">
+&nbsp;
+　　　　</strong><strong class="ph b">Set</strong><strong class="ph b"> objDataBase = </strong><strong class="ph b">nothing</strong><strong class="ph b">
+&nbsp;
+　　</strong><strong class="ph b">End</strong><strong class="ph b"> </strong><strong class="ph b">Sub</strong><strong class="ph b">
+&nbsp;
+</strong><strong class="ph b">End</strong><strong class="ph b"> Class
+&nbsp;
+&nbsp;
+&nbsp;
+&nbsp;
+&nbsp;
+</strong>''''''''''''''''''''''''<strong class="ph b">
+</strong><strong class="ph b">Call</strong><strong class="ph b"> System_Initialize()
+&nbsp;
+&nbsp;
+&nbsp;
+</strong><strong class="ph b">Dim</strong><strong class="ph b"> objUser
+&nbsp;
+</strong><strong class="ph b">Set</strong><strong class="ph b"> objUser = </strong><strong class="ph b">new</strong><strong class="ph b"> TUser
+&nbsp;
+　　objUser.Table=</strong><strong class="ph b">"Comm_User"</strong><strong class="ph b">
+&nbsp;
+　　</strong><strong class="ph b">If</strong><strong class="ph b"> objUser.Creat </strong><strong class="ph b">Then</strong><strong class="ph b">
+&nbsp;
+　　　　</strong>'objUser.ValidAndTransfer()<strong class="ph b">
+　　　　</strong>'objUser.Update()<strong class="ph b">
+　　　　</strong><strong class="ph b">Call</strong><strong class="ph b"> objUser.DrawForm()
+&nbsp;
+　　</strong><strong class="ph b">End</strong><strong class="ph b"> </strong><strong class="ph b">IF</strong><strong class="ph b">
+&nbsp;
+</strong><strong class="ph b">Set</strong><strong class="ph b"> objUser = </strong><strong class="ph b">nothing</strong><strong class="ph b">
+&nbsp;
+&nbsp;
+&nbsp;
+</strong><strong class="ph b">Call</strong><strong class="ph b"> System_Terminate()
+&nbsp;
+</strong>''''''''''''''''''''''''<strong class="ph b">
+%&gt;</strong></code></pre></div>
+<p class="p">代码下载</p>
+<p class="p">VBScript因为语言本身的限制，很多功能的实现都会变得没有必要的复杂，或者根本就不可能实现，有兴趣的可以用Javascript重写这个框架，那应该就可以比较轻松地实现多表联合查询了。</p>
+<p class="p">所以，现在这个框架仅实现了在单表状态下的操作，觉得主要的功能都有了。</p>
+<p class="p"><a class="xref" href="http://woooh.com/upload/fyautoly.rar" target="_blank" rel="external noopener">用这个框架写的写一个很简单的网站动态发布系统fyautoparts.com代码下载</a>，另外请注意这个实例为每个表写了单独的业务逻辑类，其实并非必要可以简化。</p>
+<div class="p"><pre class="pre codeblock"><code>安装指南：
+&nbsp;
+　　1、下载源文件包；
+&nbsp;
+　　2、把fyautoly文件夹下的所有文件解压；
+&nbsp;
+　　3、在SQL Server新建数据库auto_website，然后将auto_website.dat文件还原到这个数据库；
+&nbsp;
+&nbsp;
+&nbsp;
+　　系统管理界面在：
+&nbsp;
+　　/web/admin/
+&nbsp;
+　　用户名：Aether
+&nbsp;
+　　密码：111111</code></pre></div>
+<p class="p">参考</p>
+<p class="p"><a class="xref" href="http://woooh.com/post/sqldriver_by_asp_example.html" target="_blank" rel="external noopener">ASP数据库封装驱动·实例下载</a></p>
+<p class="p"><a class="xref" href="http://woooh.com/post/133.html" target="_blank" rel="external noopener">ASP数据库封装驱动</a></p>
+<p class="p"><a class="xref" href="http://woooh.com/post/134.html" target="_blank" rel="external noopener">ASP-VBScript下程序模型图</a></p>
+</div>
+<nav role="navigation" class="related-links"><div class="familylinks"><div class="parentlink"><strong>父主题：</strong> <a class="link" href="ASP.html">ASP</a></div></div></nav></article></main></body></html>

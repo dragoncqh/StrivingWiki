@@ -1,0 +1,116 @@
+<!DOCTYPE html
+  SYSTEM "about:legacy-compat">
+<html lang="zh-cn"><head><meta charset="UTF-8"><meta name="copyright" content="(C) 版权 2024"><meta name="generator" content="DITA-OT"><meta name="description" content=""><title>VC6编译Boost</title><link rel="stylesheet" type="text/css" href="../../commonltr.css">
+<link rel="stylesheet" type="text/css" href="../../common-extended.css"></head><body id="VC6编译Boost-4750AAE1"><main role="main"><article role="article" aria-labelledby="ariaid-title1">
+<h1 class="title topictitle1" id="ariaid-title1">VC6编译Boost</h1>
+
+
+<div class="body taskbody"><p class="shortdesc"></p>
+<section class="section prereq">这里选用版本boost_1_34_1.tar.gz，更新的版本用VC6.0编译会有很多编译错误。请在XP或WIN 7
+32位机器上编译</section>
+<section class="section context"></section>
+<section><ol class="ol steps"><li class="li step stepexpand"><span class="ph cmd">下载和直接包含源码使用Boost:</span>
+<ol type="a" class="ol substeps">
+<li class="li substep substepexpand"><span class="ph cmd">到Boost官方网站可以下载Boost的1.34.1版。http://sourceforge.net/projects/boost/files/boost/1.34.1/</span>
+</li>
+<li class="li substep substepexpand"><span class="ph cmd">将Boost压缩包解压到C：\Boost下</span></li>
+<li class="li substep substepexpand"><span class="ph cmd">在VC-&gt;Tools-&gt;Options-&gt;Directories-&gt;Include files里面增加D:\Boost\boost_1_37_0</span>
+</li>
+<li class="li substep substepexpand"><span class="ph cmd">打开vc6.0选择“Tools-&gt;Options-&gt;Directories-&gt;Include files,加入包含文件路径"C:\BOOST"(或D:\Lnhoo.Device.Driver\02_src\02_Common\Boost\boost_1_34__vc6_\boost_1_34__vc6_)</span>
+</li>
+<li class="li substep substepexpand"><span class="ph cmd">直接包含源码方式初步使用Boost：此时绝大多数的类库已经可以使用了，因为里面已经有.h和.cpp的完整源码，所以直接包含在你的工程，等你的工程需要的时候，才将Boost一些库功能进行编译。</span>
+<div class="itemgroup info"><p class="p">boost库中大部分组件不需要编译，直接包含对应头文件即可使用，如#include "boost/array.hpp"，因为组件的声明和实现都包含在头文件hpp中。</p><p class="p">其它一些库需要编译成静态库或动态库才能使用，如date_time、regex、thread、locale、signals、python等，不过这其中有些库不需要编译也可以使用其部分功能，而且有些库有不必编译的替代品，如xpressive可替换regex，signals2可以替换signals。</p><p class="p">可使用以下代码进行测试：</p><pre class="pre codeblock"><code>#include &lt;vector&gt;
+#include &lt;iostream&gt;
+#include &lt;boost/lexical_cast.hpp&gt;
+
+using namespace boost ;
+using namespace std ;
+
+int main(int argc, char * argv[])
+{
+vector&lt;int&gt; v1;
+vector&lt;int&gt;::const_iterator ci_v1 ;
+int iLength = 0 ;
+
+while( iLength &lt; 10 )
+{
+    try
+    {
+      if ( iLength == 5 )
+        v1.push_back(lexical_cast&lt;int&gt;("DukeJoe")) ;
+      else
+        v1.push_back(lexical_cast&lt;int&gt;(iLength));
+      }
+      catch(bad_lexical_cast &amp;ex;)
+      {
+        cout &lt;&lt; ex.what()&lt;&lt; endl ;
+        v1.push_back(-1);
+      }
+      iLength++ ;
+    }
+
+    cout &lt;&lt; "vector --&gt; " ;
+    for ( ci_v1 = v1.begin() ; ci_v1 != v1.end() ; ci_v1++ )
+    {
+      cout &lt;&lt; *ci_v1 &lt;&lt; " " ;
+    }
+    cout &lt;&lt; endl ;
+
+    return 0 ;
+}</code></pre></div>
+</li>
+</ol>
+</li><li class="li step stepexpand"><span class="ph cmd">使用nmake编译单个Boost子库：以编译regex功能子库为例。</span>
+<div class="itemgroup info"><p class="p">可以先将Boost类的功能编译成.dll和.lib等链接库，以减少编译时间，等到我们的工程使用的时候，只需要引用.dll，.lib，还有相应的.h就可以了。一般Boost库是由多个子库功能组合起来的，子库位于X:\Boost\boost_1_37_0\libs下面的文件夹，一个文件夹就是一个子库。可以一下子全部编译所有的子库，也可只编译某一些子库，如regex功能子库。</p></div>
+<ol type="a" class="ol substeps">
+<li class="li substep"><span class="ph cmd">将vc安装目录下\Microsoft Visual Studio\VC98\搜索Bin 找到名为VCVARS32.BAT的批处理文件，并将其拷贝到C:\Boost\libs\regex\build目录下。</span>
+</li>
+<li class="li substep"><span class="ph cmd">cmd进入到C:\boost\libs\regex\build目录下，执行VCVARS32.BAT（目的是使编译文件命令nmake可用，否则
+将提示nmake既不是内部也不是外部命令）后，敲入:nmake -f vc6.mak对其进行编译，</span></li>
+<li class="li substep"><span class="ph cmd">数分钟后，待编译完成后，在C:\boost\libs\regex\build目录下将产生名为vc的文件夹。我们将vc文件夹下的lib文件和
+dll文件全部拷贝，在vc安装目录下xxx \Microsoft Visual Studio\VC98\下新建文件夹，名称自定如BoostRegx，将lib和dll文件放入该文件夹中。</span>
+</li>
+</ol>
+</li><li class="li step stepexpand"><span class="ph cmd">使用bjam来编译</span>
+<ol type="a" class="ol substeps">
+<li class="li substep substepexpand"><span class="ph cmd">编译bjam：如果系统安装多个VS版本，可以修改boost_1_34_1\tools\jam\src\build.bat，通过注释其他版本来选择VC6.0版本生成bjam.exe </span>
+<div class="itemgroup info"><img class="image" src="../../images/2019-05/boost_2.png"><p class="p">还有另外一种改法：</p><p class="p">定位到D:\Boost\boost_1_37_0\tools\jam\src，使用记事本打开build.bat(先备份一下)，里面有部分内容如下：</p><p class="p">//-------------------------------------------------------------------------------------------</p><p class="p">:Guess_Toolset REM Try and guess the toolset to bootstrap the
+build with... REM Sets BOOST_JAM_TOOLSET to the first found toolset.
+REM May also set BOOST_JAM_TOOLSET_ROOT to the REM location of the
+found toolset.</p><p class="p">if "_%ProgramFiles%_" == "__" set ProgramFiles=C:\Program
+Files</p><p class="p">//-------------------------------------------------------------------------------------------</p><p class="p">如果你的VC安装在D盘，则要改一下红色部分配置。</p></div>
+</li>
+<li class="li substep substepexpand"><span class="ph cmd">生成bjam.exe：打开cmd命令行，进入到boost_1_34_1\tools\jam\src目录下，运行build.bat，build.bat会运行VCVARS32.BAT，设置环境变量，并编译生成bjam，如图</span>
+<div class="itemgroup info"><img class="image" src="../../images/2019-05/boost_1.png"></div>
+<div class="itemgroup stepresult"><p class="p">最终会在目录下生成一个名为bin.ntx86的文件夹里面包含一个bjam.exe可执行文件。</p></div>
+</li>
+<li class="li substep substepexpand"><span class="ph cmd">将bjam.exe拷贝到boost_1_34_1目录下，CMD进入boost_1_34_1目录，运行 bjam
+--toolset=msvc-6.0进行编译，bjam --toolset=msvc-6.0 install 生成相应的头文件（include）和
+库文件（lib），默认生成在C:\boost下面。</span>
+<div class="itemgroup info"><p class="p">单独编译regex子库：bjam --toolset=msvc-6.0 --build-type=complete
+--prefix=d:\boost install --with-regex</p><p class="p">编译全部Boost子库(可能要2小时)：bjam
+--toolset=msvc-6.0 --build-type=complete --prefix=d:\boost install</p></div>
+</li>
+<li class="li substep substepexpand"><span class="ph cmd"></span><br>
+<div class="itemgroup info"></div>
+</li>
+<li class="li substep substepexpand"><span class="ph cmd"></span><br></li>
+</ol>
+</li><li class="li step stepexpand"><span class="ph cmd">设置包含路径</span>
+<div class="itemgroup info"><p class="p">将上面所说的编译好的boost静态库的目录添加到当前项目的附加库目录：项目属性-链接器-附加库目录。</p><p class="p">清除之前Include files里面的Boost源码路径，再在VC-&gt;Tools-&gt;Options-&gt;Directories-&gt;Include
+files里面增加新生成的D:\Boost\boost_1_34_1</p><p class="p">选择"Tools-&gt;Options-&gt;Directories-&gt;Library
+file" 编辑添加库文件路径 xxx\MICROSOFT VISUAL STUDIO\VC98\BOOSTREGX（这个是前面建立的文件夹BoostRegx的位置）。(或D:\Lnhoo.Device.Driver\02_src\02_Common\Boost\boost_1_34__vc6_\boost_1_34__vc6_\boost\libs\regex\build)</p></div>
+</li><li class="li step stepexpand"><span class="ph cmd">lib文件改名：libboost_regex-vc6-s-1_34.lib改名为libboost_regex-vc6-s-1_34_1.lib;libboost_regex-vc6-sgd-1_34.lib改名为libboost_regex-vc6-sgd-1_34_1.lib</span>
+</li><li class="li step stepexpand"><span class="ph cmd">运行测试程序，boosttest2 --&gt;OK</span></li></ol></section>
+<section class="section result"></section>
+<section class="example"><h2 class="title sectiontitle">参见</h2><ol class="ol">
+<li class="li"><p class="p"><a class="xref" href="https://www.cnblogs.com/cy163/archive/2010/03/27/1698156.html" target="_blank" rel="external noopener">Boost 1_37_0 的安装以及在VC6.0中的使用</a></p></li>
+<li class="li"><p class="p"><a class="xref" href="https://www.cnblogs.com/cy163/archive/2010/02/23/1672023.html" target="_blank" rel="external noopener">VC6.0下配置boost库使用正则表达式(解决问题)</a>：<a class="xref" href="https://download.csdn.net/download/airen3339/9421881" target="_blank" rel="external noopener">boost_1.34库及VC6下使用此库</a>&nbsp;</p></li>
+<li class="li"><p class="p"><a class="xref" href="https://www.cnblogs.com/zhaoweiwei/p/bitcoinVC6.html" target="_blank" rel="external noopener">比特币初始版本VC6.0编译</a></p></li>
+<li class="li"><p class="p"><a class="xref" href="https://blog.csdn.net/poem_qianmo/article/details/26048697" target="_blank" rel="external noopener">解决VS命令提示符“Setting environment for using Microsoft
+Visual Studio. 此时不应有“系列错误.</a></p></li>
+<li class="li"><p class="p"><a class="xref" href="https://www.cnblogs.com/VRS_technology/archive/2010/09/15/1826812.html" target="_blank" rel="external noopener">使用boost的thread库</a></p></li>
+</ol></section>
+<section class="section postreq"></section>
+</div>
+<nav role="navigation" class="related-links"><div class="familylinks"><div class="parentlink"><strong>父主题：</strong> <a class="link" href="Boost%E5%BC%80%E5%8F%91.html">Boost开发</a></div></div></nav></article></main></body></html>

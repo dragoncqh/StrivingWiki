@@ -1,0 +1,74 @@
+<!DOCTYPE html
+  SYSTEM "about:legacy-compat">
+<html lang="zh-cn"><head><meta charset="UTF-8"><meta name="copyright" content="(C) 版权 2024"><meta name="generator" content="DITA-OT"><meta name="description" content=""><title>DLL注入技术</title><link rel="stylesheet" type="text/css" href="../../commonltr.css">
+<link rel="stylesheet" type="text/css" href="../../common-extended.css"></head><body id="DLL注入技术-E8ACBE14"><main role="main"><article role="article" aria-labelledby="ariaid-title1">
+<h1 class="title topictitle1" id="ariaid-title1">DLL注入技术</h1>
+
+
+<div class="body conbody"><p class="shortdesc"></p>
+<p class="p"></p>
+<section class="section"><h2 class="title sectiontitle">DLL 注入技术</h2><p class="p">DLL注入技术可以被正常软件用来添加/扩展其他程序，调试或逆向工程的功能性；该技术也常被恶意软件以多种方式利用。这意味着从安全角度来说，了解DLL注入的工作原理是十分必要的。 </p><p class="p">不久前在为攻击方测试（目的是为了模拟不同类型的攻击行为）开发定制工具的时候，我编写了这个名为“injectAllTheThings”的小工程的大部分代码。如果你想看一下利用DLL注入实施的攻击行为的若干示例，请参阅网址：<a class="xref" href="https://link.zhihu.com/?target=https%3A//attack.mitre.org/wiki/Technique/T1055" target="_blank" rel="external noopener"><strong class="ph b">https://</strong><strong class="ph b">attack.mitre.org/wiki/T</strong><strong class="ph b">echnique/T1055</strong></a>。如果你想学习DLL注入的相关知识，你会发现该工程也是有用的。当你想要查询这类信息/代码时，你会发现网上充斥着垃圾；我的代码可能也属于垃圾。我并不是程序员，我只是在需要时对代码进行修改。无论如何，我以一种便于阅读和理解的方式，将多种能在32位和64位环境下生效的DLL注入技术（事实上一共7种不同的技术），整合到了一个单独的Visual
+Studio工程之中。有些朋友对这些代码感兴趣，所以它也可能会吸引你。为了区分，每种技术有其独有的源文件。</p>本文试图以一种简单而高阶的方式纵览DLL注入技术，同时为GitHub中的项目（网址为：<a class="xref" href="https://link.zhihu.com/?target=https%3A//github.com/fdiskyou/injectAllTheThings" target="_blank" rel="external noopener"><strong class="ph b">https://</strong><strong class="ph b">github.com/fdiskyou/inj</strong><strong class="ph b">ectAllTheThings</strong></a>）提供“文档”支持。</section>
+<section class="section"><h2 class="title sectiontitle">程序源码项目分析</h2><p class="p">源码地址：<a class="xref" href="https://www.codeproject.com/Articles/3279/Automating-Windows-Applications" target="_blank" rel="external noopener">Automating Windows Applications - CodeProject</a></p><p class="p">本地带中文注释的源码：<a class="xref" href="../../codes/2020/NotepadAuto.rar">DLL注入实现自动化的源码</a></p><ol class="ol">
+<li class="li"><p class="p">Loader.exe：注入加载器</p></li>
+<li class="li"><p class="p">NotepadPlugin.dll：注入内容</p></li>
+<li class="li"><p class="p">NotepadHandler.dll：COM组件,实现IHandler</p></li>
+<li class="li"><p class="p">NotepadHandlerNotification.dll：IHandlerEvents的实现</p></li>
+<li class="li"><p class="p">AutomClient.exe：</p></li>
+</ol><p class="p">Loader.exe负责把NotepadPlugin.dll注入Notepad.exe. Loader寻找Notepad的一个实例，如未找到则新启动一个实例，获得其进程句柄，使用一个远程线程来执行NotepadPlugin.dll的注入</p><p class="p">NotepadPlugin.dll是用来注入Notepad.exe的。它的DllMain()方法首先找到Notepad.exe的frame
+和 view窗体，然后使用适当的自定义窗体过程对二者进行子类化继承。当其被启动时，DllMain()并不运行于Notepad.exe的主线程，而是一个附加的由Loader.exe创建的远程线程。该附加线程在NotepadPlugin.dll完全加载之后自动消失。一个自定义的WM_CREATE_OBJECT窗体消息被提交给frame窗体，以初始化创建自动化COM组件对象及其ROT注册。新frame窗体过程的WM_CREATE_OBJECT信息的句柄负责初始化COM对象，创建NotepadHandler
+COM对象，调用其对应方法完成ROT注册。</p><p class="p">NotepadHandler.dll是一个(in-process server)的COM组件，实现一个特别为Notepad自动化而定制的IHandler双向接口，IHandler包括ROT注册/卸载的方法。NotepadHandler项目的NotepadHandler.idl文件提供了对外双向接口IHandlerEvents，它包括HRESULT
+SentenceCompleted([in] BSTR bsText)方法，NotepadHandler组件实现了连接点机制(激活连接端的实现代码可在此加入，如Visual
+Studio workspace及其后继对话框的ClassView标签页中的CHandler的右键菜单项)</p><p class="p">在本文所模拟的场景中，嵌入了COM对象的服务端采集所有Notepad编辑框内的键盘输入字符(包括非字母字符)，只要句末符号(".",
+"?", and "!" characters)出现，服务端触发Fire_SentenceCompleted()事件，对所有事件的订阅者发送一个完整的句子(对应缓存中的)。</p><p class="p">下列两种客户端，包括Win32和.net平台两种。各种支持两种ROT注册目标：ActiveObject and moniker
+registration。注册的详细信息可以用ROT Viewer tool查看。</p><p class="p"></p><p class="p">Win32 Client</p><p class="p"> AutomClient.exe是一个Win32自动化客户端的实例。它使用组件ROT注册，从而创建一个NotepadHandler
+COM对象的代理器，通过NotepadHandler实现了的IHandler接口，来实际控制Notepad的自动化实例。</p><p class="p">客户程序进程会实现IHandlerEvents接口，实现方式有多种，本文使用特定的COM组件(in-process server)即Notification。因此要使用
+ATL COM AppWizard新增一个项目NotepadHandlerNotification，这样通过右击鼠标菜单就会把一个ATL对象插入到组件中，这个对象实现一个附加的接口INotification。这个接口并非必不可缺，但他对于通过适当方法从客户端给组件提供数据是很有用的，比如本文就给组件提供了客户端程序主窗口的句柄。CNotification类通过激活Implement接口，加上一些右键鼠标菜单出现的对话框操作，实现了IHandlerEvents接口。一个客户端程序类CAdvise包括advising机制，CAutomationClientDlg::OnButtonAutomate()方法包括负责advising的代码。</p><p class="p">服务端可以调用在Notification组件中实现的IHandlerEvents接口的SentenceCompleted()方法。程序的主窗口句柄通过INotification接口的SetMainWnd()方法被传递给Notification组件。SentenceCompleted()可使用该句柄向客户端程序主窗口发送一个notification信息，并传递从服务端接收到的数据缓存指针。</p><p class="p">默认使用ActiveObject注册方式，如果想要换成moniker注册方式，可以在.\Include\DefineMONIKER.h文件的代码中反注释相关MONIKER定义语句。</p><p class="p">NotepadHandler.dll 和 NotepadHandlerNotification.dll COM 要通过 the
+regsvr32.exe 工具来注册</p></section>
+<section class="section"></section>
+<section class="section"><h2 class="title sectiontitle">Subclass(子类化)</h2><p class="p">子类化的目的是在不修改现有代码的前提下，扩展现有窗口的功能。它的思路很简单，就是将窗口过程地址修改为一个新函数地址，新的窗口过程函数处理自己感兴趣的消息，将其它消息传递给原窗口过程。通过子类化，我们不需要现有窗口的源代码，就可以定制窗口功能。</p><p class="p">子类化可以分为实例子类化和全局子类化。实例子类化就是修改窗口实例的窗口过程地址，全局子类化就是修改窗口类的窗口过程地址。实例子类化只影响被修改的窗口。全局子类化会影响在修改之后，按照该窗口类创建的所有窗口。显然，全局子类化不会影响修改前已经创建的窗口。</p><p class="p">子类化方法虽然是二十年前的概念，却很好地实践了面向对象技术的开闭原则（OCP：The Open-Closed Principle）：对扩展开放，对修改关闭。</p><p class="p">１.　窗口子类化-----------是创建一个新的窗口函数代替原来的窗口函数。&nbsp;&nbsp;&nbsp;</p><p class="p">Subclass(子类化)是MFC中最常用的窗体技术之一。子类化完成两个工作：一是把窗体类对象attach到一个windows窗体实体中（即把一个窗体的hwnd赋给该类）。另外就是把该类对象的消息加入到消息路由中，使得该类可以捕获消息。</p><p class="p">SubclassDlgItem可以把对话框中已有的控件与某个窗口对象动态连接起来，该窗口对象将接管控件的消息处理，从而使控件具有新的特性．</p><p class="p">简单说来，子类化是靠拦截Windows系统中的某些消息来自己进行处理罢了。举例来说，请大家看以下这段简单的窗口回调过程：</p><p class="p">参见：<a class="xref" href="https://www.cnblogs.com/just-bg/p/3929044.html" target="_blank" rel="external noopener">子类化和超类化区别（介绍Windows的窗口、消息、子类化和超类化）(转)</a></p></section>
+<section class="section"><h2 class="title sectiontitle">超类化</h2><p class="p">超类化的概念更简单，就是读取现有窗口类的数据，保存窗口过程函数地址。对窗口类数据作必要的修改，设置新窗口过程，再换一个名称后登记一个新窗口类。新窗口类的窗口过程函数还是仅处理自己感兴趣的消息，而将其它消息传递给原窗口过程函数处理。使用GetClassInfo函数可以读取现有窗口类的数据。</p><p class="p">２.　窗口超类化-----------是要创建一个新的窗口类，窗口函数调用一个已注册类的窗口函数，就像子类窗口函数调用原始窗口函数一样。新类叫做超类。</p><p class="p">３.　不同之处是超类可以截取窗口创建之初的若干消息，而子类不行。</p></section>
+<section class="section"><h2 class="title sectiontitle">窗体过程</h2><p class="p">Window&nbsp;Procedures： Every&nbsp;window&nbsp;has&nbsp;an&nbsp;associated&nbsp;window&nbsp;procedure&nbsp;—&nbsp;a&nbsp;function&nbsp;that&nbsp;processes&nbsp;all&nbsp;messages&nbsp;sent&nbsp;or&nbsp;posted&nbsp;to&nbsp;all&nbsp;windows&nbsp;of&nbsp;the&nbsp;class.&nbsp;All&nbsp;aspects&nbsp;of&nbsp;a&nbsp;window's&nbsp;appearance&nbsp;and&nbsp;behavior&nbsp;depend&nbsp;on&nbsp;the&nbsp;window&nbsp;procedure's&nbsp;response&nbsp;to&nbsp;these&nbsp;messages.</p></section>
+<section class="section"><h2 class="title sectiontitle">COM连接点与sink接收器接口、Advise连接方法</h2><p class="p">COM 中的典型方案是让客户端对象实例化服务器对象，然后调用这些对象。然而，没有一种特殊机制的话，这些服务器对象将很难转向并回调到客户端对象。COM
+连接点便提供了这种特殊机制，实现了服务器和客户端之间的双向通信。使用连接点，服务器能够在服务器上发生某些事件时调用客户端。</p><p class="p">有了连接点，服务器可通过定义一个接口来指定它能够引发的事件。服务器上引发事件时，要采取操作的客户端会向服务器进行自行注册。随后，客户端会提供服务器所定义接口的实现。</p><p class="p">客户端可通过一些标准机制向服务器进行自行注册。COM 为此提供了 IConnectionPointContainer 和 IConnectionPoint
+接口。</p><p class="p">COM 连接点服务器的客户端可用 C++ 和 C# 托管代码来编写。C++ 客户端会注册一个类的实例，该类提供了接收器接口的实现。托管客户端会注册单个事件的委托，因而会按每个事件通知方法创建单个接收器。在托管领域中，客户端自行注册有两种方法</p><p class="p">IConnectionPoint::Advise连接方法建立与接收器的连接</p><p class="p"><a class="xref" href="https://blog.csdn.net/rundll64/article/details/39018811" target="_blank" rel="external noopener">COM&nbsp;组件设计与应用（十五）——连接点(vc6.0)</a></p></section>
+<section class="section"></section>
+<section class="section"><h2 class="title sectiontitle">参见</h2><ol class="ol">
+<li class="li"><p class="p"><a class="xref" href="https://zhuanlan.zhihu.com/p/28537697" target="_blank" rel="external noopener">DLL 注入技术的N 种姿势- 知乎</a></p></li>
+<li class="li"><p class="p"><a class="xref" href="https://www.codeproject.com/Articles/3279/Automating-Windows-Applications" target="_blank" rel="external noopener">Automating Windows Applications - CodeProject</a> </p></li>
+<li class="li"><p class="p"><a class="xref" href="https://www.codeproject.com/Articles/17924/Automating-Windows-Applications-Using-the-WCF-Equi" target="_blank" rel="external noopener">Automating Windows Applications Using the WCF Equipped
+Injected Component</a></p></li>
+<li class="li"><p class="p"><a class="xref" href="https://www.codeproject.com/Articles/2082/API-hooking-revealed" target="_blank" rel="external noopener">API hooking revealed - CodeProject</a> </p></li>
+<li class="li"><a class="xref" href="https://www.codemag.com/Article/0810122/Creating-UI-Automation-Client-Applications" target="_blank" rel="external noopener">Creating UI Automation Client Applications - CODE
+Magazine</a></li>
+<li class="li"><p class="p"></p><p class="p"><a class="xref" href="http://alax.info/blog/1444" target="_blank" rel="external noopener">RotView: What is on ROT?</a>&nbsp;has a pretty
+good viewer for download in 32 bit and 64 bit versions.</p><p class="p"><a class="xref" href="https://gist.github.com/Grynn/1475780" target="_blank" rel="external noopener">RotHelper.cs</a>has a simple enumeration class,
+but it needs some improvement since if you have two objects running
+with the same name (like two instances of Excel), it cannot populate
+the dictionary with the duplicate key.</p></li>
+<li class="li"><p class="p"><a class="xref" href="https://github.com/yinkaisheng/MyLiteSpy" target="_blank" rel="external noopener">MyLiteSpy</a>:DLL注入实现SPY功能</p></li>
+<li class="li"><p class="p"><a class="xref" href="https://www.codeproject.com/Articles/4610/Three-Ways-to-Inject-Your-Code-into-Another-Proces" target="_blank" rel="external noopener">Three Ways to Inject Your Code into Another Process</a> </p></li>
+</ol></section>
+<section class="section"><ol class="ol">
+<li class="li"><p class="p"></p></li>
+<li class="li"><p class="p">GetModuleHandle(), for a DLL in another process https://stackoverflow.com/questions/26395243/getmodulehandle-for-a-dll-in-another-process</p><p class="p">Is dependency injection useful in C++ https://stackoverflow.com/questions/29365084/is-dependency-injection-useful-in-c</p><p class="p">反射式dll注入(ReflectiveDLLInjection) https://blog.csdn.net/weixin_43956962/article/details/105843803</p><p class="p">Reflective DLL Injection(字面翻译:反射dll注入) https://blog.csdn.net/gaara_fan/article/details/6528359</p><p class="p">Reflective DLL Injection paper+src https://download.csdn.net/download/GaA_Ra/3343721?spm=1001.2014.3001.5503</p><p class="p">ReflectiveDLLInjection变形应用https://idiotc4t.com/defense-evasion/reflectivedllinjection-variation</p><p class="p">.dll Plugin that uses functions defined in the main executable
+https://stackoverflow.com/questions/15454968/dll-plugin-that-uses-functions-defined-in-the-main-executable</p><p class="p">How to Implement a C++ Plugin System for a Modular Application?&nbsp;
+https://stackoverflow.com/questions/62480357/how-to-implement-a-c-plugin-system-for-a-modular-application</p><p class="p">Dynamic Libraries, plugin frameworks, and function pointer casting
+in c++ https://stackoverflow.com/questions/14783330/dynamic-libraries-plugin-frameworks-and-function-pointer-casting-in-c</p><p class="p">Call a function in the main program from an imported DLL(测试运行错误)
+https://stackoverflow.com/questions/56472290/call-a-function-in-the-main-program-from-an-imported-dll</p><p class="p">Passing Windows handle into an Unmanaged C++ dll https://stackoverflow.com/questions/795297/passing-windows-handle-into-an-unmanaged-c-dll</p><p class="p">Win32 - Get Main Wnd Handle of application https://stackoverflow.com/questions/6202547/win32-get-main-wnd-handle-of-application</p><p class="p">Tip: Detecting a HMODULE/HINSTANCE Handle Within the Module You're
+Running In https://www.codeguru.com/cpp/w-p/dll/tips/article.php/c3635/Tip-Detecting-a-HMODULEHINSTANCE-Handle-Within-the-Module-Youre-Running-In.htm</p><p class="p">How can I get HINSTANCE from a DLL? https://stackoverflow.com/questions/2126657/how-can-i-get-hinstance-from-a-dll</p><p class="p">DLL注入的简略教程 Dll Injection https://web.archive.org/web/20090904193405/https://www.edgeofnowhere.cc/viewtopic.php?p=2483118</p><p class="p">DLL注入的阻止策略 How do I prevent DLL injection https://stackoverflow.com/questions/869320/how-do-i-prevent-dll-injection</p></li>
+<li class="li"><p class="p">Detecting reflective DLL injection https://stackoverflow.com/questions/12697292/detecting-reflective-dll-injection</p></li>
+<li class="li"><p class="p">DLL注入可用于应用反破解 What is DLL Injection and how is it used for
+reversing? https://reverseengineering.stackexchange.com/questions/2252/what-is-dll-injection-and-how-is-it-used-for-reversing</p></li>
+<li class="li">游戏中注入 DLL 是什么意思，具体怎么实现的？ https://www.zhihu.com/question/63847141</li>
+<li class="li">DLL注入 https://zh.wikipedia.org/wiki/DLL注入</li>
+<li class="li"><p class="p">DLL injection https://en.wikipedia.org/wiki/DLL_injection</p></li>
+<li class="li">Best Practices for DLL Injection? https://stackoverflow.com/questions/16254721/best-practices-for-dll-injection</li>
+<li class="li">Reflective DLLs and You https://ijustwannared.team/2018/02/13/reflective-dlls-and-you/</li>
+<li class="li">Upgrade your DLL to Reflective DLL https://securitycafe.ro/2015/02/26/upgrade-your-dll-to-reflective-dll/</li>
+<li class="li"><p class="p">C++的DI轻量框架：Write Your Own Dependency-Injection Container https://www.fluentcpp.com/2019/06/07/write-your-own-dependency-injection-container/</p></li>
+<li class="li"><p class="p">Is dependency injection useful in C++ https://stackoverflow.com/questions/29365084/is-dependency-injection-useful-in-c/29365683</p></li>
+<li class="li"><p class="p">Law of Demeter https://en.wikipedia.org/wiki/Law_of_Demeter</p></li>
+</ol></section>
+</div>
+<nav role="navigation" class="related-links"><div class="familylinks"><div class="parentlink"><strong>父主题：</strong> <a class="link" href="CPP%E5%BC%80%E5%8F%91.html">C++开发</a></div></div></nav></article></main></body></html>

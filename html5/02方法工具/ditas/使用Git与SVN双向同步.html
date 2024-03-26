@@ -1,0 +1,135 @@
+<!DOCTYPE html
+  SYSTEM "about:legacy-compat">
+<html lang="zh-cn"><head><meta charset="UTF-8"><meta name="copyright" content="(C) 版权 2024"><meta name="generator" content="DITA-OT"><meta name="description" content="使用git svn指令在Coding.net实现Git和SVN双向同步"><title>使用Git与SVN双向同步</title><link rel="stylesheet" type="text/css" href="../../commonltr.css">
+<link rel="stylesheet" type="text/css" href="../../common-extended.css"></head><body id="使用Git与SVN双向同步-601F8549"><main role="main"><article role="article" aria-labelledby="ariaid-title1">
+<h1 class="title topictitle1" id="ariaid-title1">使用Git与SVN双向同步</h1>
+
+
+<div class="body taskbody"><p class="shortdesc">使用git svn指令在Coding.net实现Git和SVN双向同步</p>
+<section class="section prereq">当前目录为:drago@CWAY MINGW64 /d/user/desktop/02_公司/svn50 $</section>
+<section class="section context"></section>
+<section><ol class="ol steps"><li class="li step stepexpand"><span class="ph cmd">$ mkdir localSvn</span></li><li class="li step stepexpand"><span class="ph cmd">$ cd localSvn/</span>
+<div class="itemgroup stepresult"><pre class="pre codeblock"><code>drago@CWAY MINGW64 /d/user/desktop/02_公司/svn50/localSvn $ </code></pre></div>
+</li><li class="li step stepexpand"><span class="ph cmd">git svn clone https://svn.coding.net/sdjq/coding-devops-guide/yjptnet
+-s</span>
+<div class="itemgroup stepresult"><pre class="pre codeblock"><code>Initialized empty Git repository in D:/user/desktop/02_公司/svn50/localSvn/yjptnet/.git/
+r1 = 81191a4cd25782e06ae161a7bc03d47beaf31ebd (refs/remotes/origin/trunk)
+Checked out HEAD:
+  https://svn.coding.net/sdjq/coding-devops-guide/yjptnet/trunk r1</code></pre></div>
+</li><li class="li step stepexpand"><span class="ph cmd">$ ls yjptnet</span></li><li class="li step stepexpand"><span class="ph cmd">cd yjptnet/</span>
+<div class="itemgroup stepresult"><pre class="pre codeblock"><code>drago@CWAY MINGW64 /d/user/desktop/02_公司/svn50/localSvn/yjptnet (master) $</code></pre></div>
+</li><li class="li step stepexpand"><span class="ph cmd">$ ls</span></li><li class="li step stepexpand"><span class="ph cmd">$ git status</span>
+<div class="itemgroup stepresult"><pre class="pre codeblock"><code>On branch master
+nothing to commit, working tree clean</code></pre></div>
+</li><li class="li step stepexpand"><span class="ph cmd">创建新文件:D:\user\desktop\02_公司\svn50\localSvn\yjptnet\helloworld.txt</span>
+</li><li class="li step stepexpand"><span class="ph cmd">$ git status</span>
+<div class="itemgroup stepresult"><pre class="pre codeblock"><code>On branch master
+Untracked files:
+  (use "git add &lt;file&gt;..." to include in what will be committed)
+        helloworld.txt
+
+nothing added to commit but untracked files present (use "git add" to track)
+</code></pre></div>
+</li><li class="li step stepexpand"><span class="ph cmd">$ git add .</span></li><li class="li step stepexpand"><span class="ph cmd">$ git status</span>
+<div class="itemgroup stepresult"><pre class="pre codeblock"><code>On branch master
+Changes to be committed:
+  (use "git restore --staged  &lt;file&gt;..." to unstage)
+        new file:   helloworld.txt
+</code></pre></div>
+</li><li class="li step stepexpand"><span class="ph cmd">$ git commit -m ' init commit'</span>
+<div class="itemgroup stepresult"><pre class="pre codeblock"><code>[master 31e0c76]  init commit
+ 1 file changed, 68 insertions(+)
+ create mode 100644 helloworld.txt</code></pre></div>
+</li><li class="li step stepexpand"><span class="ph cmd">$ git svn dcommit</span>
+<div class="itemgroup stepresult"><pre class="pre codeblock"><code>Committing to https://svn.coding.net/sdjq/coding-devops-guide/yjptnet/trunk ...
+        A       helloworld.txt
+Committed r2
+        A       helloworld.txt
+r2 = b58b9497ae4f92d81ef5fbe11c91017b7f443588 (refs/remotes/origin/trunk)
+No changes between 31e0c76ea96128297693594ea6cfb0b335a037a0 and refs/remotes/origin/trunk
+Resetting to the latest refs/remotes/origin/trunk
+</code></pre></div>
+</li></ol></section>
+<section class="section result"><p class="p">请严格按照下图步骤操作,实战中如果漏了步骤或顺序乱了,在最终提交时会出现怎么都消除不了的错误:Unable to
+determine upstream SVN information from HEAD history. Perhaps the
+repository is empty. at C:/Program Files/Git/mingw64/libexec/git-core\git-svn
+line 916.</p><p class="p">指令汇总如下:</p><pre class="pre codeblock"><code>$ mkdir localSvn
+$ cd localSvn/
+$ git svn clone https://svn.coding.net/sdjq/coding-devops-guide/yjptnet -s
+$ ls yjptnet
+$ cd yjptnet/
+$ ls
+$ git status
+创建文件helloworld.txt
+$ git status
+$ git add .
+$ git status
+$ git commit -m ' init commit'
+$ git svn dcommit</code></pre><img class="image" src="../../_images/2022/git_svn.jpg"><p class="p">以下是在Coding.net上使用成功的Jenkins脚本:</p><div class="p"><pre class="pre codeblock"><code>pipeline {
+  agent any
+  stages {
+    stage('检出') {
+      steps {
+        checkout([
+          $class: 'GitSCM',
+          branches: [[name: GIT_BUILD_REF]],
+          userRemoteConfigs: [[
+            url: GIT_REPO_URL,
+            credentialsId: CREDENTIALS_ID
+          ]]])
+          sh '''pwd
+ls'''
+        }
+      }
+      stage('自定义构建过程') {
+        steps {
+          echo '正在推送文件...'
+          sh '''sudo apt-get --yes --allow-downgrades --allow-remove-essential --allow-change-held-packages install git-svn
+pwd
+ls
+cd ..
+mkdir localSVN
+cd localSVN/
+echo cqh123456. | git svn --username sd_cqh clone -s http://47.104.144.219:8080/svn/硬件驱动产品
+ls 硬件驱动产品
+cd 硬件驱动产品/
+git status
+rsync -av --progress /root/workspace/ /root/localSVN/硬件驱动产品/ --exclude .git
+pwd
+ls
+git status
+git add .
+git status
+git commit -m \' init commit\'
+git svn dcommit'''
+        }
+      }
+    }
+  }</code></pre></div><div class="note note note_note"><span class="note__title">注：</span> <div class="note__body"><ol class="ol">
+<li class="li"><div class="p">上述有一步复制文件指令:<code class="ph codeph">rsync -av --progress /root/workspace/ /root/localSVN/硬件驱动产品/
+--exclude .git</code>.如果此步骤使用<code class="ph codeph">cp -r /root/workspace/. /root/localSVN/硬件驱动产品</code>,会把.git文件夹一齐复制过去,会造成git HEAD 游离的异常状态,错误提示如下:这样就无法在master主干上添加新文件并成功提交,即使是git
+checkout master切换回主干也很麻烦还要合并融合等操作消除游离状态.<pre class="pre codeblock"><code>[2022-03-25 22:29:43] + git status
+[2022-03-25 22:29:44] HEAD detached at 5048d3e
+[2022-03-25 22:29:44] nothing to commit, working tree clean</code></pre></div></li>
+<li class="li"><p class="p">指令中的@在url中需要写成%40的UTF8形式,如: git clone https://12293669%40qq.com:D123456@e.coding.net/sdjq/paas_hardware/paasplugins.git
+base</p></li>
+</ol></div></div></section>
+<section class="example"><h2 class="title sectiontitle">参考资料</h2><ol class="ol">
+<li class="li"><p class="p"><a class="xref" href="../../codes/2022/Coding.net%E5%90%8C%E6%AD%A5%E5%88%B0%E5%85%AC%E5%8F%B8%E8%87%AA%E5%BB%BASVN%E7%9A%84Jenkin%E9%83%A8%E4%BB%BD%E8%84%9A%E6%9C%AC.txt">Coding.net同步到公司自建SVN的Jenkin部份脚本</a></p></li>
+<li class="li"><p class="p"><a class="xref" href="https://blog.csdn.net/dahaohan/article/details/83545403" target="_blank" rel="external noopener">使用Git 作为Subversion 仓库的客户端</a></p></li>
+<li class="li"><p class="p"><a class="xref" href="https://zhuanlan.zhihu.com/p/59263408" target="_blank" rel="external noopener">git到svn双向同步的实现</a></p></li>
+<li class="li"><p class="p"><a class="xref" href="https://blog.csdn.net/qq_26834399/article/details/117299567" target="_blank" rel="external noopener">一个项目同时用svn和git进行版本控制</a></p></li>
+<li class="li"><p class="p"><a class="xref" href="https://www.cnblogs.com/aiwz/p/6333268.html" target="_blank" rel="external noopener">GIT版本控制— GIT与SVN的相互转换(三)</a></p></li>
+<li class="li"><p class="p"><a class="xref" href="https://stackoverflow.com/questions/3095611/git-svn-dcommit-error-unable-to-determine-upstream-svn-information" target="_blank" rel="external noopener">git-svn dcommit error: unable to determine upstream
+SVN information</a>,仅供参考,实战中无效</p>,<a class="xref" href="https://stackoverflow.com/questions/20060363/git-svn-unable-to-determine-upstream-svn-information-from-working-tree-history" target="_blank" rel="external noopener">git-svn: Unable to determine upstream SVN information
+from working tree history</a></li>
+<li class="li"><p class="p"><a class="xref" href="https://www.hhtjim.com/semi-automatic-svn-or-git-remote-two-way-synchronization.html" target="_blank" rel="external noopener">SVN或者GIT远程双向同步</a></p></li>
+<li class="li"><p class="p"><a class="xref" href="https://www.cnblogs.com/djoel/p/5757674.html" target="_blank" rel="external noopener">git-svn — 让git和svn协同工作</a></p></li>
+<li class="li"><p class="p"><a class="xref" href="https://gist.github.com/shijinkui/3149875" target="_blank" rel="external noopener">gist:3149875</a></p>:git-svn 使用,实战中一直报:Unable to determine upstream
+SVN information from HEAD history. Perhaps the repository is empty.
+at C:/Program Files/Git/mingw64/libexec/git-core\git-svn line 916.</li>
+<li class="li"><p class="p"><a class="xref" href="https://www.google.com/url?sa=t&amp;rct=j&amp;q=&amp;esrc=s&amp;source=web&amp;cd=&amp;cad=rja&amp;uact=8&amp;ved=2ahUKEwi--6WnwuH2AhUnGqYKHSyBBMgQFnoECBUQAQ&amp;url=https%3A%2F%2Fblog.csdn.net%2FITzhongzi%2Farticle%2Fdetails%2F79700236&amp;usg=AOvVaw2YEWryU132MMVSYlHyprAm" target="_blank" rel="external noopener">git detached HEAD解决方案（亲测）</a></p></li>
+</ol></section>
+<section class="section postreq"></section>
+</div>
+<nav role="navigation" class="related-links"><div class="familylinks"><div class="parentlink"><strong>父主题：</strong> <a class="link" href="../../04%E9%A1%B9%E7%9B%AE%E7%AE%A1%E7%90%86/ditas/Git.html">Git</a></div></div></nav></article></main></body></html>

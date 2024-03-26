@@ -1,0 +1,126 @@
+<!DOCTYPE html
+  SYSTEM "about:legacy-compat">
+<html lang="zh-cn"><head><meta charset="UTF-8"><meta name="copyright" content="(C) 版权 2024"><meta name="generator" content="DITA-OT"><meta name="description" content=""><title>异常处理(exception handling)</title><link rel="stylesheet" type="text/css" href="../../commonltr.css">
+<link rel="stylesheet" type="text/css" href="../../common-extended.css"></head><body id="异常处理exceptionHandling-D993BF4A"><main role="main"><article role="article" aria-labelledby="ariaid-title1">
+<h1 class="title topictitle1" id="ariaid-title1">异常处理(exception handling)</h1>
+
+
+<div class="body conbody"><p class="shortdesc"></p>
+<p class="p"></p>
+<section class="section"></section>
+<section class="section"><h2 class="title sectiontitle">异常处理（exception handling）的成本与处理原则</h2><p class="p">1、为了在运行期处理异常，程序必须做大量额外的工作。比如，即使抛出异常，也必须保证离开作用域的栈上对象执行析构方法。因此，必须记录try语句的进入点和离开点，记录catch语句能够处理的异常等。这就意味着，程序目标码变大，执行速度慢。</p><p class="p">2、即使从未使用任何异常处理，还是必须要付出最低代价，付出一些空间，放置某些数据结构，付出一些时间，保持数据结构的正确性。</p><p class="p">3、即使自己的程序没有使用throw，try，catch语句，使用的其他程序库可能有异常处理，因此也要付出代价。</p><p class="p">4、对于try语句，没有异常抛出的情况下，代码膨胀5%-10%，速度也下降这个数。</p><p class="p">5、如果抛出异常，影响很大，速度可能会比正常情况下慢3个数量级。但是，抛出异常是罕见的，因此可以接受。这也就意味着，在相对正常的情况下，不要抛出异常。</p><p class="p">6、考虑到异常对效率的影响，因此，在非用不可的情况下，才使用try语句。在确实是个异常的情况下，才抛出异常。</p></section>
+<section class="section"><h2 class="title sectiontitle">处理策略handling strategy</h2><p class="p">在钩住(hooking)Application.ThreadException事件后，捕获所有未处理异常后</p><ul class="ul">
+<li class="li"><p class="p">对于UI应用(如winforms)，应弹出向用户致歉的包含异常信息的窗口(winforms)。</p></li>
+<li class="li"><p class="p">对于Service或Console应用，记录日志到文件中(service 或 console)。</p></li>
+</ul><p class="p">Then I always enclose <strong class="ph b">every piece of code that is run externally</strong> in try/catch :</p><ul class="ul">
+<li class="li"><p class="p">All events fired by the Winforms infrastructure (Load, Click,
+SelectedChanged...)</p></li>
+<li class="li"><p class="p">All events fired by third party components</p></li>
+</ul><p class="p">Then I enclose in 'try/catch'</p><ul class="ul">
+<li class="li"><p class="p">All the <strong class="ph b">operations that I </strong><strong class="ph b">know might not work all
+the time</strong> (IO operations, calculations with a potential zero division...).
+In such a case, I throw a new ApplicationException("custom message",
+innerException) to keep track of what really happened</p></li>
+</ul><p class="p">Additionally, I try my best to <strong class="ph b">sort exceptions correctly</strong>. There are exceptions which:</p><ul class="ul">
+<li class="li"><p class="p">need to be shown to the user immediately</p></li>
+<li class="li"><p class="p">require some extra processing to put things together when they
+happen to avoid cascading problems (ie: put .EndUpdate in the finally
+section during a TreeView fill)</p></li>
+<li class="li"><p class="p">the user does not care, but it is important to know what happened.
+So I always log them:</p><ul class="ul">
+<li class="li"><p class="p">In the event log</p></li>
+<li class="li"><p class="p">or in a .log file on the disk</p></li>
+</ul></li>
+</ul><p class="p">It is a good practice to <strong class="ph b">design some static methods to
+handle exceptions</strong> in the application top level error handlers.</p><p class="p">I also force myself to try to:</p><ul class="ul">
+<li class="li"><p class="p">Remember <strong class="ph b">ALL exceptions are bubbled up to the top level</strong>. It is not necessary to put exception handlers everywhere.</p></li>
+<li class="li"><p class="p">Reusable or deep called functions does not need to display
+or log exceptions : they are either bubbled up automatically or rethrown
+with some custom messages in my exception handlers.</p></li>
+</ul></section>
+<section class="section"><h2 class="title sectiontitle">实例</h2><p class="p">糟糕用法:</p><div class="p">// DON'T DO THIS, ITS BAD<pre class="pre codeblock"><code>try
+{...}
+catch 
+{// only air...}</code></pre></div><p class="p">无效用法，不如不处理异常:</p><div class="p">// DONT'T DO
+THIS, ITS USELESS<pre class="pre codeblock"><code>try
+{...}
+catch(Exception ex)
+{throw ex}</code></pre></div><p class="p">Having a try finally without a catch
+is perfectly valid:</p><div class="p"><pre class="pre codeblock"><code>try{listView1.BeginUpdate();
+// If an exception occurs in the following code, then the finally will be executed
+// and the exception will be thrown...
+}
+finally
+{
+// I WANT THIS CODE TO RUN EVENTUALLY REGARDLESS AN EXCEPTION OCCURED OR NOTlistView1.EndUpdate();
+}</code></pre></div><p class="p">What I do at the top level:</p><div class="p"><pre class="pre codeblock"><code>// i.e When the user clicks on a button
+try{...}
+catch(Exception ex)
+{
+		ex.Log(); // Log exception-- OR --
+    ex.Log().Display(); // Log exception, then show it to the user with apologies...
+}</code></pre></div><p class="p">What I do in some called functions:</p><pre class="pre codeblock"><code>// Calculation module
+try{...}
+catch(Exception ex)
+{
+// Add useful information to the exceptionthrow new ApplicationException("Something wrong happened in the calculation module :", ex);}
+// IO module
+try{...}
+catch(Exception ex)
+{throw new ApplicationException(string.Format("I cannot write the file {0} to {1}", fileName, directoryName), ex);}</code></pre><p class="p">There is a lot to do with exception handling (Custom Exceptions)
+but thoses rules I try to keep in mind are enough for the simple applications
+I do.</p><p class="p">Here is an example of extensions methods to handle caught
+exceptions a comfortable way. They are implemented a way they can
+be chained together, and it is very easy to add your own caught exception
+processing.</p><pre class="pre codeblock"><code>// Usage:
+
+try
+{
+    // boom
+}
+catch(Exception ex)
+{
+    // Only log exception
+    ex.Log();
+
+    -- OR --
+
+    // Only display exception
+    ex.Display();
+
+    -- OR --
+
+    // Log, then display exception
+    ex.Log().Display();
+
+    -- OR --
+
+    // Add some user-friendly message to an exception
+    new ApplicationException("Unable to calculate !", ex).Log().Display();
+}
+
+// Extension methods
+
+internal static Exception Log(this Exception ex)
+{
+    File.AppendAllText("CaughtExceptions" + DateTime.Now.ToString("yyyy-MM-dd") + ".log", DateTime.Now.ToString("HH:mm:ss") + ": " + ex.Message + "\n" + ex.ToString() + "\n");
+    return ex;
+}
+
+internal static Exception Display(this Exception ex, string msg = null, MessageBoxImage img = MessageBoxImage.Error)
+{
+    MessageBox.Show(msg ?? ex.Message, "", MessageBoxButton.OK, img);
+    return ex;
+}
+
+</code></pre></section>
+<section class="section"><h2 class="title sectiontitle">参见</h2><ul class="ul">
+<li class="li"><p class="p"><a class="xref" href="http://www.cnblogs.com/artech/archive/2009/11/16/1603579.html" target="_blank" rel="external noopener">Enterprise Library深入解析与灵活应用（8）：WCF与Exception Handling
+AppBlock集成[上]</a></p></li>
+<li class="li"><p class="p"><a class="xref" href="https://www.codeproject.com/tips/845617/how-to-handle-faults-in-wcf-without-declaring-them" target="_blank" rel="external noopener">How to Handle Faults in WCF without Declaring Them
+Explicitly</a></p></li>
+<li class="li"><p class="p"></p></li>
+<li class="li"><p class="p"></p></li>
+</ul></section>
+</div>
+<nav role="navigation" class="related-links"><div class="familylinks"><div class="parentlink"><strong>父主题：</strong> <a class="link" href=".NET%E5%BC%80%E5%8F%91.html">.Net开发</a></div></div></nav></article></main></body></html>

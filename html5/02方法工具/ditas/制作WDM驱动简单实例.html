@@ -1,0 +1,290 @@
+<!DOCTYPE html
+  SYSTEM "about:legacy-compat">
+<html lang="zh-cn"><head><meta charset="UTF-8"><meta name="copyright" content="(C) 版权 2024"><meta name="generator" content="DITA-OT"><meta name="description" content=""><title>制作WDM驱动简单实例</title><link rel="stylesheet" type="text/css" href="../../commonltr.css">
+<link rel="stylesheet" type="text/css" href="../../common-extended.css"></head><body id="制作WDM驱动简单实例-C27179D5"><main role="main"><article role="article" aria-labelledby="ariaid-title1">
+<h1 class="title topictitle1" id="ariaid-title1">制作WDM驱动简单实例</h1>
+
+
+<div class="body conbody"><p class="shortdesc"></p>
+<p class="p"></p>
+<section class="section"></section>
+<section class="section"></section>
+<section class="section"><p class="p">Introduction</p><p class="p">A lot of articles have
+been investigating in application layer issues, like skin-based dialogs,
+MFC, ATL, thread, process, registry etc. It won't be easy to find
+any driver related articles posted with full source code. The root
+cause is that most drivers are developed for specific hardware. Without
+the domain knowledge, you will never want to get in touch with it.
+I believe a lot of software engineers are afraid when they involve
+in kernel mode programming for the very first time, and there are
+not too much resources that can guide them through the whole process
+from DDK study to program stage. Hence I decided to share some of
+my experiences in driver programming in Windows. This demo focuses
+on a quick introduction to WDM Driver's architecture, and will introduce&nbsp;two
+I/O modes coming with Windows, which are Direct I/O and Buffered I/O,
+how to communicate with drivers residing in system kernel space, and
+read/write data to it.</p><p class="p">There is no need for you to read the
+demo program with any hardware related background, the demo drivers
+are all pseudo drivers. That's drivers installed without a physical
+device in computer.</p><p class="p">The member functions defined in this demo
+program can be used as templates for later driver development by you.</p><p class="p">Background</p><p class="p">You might be a well-experienced software engineer
+and might want to involve in kernel programming.</p><p class="p">Create your
+WDM Driver: a Pseudo Driver tutorial</p><p class="p">Before we start, declaration
+for member routines and structures is required. The most important
+driver-required data structure is -&nbsp;DEVICE_EXTENSION!</p><p class="p">Hide&nbsp;&nbsp;&nbsp;Copy
+Code</p><p class="p">typedef structtagDEVICE_EXTENSION {     PDEVICE_OBJECT
+DeviceObject;// device object this driver createsPDEVICE_OBJECT NextDeviceObject;//
+next-layered device object in this// device stackDEVICE_CAPABILITIES
+pdc;// device capabilityIO_REMOVE_LOCK RemoveLock;// removal control
+locking structureLONG handles;// # open handlesPVOID DataBuffer;//
+Internal Buffer for Read/Write I/O     UNICODE_STRING Device_Description;
+// Device DescriptionSYSTEM_POWER_STATE SysPwrState;// Current System
+Power StateDEVICE_POWER_STATE DevPwrState;// Current Device Power
+StatePIRP PowerIrp;// Current Handling Power-Related IRP } DEVICE_EXTENSION,
+*PDEVICE_EXTENSION;</p><p class="p">Code segment below demonstrates the start
+of creating a valid WDM Driver.</p><p class="p"><img class="image" src="https://www.codeproject.com/KB/winsdk/WDM_Driver_development/DriverMembers.jpg"></p><p class="p">There
+are mandatory and optional members in a WDM Driver. A valid WDM Driver
+should come with the following member routines, the most important
+task item for&nbsp;DriverEntry&nbsp;is to register all member routines
+to kernel:</p><p class="p">Hide&nbsp;&nbsp;&nbsp;Copy Code</p><p class="p">// NTSTATUS
+DriverEntry(  IN PDRIVER_OBJECT DriverObject,  IN PUNICODE_STRING
+RegistryPath  ) { RtlInitUnicodeString( &amp;Global_sz_Drv_RegInfo,
+RegistryPath-&gt;Buffer);  // Initialize function pointers  DriverObject-&gt;DriverUnload
+= DriverUnload; DriverObject-&gt;DriverExtension-&gt;AddDevice = AddDevice;
+ DriverObject-&gt;MajorFunction[IRP_MJ_CREATE] = PsdoDispatchCreate;
+DriverObject-&gt;MajorFunction[IRP_MJ_CLOSE] = PsdoDispatchClose; DriverObject-&gt;MajorFunction[IRP_MJ_READ]
+= PsdoDispatchRead; DriverObject-&gt;MajorFunction[IRP_MJ_WRITE] = PsdoDispatchWrite;
+DriverObject-&gt;MajorFunction[IRP_MJ_DEVICE_CONTROL] = PsdoDispatchDeviceControl;
+DriverObject-&gt;MajorFunction[IRP_MJ_POWER] = PsdoDispatchPower; DriverObject-&gt;MajorFunction[IRP_MJ_PNP]
+= PsdoDispatchPnP;  return STATUS_SUCCESS; } //</p><p class="p"><img class="image" src="https://www.codeproject.com/KB/winsdk/WDM_Driver_development/DriverWorkflow.jpg"></p><p class="p">Normal
+operation workflow within WDM Driver</p><p class="p">Code segment below demonstrates
+the workflow in&nbsp;AddDevice&nbsp;routine: the most important task
+for&nbsp;AddDeviceroutine is to create a Device object, and attach
+it to the existing device stack.</p><p class="p">Hide&nbsp;&nbsp;&nbsp;Shrink&nbsp;<img class="image" src="https://www.codeproject.com/images/arrow-up-16.png">&nbsp;&nbsp;&nbsp;Copy Code</p><p class="p">NTSTATUS AddDevice( IN
+PDRIVER_OBJECT DriverObject, IN PDEVICE_OBJECT PhysicalDeviceObject
+ ) {     ULONG DeviceExtensionSize;     PDEVICE_EXTENSION p_DVCEXT;
+    PDEVICE_OBJECT ptr_PDO;     NTSTATUS status;      RtlInitUnicodeString(
+        &amp;Global_sz_DeviceName, L"");//Get DEVICE_EXTENSION required
+memory space     DeviceExtensionSize = sizeof(DEVICE_EXTENSION);//Create
+Device Objectstatus = IoCreateDevice(         DriverObject,      
+  DeviceExtensionSize,         &amp;Global_sz_DeviceName,        
+FILE_DEVICE_UNKNOWN,         FILE_DEVICE_SECURE_OPEN,          FALSE,
+        &amp;ptr_PDO         );if (NT_SUCCESS(status)) {         ptr_PDO-&gt;Flags
+&amp;= ~DO_DEVICE_INITIALIZING; &lt;font color="#ff0000"ptr_PDO-&gt;Flags
+|= DO_BUFFERED_IO;//For Buffered I/O//ptr_PDO-&gt;Flags |= DO_DIRECT_IO;
+ //For Direct I/O&lt;/font&gt;p_DVCEXT = ptr_PDO-&gt;DeviceExtension;  
+      p_DVCEXT-&gt;DeviceObject = ptr_PDO;         RtlInitUnicodeString(/*//Other
+initialization tasks go here         *///Store next-layered device
+object//Attach device object to device stackp_DVCEXT-&gt;NextDeviceObject
+=              IoAttachDeviceToDeviceStack(ptr_PDO, PhysicalDeviceObject);
+    }return status; }</p><p class="p">Code segment below shows how to support&nbsp;IRP_MJ_CREATE,
+it is send when client application tries to connect to the underlying
+Pseudo Driver. Before proceeding, see graph below in advance to realize
+the connection process.</p><p class="p"><img class="image" src="https://www.codeproject.com/KB/winsdk/WDM_Driver_development/IRP_MJ_CREATE.jpg"></p><p class="p">Usually,
+you will use&nbsp;CreateFile/fopen&nbsp;Win32 API to connect to the
+underlying device. It is the right time that Win32 Subsystem submits&nbsp;IRP_MJ_CREATE&nbsp;and
+asks driver to connect to the target device!</p><p class="p">Hide&nbsp;&nbsp;&nbsp;Copy
+Code</p><p class="p">NTSTATUS PsdoDispatchCreate( IN PDEVICE_OBJECT DeviceObject,
+IN PIRP Irp ) {     PIO_STACK_LOCATION p_IO_STK;     PDEVICE_EXTENSION
+p_DVCEXT;     NTSTATUS status;      p_IO_STK = IoGetCurrentIrpStackLocation(Irp);
+    p_DVCEXT = DeviceObject-&gt;DeviceExtension;     status = IoAcquireRemoveLock(&amp;p_DVCEXT-&gt;RemoveLock,
+p_IO_STK-&gt;FileObject);if (NT_SUCCESS(status)) {         CompleteRequest(Irp,
+STATUS_SUCCESS, 0);return STATUS_SUCCESS;     } else {         IoReleaseRemoveLock(&amp;p_DVCEXT-&gt;RemoveLock,
+p_IO_STK-&gt;FileObject);         CompleteRequest(Irp, status, 0);return
+status;     } }</p><p class="p">Code segment below shows how to support&nbsp;IRP_MJ_CLOSE,
+the IRP is sent when client application tries to close connection
+to the underlying Pseudo Driver. Before proceeding, see graph below
+in advance to realize the closing process.</p><p class="p"><img class="image" src="https://www.codeproject.com/KB/winsdk/WDM_Driver_development/IRP_MJ_CLOSE.jpg"></p><p class="p">Usually,
+you will use&nbsp;CloseHandle/fclose&nbsp;Win32 API to close connection
+to the underlying device. It is the right time that Win32 Subsystem
+submits&nbsp;IRP_MJ_CLOSE&nbsp;and asks driver to close connection
+to target device!</p><p class="p">Hide&nbsp;&nbsp;&nbsp;Copy Code</p><p class="p">NTSTATUS
+PsdoDispatchClose( IN PDEVICE_OBJECT DeviceObject, IN PIRP Irp ) {
+    PIO_STACK_LOCATION p_IO_STK;     PDEVICE_EXTENSION p_DVCEXT; 
+    p_IO_STK = IoGetCurrentIrpStackLocation(Irp);     p_DVCEXT = DeviceObject-&gt;DeviceExtension;
+    IoReleaseRemoveLock(&amp;p_DVCEXT-&gt;RemoveLock,      p_IO_STK-&gt;FileObject);
+    CompleteRequest(Irp, STATUS_SUCCESS, 0);return STATUS_SUCCESS;
+}</p><p class="p">I/O Support : Buffered I/O Mode</p><p class="p">There are three I/O
+modes in Windows kernel, they are Buffer, Direct and Neither modes.
+Now, we'll talk about Buffered I/O, and this article will not involve
+Neither mode for data transfer if processing under user-thread occupied
+memory space, it might be dangerous!! If client application is going
+to read/write data to and from driver, the memory address of data
+source will not be directly referenced by the underlying driver. System
+kernel will allocate another data buffer with equivalent size in kernel.
+All data transferred must be copied into this area before they are
+to the target place. Usually, you will call&nbsp;ReadFile/WriteFile&nbsp;or&nbsp;fread/fwrite&nbsp;to
+make read/write request.</p><p class="p"><img class="image" src="https://www.codeproject.com/KB/winsdk/WDM_Driver_development/BufferedIO.jpg"></p><p class="p">Below
+code segment demos the workflow in I/O handle for read request. As
+we can see, the routine that is registered for reading is&nbsp;PsdoDispatchRead&nbsp;in&nbsp;DriverEntry,
+this member routine will read data out of Driver's internal member
+-&nbsp;DataBuffer&nbsp;to client application:</p><p class="p">Hide&nbsp;&nbsp;&nbsp;Shrink&nbsp;<img class="image" src="https://www.codeproject.com/images/arrow-up-16.png">&nbsp;&nbsp;&nbsp;Copy Code</p><p class="p">NTSTATUS PsdoDispatchRead(
+IN PDEVICE_OBJECT DeviceObject, IN PIRP Irp ) {     PVOID Buf; //Buffer
+provided by user program     ULONG BufLen; //Buffer length for user
+provided buffer     LONGLONG Offset;//Buffer Offset     PVOID DataBuf;
+//Buffer provided by Driver     ULONG DataLen; //Buffer length for
+Driver Data Buffer     ULONG ByteTransferred;     PIO_STACK_LOCATION
+p_IO_STK;     PDEVICE_EXTENSION p_DVCEXT;      DbgPrint("IRP_MJ_READ
+: Begin\r\n");//Get I/o Stack Location &amp; Device Extensionp_IO_STK
+= IoGetCurrentIrpStackLocation(Irp);     p_DVCEXT = DeviceObject-&gt;DeviceExtension;//Get
+User Output Buffer &amp; Length BufLen = p_IO_STK-&gt;Parameters.Read.Length;
+    Offset = p_IO_STK-&gt;Parameters.Read.ByteOffset.QuadPart;     Buf
+= (PUCHAR)(Irp-&gt;AssociatedIrp.SystemBuffer) + Offset;//Get Driver
+Data Buffer &amp; LengthDataBuf = p_DVCEXT-&gt;DataBuffer;if (DataBuf
+== NULL)         DataLen = 0else         DataLen = 1024;      IoAcquireRemoveLock(&amp;p_DVCEXT-&gt;RemoveLock,
+Irp);      DbgPrint("Output Buffer Length : %d\r\n", BufLen);    
+DbgPrint("Driver Data Length : %d\r\n", DataLen);//if (BufLen &lt;=
+DataLen) {         ByteTransferred = BufLen;      } else {       
+ ByteTransferred = DataLen;     }      RtlCopyMemory(         Buf,
+DataBuf,          ByteTransferred);      IoReleaseRemoveLock(&amp;p_DVCEXT-&gt;RemoveLock,
+Irp);     CompleteRequest(Irp, STATUS_SUCCESS, ByteTransferred); 
+    DbgPrint("IRP_MJ_READ : End\r\n");return STATUS_SUCCESS; }</p><p class="p">Below code segment demos the possible task items in workflow that
+can support the normal I/O requests to write data from application
+to driver.</p><p class="p">Hide&nbsp;&nbsp;&nbsp;Shrink&nbsp;<img class="image" src="https://www.codeproject.com/images/arrow-up-16.png">&nbsp;&nbsp;&nbsp;Copy Code</p><p class="p">NTSTATUS PsdoDispatchWrite(
+IN PDEVICE_OBJECT DeviceObject, IN PIRP Irp ) {     PVOID Buf; //Buffer
+provided by user program     ULONG BufLen; //Buffer length for user
+provided buffer     LONGLONG Offset;//Buffer Offset     PVOID DataBuf;
+//Buffer provided by Driver     ULONG DataLen; //Buffer length for
+Driver Data Buffer     ULONG ByteTransferred;     PIO_STACK_LOCATION
+p_IO_STK;     PDEVICE_EXTENSION p_DVCEXT;     NTSTATUS status;   
+  DbgPrint("IRP_MJ_WRITE : Begin\r\n");//Get I/o Stack Location &amp;
+Device Extensionp_IO_STK = IoGetCurrentIrpStackLocation(Irp);    
+p_DVCEXT = DeviceObject-&gt;DeviceExtension;//Get User Input Buffer &amp;
+Length BufLen = p_IO_STK-&gt;Parameters.Write.Length;     Offset = p_IO_STK-&gt;Parameters.Read.ByteOffset.QuadPart;
+    Buf = (PUCHAR)(Irp-&gt;AssociatedIrp.SystemBuffer) + Offset;//Get
+Driver Data Buffer &amp; Length     DataBuf = p_DVCEXT-&gt;DataBuffer;
+    DataLen = 1024;      IoAcquireRemoveLock(&amp;p_DVCEXT-&gt;RemoveLock,
+Irp);      DbgPrint("Input Buffer Length : %d\r\n", BufLen);     DbgPrint("Driver
+Data Length : %d\r\n", DataLen);if (BufLen &lt;= DataLen) {      
+  ByteTransferred = BufLen;      } else{         ByteTransferred =
+DataLen;     }      ByteTransferred = BufLen;         RtlZeroMemory(
+        p_DVCEXT-&gt;DataBuffer,1024);      RtlCopyMemory(         DataBuf,
+        Buf,          ByteTransferred);      IoReleaseRemoveLock(&amp;p_DVCEXT-&gt;RemoveLock,
+Irp);     CompleteRequest(Irp, STATUS_SUCCESS, ByteTransferred); 
+    DbgPrint("IRP_MJ_WRITE : End\r\n");return STATUS_SUCCESS; }</p><p class="p">I/O Support : Direct I/O Mode</p><p class="p">Below graph exhibits how Direct
+I/O mode is supported when data is transferred between client application
+and driver. Under Direct I/O mode, Memory Manager will create MDL
+(Memory Descriptor List) to reference the physical address taken by
+user-provided buffer, all data can be directly referenced via MDL
+from kernel environment.</p><p class="p"><img class="image" src="https://www.codeproject.com/KB/winsdk/WDM_Driver_development/DirectIO.jpg"></p><p class="p">In DDK,
+some&nbsp;MMXxx&nbsp;routines are provided to help you to get MDL
+that maps to physical address of user-provided buffer.</p><p class="p"><img class="image" src="https://www.codeproject.com/KB/winsdk/WDM_Driver_development/DirectIOWorkFlow.jpg"></p><p class="p">Below
+code segment contains the statements that can support data reading
+under Direct I/O mode. It is achieved by&nbsp;Mmxxx&nbsp;routine,
+please read it carefully, and you can also find the full code in the
+zip file. The most important&nbsp;MmXxx&nbsp;you will use in this
+mode should be -&nbsp;MmGetSystemAddressForMdlSafe, it can obtain
+the MDL that references the physical address of user-buffer.</p><p class="p">Hide&nbsp;&nbsp;&nbsp;Shrink&nbsp;<img class="image" src="https://www.codeproject.com/images/arrow-up-16.png">&nbsp;&nbsp;&nbsp;Copy Code</p><p class="p">NTSTATUS PsdoDispatchRead(
+IN PDEVICE_OBJECT DeviceObject, IN PIRP Irp ) {     PVOID Buf; //Buffer
+provided by user program     ULONG BufLen; //Buffer length for user
+provided buffer     ULONG Offset;//Buffer Offset     PVOID DataBuf;
+//Buffer provided by Driver     ULONG DataLen; //Buffer length for
+Driver Data Buffer     ULONG ByteTransferred;     PIO_STACK_LOCATION
+p_IO_STK;     PDEVICE_EXTENSION p_DVCEXT;      DbgPrint("IRP_MJ_READ
+: Begin\r\n");//Get I/o Stack Location &amp; Device Extensionp_IO_STK
+= IoGetCurrentIrpStackLocation(Irp);     p_DVCEXT = DeviceObject-&gt;DeviceExtension;//Get
+User Output Buffer &amp; Length Buf = MmGetSystemAddressForMdlSafe(
+        Irp-&gt;MdlAddress, HighPagePriority);if (Buf == NULL) {    
+    DbgPrint("Can't get Virtual Address from MDL\r\n");returnSTATUS_INSUFFICIENT_RESOURCES;
+    }     BufLen = MmGetMdlByteCount(Irp-&gt;MdlAddress);     Offset
+= MmGetMdlByteOffset(Irp-&gt;MdlAddress);//Get Driver Data Buffer &amp;
+LengthDataBuf = p_DVCEXT-&gt;DataBuffer;if (DataBuf == NULL)        
+DataLen = 0else         DataLen = 1024;      IoAcquireRemoveLock(&amp;p_DVCEXT-&gt;RemoveLock,
+Irp);      DbgPrint("Output Buffer Length : %d\r\n", BufLen);    
+DbgPrint("Offset for Buffer in the Memory Page: %d\r\n", Offset);
+    DbgPrint("Driver Data Length : %d\r\n", DataLen);//if (BufLen
+&lt;= DataLen) {         ByteTransferred = BufLen;      } else { 
+       ByteTransferred = DataLen;     }      RtlCopyMemory(      
+  Buf,          DataBuf,          ByteTransferred);      IoReleaseRemoveLock(&amp;p_DVCEXT-&gt;RemoveLock,
+Irp);     CompleteRequest(Irp, STATUS_SUCCESS, ByteTransferred); 
+    DbgPrint("IRP_MJ_READ : End\r\n");return STATUS_SUCCESS; }</p><p class="p">Below code segment demos the possible workflow to write data from
+user application to driver:</p><p class="p">Hide&nbsp;&nbsp;&nbsp;Shrink&nbsp;<img class="image" src="https://www.codeproject.com/images/arrow-up-16.png">&nbsp;&nbsp;&nbsp;Copy Code</p><p class="p">NTSTATUS PsdoDispatchWrite(
+IN PDEVICE_OBJECT DeviceObject, IN PIRP Irp ) {     PVOID Buf; //Buffer
+provided by user program     ULONG BufLen; //Buffer length for user
+provided buffer     ULONG Offset;//Buffer Offset     PVOID DataBuf;
+//Buffer provided by Driver     ULONG DataLen; //Buffer length for
+Driver Data Buffer     ULONG ByteTransferred;     PIO_STACK_LOCATION
+p_IO_STK;     PDEVICE_EXTENSION p_DVCEXT;     NTSTATUS status;   
+  DbgPrint("IRP_MJ_WRITE : Begin\r\n");//Get I/o Stack Location &amp;
+Device Extensionp_IO_STK = IoGetCurrentIrpStackLocation(Irp);    
+p_DVCEXT = DeviceObject-&gt;DeviceExtension;//Get User Input Buffer &amp;
+Length Buf = MmGetSystemAddressForMdlSafe(         Irp-&gt;MdlAddress,
+HighPagePriority);if (Buf == NULL) {         DbgPrint("Can't get Virtual
+Address from MDL\r\n");returnSTATUS_INSUFFICIENT_RESOURCES;     }
+     BufLen = MmGetMdlByteCount(Irp-&gt;MdlAddress);     Offset = MmGetMdlByteOffset(Irp-&gt;MdlAddress);//Get
+Driver Data Buffer &amp; Length     DataBuf = p_DVCEXT-&gt;DataBuffer;
+    DataLen = 1024;      IoAcquireRemoveLock(&amp;p_DVCEXT-&gt;RemoveLock,
+Irp);      DbgPrint("Input Buffer Length : %d\r\n", BufLen);     DbgPrint("Offset
+for Buffer in the Memory Page: %d\r\n", Offset);     DbgPrint("Driver
+Data Length : %d\r\n", DataLen);if (BufLen &lt;= DataLen) {      
+  ByteTransferred = BufLen;      } else{         ByteTransferred =
+DataLen;     }      ByteTransferred = BufLen;     RtlZeroMemory( 
+       p_DVCEXT-&gt;DataBuffer,1024);      RtlCopyMemory(         DataBuf,
+        Buf,          ByteTransferred);      IoReleaseRemoveLock(&amp;p_DVCEXT-&gt;RemoveLock,
+Irp);     CompleteRequest(Irp, STATUS_SUCCESS, ByteTransferred); 
+    DbgPrint("IRP_MJ_WRITE : End\r\n");return STATUS_SUCCESS; }</p><p class="p">Contents of the source zip package</p><p class="p">The zip file contains
+below subfolders:</p><ol class="ol">
+<li class="li"><p class="p"><em class="ph i">Application</em>: it contains the client applications to
+the Pseudo Driver.</p></li>
+<li class="li"><p class="p"><em class="ph i">bin</em>: it contains the install/uninstall utility for Pseudo
+Driver.</p></li>
+<li class="li"><p class="p"><em class="ph i">BufferedIO_PW</em>: it is where the Pseudo Driver that employees
+Buffered I/O mode for read/write resides.</p></li>
+<li class="li"><p class="p"><em class="ph i">DirectIO_PW</em>: it is where the Pseudo Driver that employees
+Direct I/O Mode for read/write resides.</p></li>
+<li class="li"><p class="p"><em class="ph i">IOCTL_PW</em>: it is where the Pseudo Driver that simply
+supports user-defined I/O Control Code resides.</p></li>
+<li class="li"><p class="p"><em class="ph i">ShareFiles</em>: it is the common shared library for PnP,
+Power Management, I/O completion.</p></li>
+<li class="li"><p class="p"><em class="ph i">Install</em>: it contains the source code of install/uninstall
+utility. (Install utility is directly referenced from DDK's sample,
+I won't provide redundant copy of it, only the uninstall utility source
+code is provided in it).</p></li>
+</ol><p class="p">How to build the Pseudo Driver?</p><ol class="ol">
+<li class="li"><p class="p">Unzip the package to some folder you'd like it to be, let's
+name it&nbsp;<em class="ph i">ROOT_OF_SOURCE</em>.</p></li>
+<li class="li"><p class="p">Select Start-&gt;Programs-&gt;Development Kits-&gt;Windows DDK xxxx.xxxx-&gt;Build
+Environments-&gt;Free Build. (This is for free release without debug
+information in it.)</p></li>
+<li class="li"><p class="p">Enter&nbsp;<em class="ph i">ROOT_OF_SOURCE\SharedFiles</em>&nbsp;subfolder,
+enter&nbsp;<strong class="ph b">build -cefw</strong>, it all goes well, shared library will
+be generated.</p></li>
+<li class="li"><p class="p">Enter&nbsp;<em class="ph i">ROOT_OF_SOURCE\BufferedIO_PW</em>&nbsp;subfolder,
+enter&nbsp;<strong class="ph b">build -cefw</strong>, it will create Pseudo Driver -&nbsp;<em class="ph i">BufferDrv.sys</em>. Copy this file into&nbsp;<em class="ph i">ROOT_OF_SOURCE\BufferedIO_PW\Install</em>&nbsp;if you have made add-in for any new features, the copy is for
+later driver install.</p></li>
+<li class="li"><p class="p">Enter&nbsp;<em class="ph i">ROOT_OF_SOURCE\DirectIO_PW</em>&nbsp;subfolder,
+enter&nbsp;<strong class="ph b">build -cefw</strong>, it will create Pseudo Driver -&nbsp;<em class="ph i">DirectDrv.sys</em>. Copy this file into&nbsp;<em class="ph i">ROOT_OF_SOURCE\DirectIO_PW\Install</em>&nbsp;if you have made add-in for any new features, the copy is for
+later driver install.</p></li>
+<li class="li"><p class="p">Enter&nbsp;<em class="ph i">ROOT_OF_SOURCE\IOCTL_PW</em>&nbsp;subfolder, enter&nbsp;<strong class="ph b">build -cefw</strong>, it will create Pseudo Driver -&nbsp;<em class="ph i">PseudoDrv.sys</em>. Copy this file into&nbsp;<em class="ph i">ROOT_OF_SOURCE\IOCTL_PW\Install</em>&nbsp;if you have made add-in for any new features, the copy is for
+later driver install.</p></li>
+</ol><p class="p">Install Pseudo Driver into system (XP)</p><ol class="ol">
+<li class="li"><p class="p">Unzip the source file, launch DOS prompt-console.</p></li>
+<li class="li"><p class="p">Enter into&nbsp;<em class="ph i">bin</em>&nbsp;subfolder.</p></li>
+<li class="li"><p class="p">Execute&nbsp;<em class="ph i">DevInst.bat</em>, it will automatically install
+the Pseudo Driver into your system.</p></li>
+</ol><p class="p">Uninstall Pseudo Driver from system (XP)</p><ol class="ol">
+<li class="li"><p class="p">Enter into&nbsp;<em class="ph i">bin</em>&nbsp;subfolder.</p></li>
+<li class="li"><p class="p">Execute&nbsp;<em class="ph i">DevRemove.bat</em>, it will automatically uninstall
+all-driver related resources from your system.</p></li>
+</ol><p class="p">Execute client application</p><p class="p">You can enter into&nbsp;<em class="ph i">ROOT_OF_SOURCE\Application</em>&nbsp;subfolder, execute&nbsp;<em class="ph i">bufferclient.exe</em>,&nbsp;<em class="ph i">directclient.exe</em>, and&nbsp;<em class="ph i">clientapp.exe</em>&nbsp;to
+verify if the three Pseudo Drivers have been installed successfully.</p><p class="p">Known Issues</p><ul class="ul">
+<li class="li"><p class="p">The install/uninstall of Pseudo Driver won't wok on Window
+2000, the root cause might be that the Setup API doesn't work on Window
+2000, can't allow driver installed without a physical hardware in
+it. Can anybody help to resolve it? Many Thanks.</p></li>
+<li class="li"><p class="p">If you'd like to install/uninstall the Pseudo Driver in Windows
+2000, you will need to launch New Hardware Wizard from within Device
+Manager, and select to install new hardware-&gt;Display all hardware-&gt;Install
+from disk-&gt;"ROOT_OF_SOURCE\BufferedIO_PW\Install", click on OK button.
+New Hardware Wizard will install Buffered I/O Pseudo Driver. (This
+is for Buffered I/O demo driver install. As for Direct I/O, please
+set source directory to "<em class="ph i">ROOT_OF_SOURCE\DirectIO_PW\Install</em>").</p></li>
+<li class="li"><p class="p">Reboot is required if the driver has been reinstalled after
+un-installation. I don't know why this happened, I hope somebody can
+inform me. Many Thanks.</p></li>
+</ul><p class="p">Future Directions for Pseudo Driver</p><ol class="ol">
+<li class="li"><p class="p">Fix above issues.</p></li>
+<li class="li"><p class="p">WMI support in Pseudo Driver will be added-in.</p></li>
+</ol></section>
+</div>
+<nav role="navigation" class="related-links"><div class="familylinks"><div class="parentlink"><strong>父主题：</strong> <a class="link" href="WDM%E9%A9%B1%E5%8A%A8%E5%BC%80%E5%8F%91.html">WDM驱动开发</a></div></div></nav></article></main></body></html>

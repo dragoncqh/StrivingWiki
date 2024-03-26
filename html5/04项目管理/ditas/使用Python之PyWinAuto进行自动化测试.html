@@ -1,0 +1,95 @@
+<!DOCTYPE html
+  SYSTEM "about:legacy-compat">
+<html lang="zh-cn"><head><meta charset="UTF-8"><meta name="copyright" content="(C) 版权 2024"><meta name="generator" content="DITA-OT"><meta name="description" content=""><title>使用Python之PyWinAuto进行自动化测试</title><link rel="stylesheet" type="text/css" href="../../commonltr.css">
+<link rel="stylesheet" type="text/css" href="../../common-extended.css"></head><body id="使用Python进行自动化测试-50008158"><main role="main"><article role="article" aria-labelledby="ariaid-title1">
+<h1 class="title topictitle1" id="ariaid-title1">使用Python之PyWinAuto进行自动化测试</h1>
+
+
+<div class="body taskbody"><p class="shortdesc"></p>
+<section class="section prereq">(Py2.7+, Py3.3+)</section>
+<section class="section context"></section>
+<section><ol class="ol steps"><li class="li step stepexpand"><span class="ph cmd">下载安装Windows GUI窗口的自动化测试库pywinauto:直接使用pip安装:进入cmd窗口 —&gt;
+pip install --upgrade pywinauto&nbsp;</span>
+<div class="itemgroup info"><p class="p"><img class="image" src="../../images/2019-06/pywinauto_1.png"></p><p class="p">或者也可以手动安装(离线项目主机)</p><ul class="ul">
+<li class="li"><p class="p">安装 pyWin32 extensions</p></li>
+<li class="li"><p class="p">下载 six并执行 python setup.py install来安装</p></li>
+<li class="li"><p class="p">下载 comtypes 并执行 python setup.py install来安装</p></li>
+<li class="li"><p class="p">下载 the latest pywinauto 并执行 python setup.py install来安装</p></li>
+</ul><div class="note note note_note"><span class="note__title">注：</span> <div class="note__body"><ul class="ul">
+<li class="li"><p class="p">six，comtypes，pywinauto可以使用&nbsp;pip download pywinauto&nbsp;得到相应的包</p></li>
+<li class="li"><p class="p">离线情况下安装依赖pywin32 安装pywin32 要注意python版本，位数（要和系统统一），setutools版本等问题。<a class="xref" href="https://github.com/mhammond/pywin32/releases" target="_blank" rel="external noopener">官方下载地址</a></p></li>
+<li class="li"><p class="p">支持的控件：</p><p class="p">标准Win32控件：MFC, WTL, VB6和其他一些使用WinForms的老应用 所有基于MS
+UI Automation的标准部件：WPF, Qt, 所有浏览器, Windows文件资源管理器和其他；</p><p class="p">对于非标准控件，简单情况下，我们可以在得到窗口句柄后，模拟键盘命令对其进行操作。</p></li>
+</ul></div></div></div>
+</li><li class="li step stepexpand"><span class="ph cmd">撰写PreSetAuto.py代码</span>
+<div class="itemgroup info"><pre class="pre codeblock"><code>#导入时间库
+import time
+#导入pywinauto库
+from pywinauto import application
+#启动记事本
+app = application.Application().start('notepad.exe')
+
+#打开菜单方法1
+#app.Notepad.MenuSelect('帮助-&gt;关于记事本')
+#打开菜单方法2
+#app['记事本'].menu_select(u'帮助(H)-&gt;关于记事本(A)')
+#打开菜单方法3
+app.Notepad.TypeKeys('%HA',pause=1)
+
+#定位“关于记事本”的对话框方法1+点击
+#app.window(title_re='关于“记事本”').window(title_re='确定').Click()
+#定位“关于记事本”的对话框方法2+点击
+#app['关于“记事本”']['确定'].Click()
+#定位“关于记事本”的对话框方法3
+about_dlg = app.window(title_re="关于", class_name="#32770")
+about_dlg['确定'].Click()#  +点击
+
+#模拟键盘输入
+app.Notepad.TypeKeys(u"测试")
+time.sleep(2)
+
+#关闭有问题方法1？不成功
+#app.Notepad.close()
+#方法2成功运行
+#app.Notepad.TypeKeys('%FX')
+#方法3成功运行
+app.Notepad.MenuSelect("文件-&gt;退出")
+ 
+time.sleep(2)
+#退出时弹出对话框操作，同窗体定位，成功
+#app['记事本']['不保存'].Click()
+#退出时弹出对话框操作，同窗体定位，成功2
+app.window(title_re='记事本').window(title_re='不保存').Click()</code></pre></div>
+</li><li class="li step stepexpand"><span class="ph cmd">安装打包可执行文件工具pyinstaller：pip install pyinstaller</span>
+<div class="itemgroup info"><p class="p"><img class="image" src="../../images/2019-06/pywinauto_2.png"></p><p class="p">也可以下载源码包，然后进入包目录，执行下面的命令（需要安装setuptools）：</p><p class="p">python
+setup.py install</p><p class="p">安装完后，检查安装成功与否：</p><p class="p">pyinstaller --version</p></div>
+</li><li class="li step stepexpand"><span class="ph cmd">打包单文件可执行文件:pyinstaller -F —w PreSetAuto.py</span>
+<div class="itemgroup info"><div class="p">在CMD环境中要先进入PreSetAuto.pys所在目录(如：E:\user\desktop\python)：<pre class="pre codeblock"><code>cd E:\user\desktop\python
+E:</code></pre></div><p class="p">参数说明： -F：打包一个单个文件；—w：不显示Windows命令行界面</p><p class="p"><img class="image" src="../../images/2019-06/pywinauto_3.png"></p><div class="note note note_note"><span class="note__title">注：</span> <div class="note__body"><ol class="ol" type="a">
+<li class="li"><p class="p">Pyinstaller对中文目录存在一定的兼容问题。故使用过程中，一般最好不要将exe文件放在带有中文的目录下，比如桌面。</p></li>
+<li class="li"><p class="p">main return -1这种错误基本都是自己的问题, 只能在输出exe时参数加个’-d’即debug模式, 然后再查下打印的错误信息</p></li>
+</ol></div></div><p class="p"><strong class="ph b">调试记录FAQ:</strong></p><ol class="ol" type="a">
+<li class="li"><p class="p">Q:[6188] Failed to execute script notepad Traceback (most recent
+call last):   File "notepad.py", line 3, in &lt;module&gt;   File "site-packages\pywinauto\application.py",
+line 1052, in start   File "site-packages\pywinauto\application.py",
+line 1039, in app_idle pywintypes.error: (1813, 'WaitForInputIdle',
+'\xd5\xd2\xb2\xbb\xb5\xbd\xd3\xb3\x cf\xf1\xce\xc4\xbc\xfe\xd6\xd0\xd6\xb8\xb6\xa8\xb5\xc4\xd7\xca\xd4\xb4\xc0\xe0\x
+d0\xcd\xa1\xa3')</p> <p class="p">A:把notepad.py改名为PreSetAuto.py即可。原因：打包生成的notepad.exe与系统程序同名冲突。。。</p></li>
+</ol></div>
+</li></ol></section>
+<section class="section result"></section>
+<section class="example"><h2 class="title sectiontitle">参见</h2><ol class="ol">
+<li class="li"><p class="p"><a class="xref" href="https://github.com/fangchaooo" target="_blank" rel="external noopener">fangchaooo</a>/<a class="xref" href="https://github.com/fangchaooo/zh-pywinauto-doc" target="_blank" rel="external noopener"><strong class="ph b">zh-pywinauto-doc</strong></a>/<a class="xref" href="https://github.com/fangchaooo/zh-pywinauto-doc/blob/b83093cf125240ceff2fde5f7fe5ef26d0d4fcfc/How%20To's.md" target="_blank" rel="external noopener">How To's.md</a></p></li>
+<li class="li"><p class="p"><a class="xref" href="https://zhuanlan.zhihu.com/p/37049573" target="_blank" rel="external noopener">Python---一个简单的自动化测试框架</a></p></li>
+<li class="li"><p class="p"><a class="xref" href="https://www.cnblogs.com/beer/p/5075619.html" target="_blank" rel="external noopener">python自动化测试（3）- 自动化框架及工具</a></p></li>
+<li class="li"><p class="p"><a class="xref" href="http://www.cnblogs.com/beer/p/6381327.html" target="_blank" rel="external noopener">基于Python的互联网软件测试开发</a></p></li>
+<li class="li"><p class="p"><a class="xref" href="https://zhuanlan.zhihu.com/p/30385931" target="_blank" rel="external noopener">收藏清单: 一步到位, python自动化测试工具最全资源汇总</a></p></li>
+<li class="li"><p class="p"><a class="xref" href="https://github.com/2gis" target="_blank" rel="external noopener">2gis</a>/<a class="xref" href="https://github.com/2gis/Winium.Desktop" target="_blank" rel="external noopener"><strong class="ph b">Winium.Desktop</strong></a></p></li>
+<li class="li"><p class="p"><a class="xref" href="https://github.com/pywinauto" target="_blank" rel="external noopener">pywinauto</a>/<a class="xref" href="https://github.com/pywinauto/pywinauto" target="_blank" rel="external noopener"><strong class="ph b">pywinauto</strong></a> </p></li>
+<li class="li"><p class="p"><a class="xref" href="https://blog.csdn.net/u014563989/article/details/80940321" target="_blank" rel="external noopener">总结Pyinstaller的坑及终极解决方法</a></p></li>
+<li class="li"><p class="p"><a class="xref" href="https://blog.csdn.net/A807296772/article/details/82769835" target="_blank" rel="external noopener">pyinstaller failed to execute script - 江南小虫虫的博客-
+CSDN博客</a></p></li>
+</ol></section>
+<section class="section postreq"></section>
+</div>
+<nav role="navigation" class="related-links"><div class="familylinks"><div class="parentlink"><strong>父主题：</strong> <a class="link" href="%E8%BD%AF%E4%BB%B6%E6%B5%8B%E8%AF%95.html">软件测试</a></div></div></nav></article></main></body></html>

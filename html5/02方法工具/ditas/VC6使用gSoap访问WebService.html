@@ -1,0 +1,150 @@
+<!DOCTYPE html
+  SYSTEM "about:legacy-compat">
+<html lang="zh-cn"><head><meta charset="UTF-8"><meta name="copyright" content="(C) 版权 2024"><meta name="generator" content="DITA-OT"><meta name="description" content=""><title>VC6使用gSoap访问WebService</title><link rel="stylesheet" type="text/css" href="../../commonltr.css">
+<link rel="stylesheet" type="text/css" href="../../common-extended.css"></head><body id="VC6使用gSoap访问WebService-A10B6926"><main role="main"><article role="article" aria-labelledby="ariaid-title1">
+<h1 class="title topictitle1" id="ariaid-title1">VC6使用gSoap访问WebService</h1>
+
+
+<div class="body taskbody"><p class="shortdesc"></p>
+<section class="section prereq">gSoap v2.8.22应该是支持VC6的最后一个版本，且也并打上了2017–7–16日的绿萝漏洞补丁</section>
+<section class="section context"><p class="p">开发的过程非常的简单，首先定义好WebService所需要提供的接口（或是服务），其实就是一个.h申明文件，然后使用“soapcpp2.exe”工具，他会帮你生成一系列的中间文件。 </p><p class="p">开发WebService的服务器比较简单，将几个头文件和.cpp文件加入工程，很快就搞定的，之前在.h申明里面定义的方法，gsoap会进行简单的一个封装，变成一个回调函数，函数体已经定义好了，只需要填写实现的方法即可。 </p><p class="p">开发WebService的客户端也很容易，同样是将头文件和.cpp文件加入工程，之前在.h申明里面定义的方法，gsoap已经进行了封装，你只需要调用封装的代码即可，这样，调用远程服务器上的方法，就和调用本地的方法是一样的，中间的网络传输（TCP）、协议解析（XML）等都不需要程序来关心了！ </p><p class="p">之前担心使用gsoap开发出来的程序会依赖gsoap的某些组件，如DLL等，但是实际上是没有依赖任何库的，用Depends看了一下，生成的程序与gsoap没有一点关系，从这点来说，gsoap仅仅是一个工具，他所产生的代码都是源代码级别的，之也就是为什么gsoap效率之所以高的原因之一吧！ </p><p class="p">使用gsoap开发的WebService服务端其实就是一个小型的HTTP Server。</p><p class="p">gsoap客户端代码支持两种实现方式：</p><p class="p">1&gt;代理类 2&gt;非代理类的方式。  </p><p class="p">gSOAP主要包括两个exe： wsdl2h.exe的作用是根据WSDL生成C/C++风格的头文件;
+soapcpp2.exe的作用是根据头文件自动生成调用远程 SOAP服务的客户端代码（称为存根:Stub）和提供SOAP服务的框架代码（称为框架：Skeleton），另外它也能从头文件生成WSDL文件</p></section>
+<section><ol class="ol steps"><li class="li step stepexpand"><span class="ph cmd">安装gSOAP</span>
+<ol type="a" class="ol substeps">
+<li class="li substep substepexpand"><span class="ph cmd">首先我们到 http://sourceforge.net/project/showfiles.php?group_id=52781链接去下载gSoap工具集，gSoap工具集不需要安装，直接解压就可以了。</span>
+<div class="itemgroup info"><p class="p">在gsoap-2.8\gsoap\bin\win32目录下我们可以看到两个可执行文件：</p><ol class="ol" type="i">
+<li class="li"><p class="p"><strong class="ph b">soapcpp2.exe:</strong>gSoap编译器，编译头文件生成服务器和客户端都需要的 c/c++文件。</p></li>
+<li class="li"><p class="p"><strong class="ph b">wsdl2h.exe:</strong>编译wsdl文件生成c/c++头文件。</p></li>
+</ol><div class="p"><div class="note note note_note"><span class="note__title">注：</span> <div class="note__body">soapcpp2.exe和wsdl2h.exe的参数的意思自己在命令行输入 soapcpp2 -h来查看</div></div></div></div>
+</li>
+</ol>
+</li><li class="li step stepexpand"><span class="ph cmd">用wsdl2h.exe 将wsdl文件翻译成为.h文件</span>
+<ol type="a" class="ol substeps">
+<li class="li substep substepexpand"><span class="ph cmd">在命令行执行：wsdl2h -s -o soapClientSoap.h http://114.55.90.253:29099/WebService.asmx?wsdl</span>
+<div class="itemgroup info"><p class="p"><img class="image" src="../../images/2018-06/gsoap1.png"></p><div class="note note note_note"><span class="note__title">注：</span> <div class="note__body"><ul class="ul">
+<li class="li"><p class="p">-o 文件名，指定输出的头文件名称</p></li>
+<li class="li"><p class="p">-n 命名空间前缀，代替默认的ns</p></li>
+<li class="li"><p class="p">-c 产生纯C代码，否则是C++代码</p></li>
+<li class="li"><p class="p">-s 不要使用stl代码</p></li>
+<li class="li"><p class="p">-t 文件名，指定type map文件，默认为typemap.dat</p></li>
+<li class="li"><p class="p">-e 禁止为enum成员加上命名空间前缀</p></li>
+</ul>wsdl2h.exe calc.wsdl&nbsp;&nbsp;&nbsp; --这个命令将本地的calc.wsdl 生成
+calc.h &nbsp;&nbsp; wsdl2h.exe http://services.xmethods.net/soap/urn:xmethods-delayed-quotes.wsdl&nbsp;
+--也可以是网络wsdl &nbsp;&nbsp; wsdl2h.exe -s -o Calc2.h calc.wsdl abcd.wsdl&nbsp;&nbsp;
+--指定多个wsdl生成同一个的文件名为Calc2.h，并且不使用STL &nbsp;&nbsp; 默认的typemap.dat 从gsoap安装包直接拷贝到wsdl2h.exe所在目录就可以了。type
+map文件用于指定SOAP/XML中的类型与C/C++之间的转换规则，比如在wsmap.dat里写xsd__string = |&nbsp;&nbsp;
+std::wstring | wchar_t*；那么SOAP/XML中的string将转换成std::wstring或wchar_t*，这样能更&nbsp;&nbsp;
+好地支持中文。</div></div><p class="p">&nbsp; 自己定义的type map文件可用 -t 选项来指定：&nbsp; -tfile&nbsp;
+use type map file instead of the default file typemap.dat &nbsp; 如果不用-t选项，默认就用gsoap自带的type
+map文件 typemap.dat</p></div>
+</li>
+</ol>
+</li><li class="li step stepexpand"><span class="ph cmd">生成客户端存根程序和框架：</span>
+<div class="itemgroup info"><p class="p">用-i生成代理类和生成非代理类的代码本质没什么区别的。代理类中封装了如何去调用webservice API的，默认构造中包括了默认soap对象，直接调用代理类中封装的方法就可以了。对于非代理类，soapClient.cpp中则是API的存根，调用时要先初始化soap对象，然后作为参数传入soapClient.cpp中API的存根。</p><p class="p">参见http://www.cs.fsu.edu/~engelen/soap.html 可知非代理类的方式是一个比较老的使用方式，现在官方推荐使用代理类的方式。</p></div>
+<ol type="a" class="ol substeps">
+<li class="li substep substepexpand"><span class="ph cmd">非代理类的方式生成客户端存根程序和框架：执行：soapcpp2.exe -C -L -i -x -ID:\Lnhoo.Device.Driver\02_src\10_APR\COMClient\docs\gsoap_2.8.22\gsoap-2.8\gsoap\import
+soapClientSoap.h</span>
+<div class="itemgroup info"><p class="p"><img class="image" src="../../images/2018-06/gsoap2.png"></p><div class="note note note_note"><span class="note__title">注：</span> <div class="note__body"><ol class="ol" type="i">
+<li class="li"><p class="p">-C 仅生成客户端代码 </p></li>
+<li class="li"><p class="p">-S 仅生成服务器端代码  </p></li>
+<li class="li"><p class="p">-L 不要产生soapClientLib.c和soapServerLib.c文件   </p></li>
+<li class="li"><p class="p">-c 产生纯C代码，否则是C++代码(与头文件有关)   </p></li>
+<li class="li"><p class="p">-I 指定import路径 </p></li>
+<li class="li"><p class="p">-x 不要产生XML示例文件  </p></li>
+<li class="li"><p class="p">-i 生成C++代理类包装，客户端为xxxxProxy.h(.cpp)，服务器端为xxxxService.h(.cpp)</p></li>
+<li class="li"><p class="p">-j 跟-i一样也可以生成代理类，细微区别是-i生成的代理类本身是从soap派生，而-j生成的代理类是将soap作为成员变量来处理</p></li>
+</ol></div></div></div>
+<div class="itemgroup stepresult"><p class="p"></p><p class="p">上面的命令执行完成后，会生产下面的6个文件，如下：</p><p class="p">soapC.cpp，soapH.h，soapXXXXProxy.cpp，soapXXXXProxy.h，soapStub.h，stdsoap2.cpp，stdsoap2.h，XXXX.nsmap</p><ol class="ol" type="i">
+<li class="li"><p class="p">soapC.cpp和soapH.h：用来序列化和反序列化C/C++不同数据类型。</p></li>
+<li class="li"><p class="p">soapXXXProxy.h: 生成的代理类的头文件,使用代理类时需要此文件。此处为：soapWebServiceSoapProxy.h</p></li>
+<li class="li"><p class="p">soapWebServiceSoapProxy.cpp</p></li>
+<li class="li"><p class="p">soapStub.h</p></li>
+<li class="li"><p class="p">WebServiceSoap.nsmap</p></li>
+</ol><p class="p">另外，soapClientSoap.cpp：编译客户端需要的存根例程。</p><p class="p">到此，所需的文件准备完毕。</p></div>
+</li>
+<li class="li substep substepexpand"><span class="ph cmd">非代理类的方式生成客户端存根程序和框架：执行：soapcpp2.exe -C -x -L -ID:\Lnhoo.Device.Driver\02_src\10_APR\COMClient\docs\gsoap_2.8.22\gsoap-2.8\gsoap\import
+soapClientSoap.h</span>
+<div class="itemgroup info"><div class="note note note_note"><span class="note__title">注：</span> <div class="note__body"></div></div></div>
+<div class="itemgroup stepresult"><p class="p"></p><p class="p">上面的命令执行完成后，会生产下面的5个文件，如下：</p><p class="p">这是非代理类的方式。这种方式会生成两个*BindingProxy.h头文件，但是不会生成cpp文件的，没有什么用的。 </p><p class="p">&nbsp;</p><ol class="ol" type="i">
+<li class="li"><p class="p">soapH.h 主 Header 文件，所有客户机和服务源代码都要将其包括在内</p></li>
+<li class="li"><p class="p">soapC.cpp 指定数据结构的序列化器和反序列化器</p></li>
+<li class="li"><p class="p">soapXXXProxy.h: 生成的代理类的头文件,使用代理类时需要此文件。此处为：soapWebServiceSoapProxy.h</p></li>
+<li class="li"><p class="p">soapStub.h 从输入 Header 文件生成的经过修改且带标注的 Header 文件h</p></li>
+<li class="li"><p class="p">ServiceSoap11Binding.nsmap 名空间定义，客户端需要包含它</p></li>
+</ol><ol class="ol" type="i">
+<li class="li"><p class="p">stdsoap2.h 为stdsoap2.cpp 运行时库的 Header 文件</p></li>
+<li class="li"><p class="p">stdsoap2.cpp 运行时 C++ 库，带 XML 解析器和运行时支持例程</p></li>
+<li class="li"><p class="p">另外，soapClientSoap.cpp：编译客户端需要的存根例程，远程操作的客户机存根例程。</p></li>
+</ol><div class="note note note_note"><span class="note__title">注：</span> <div class="note__body"><p class="p">注意：stdsoap2.h 和 stdsoap2.cpp 是从gsoap包中的gsoap-2.8\gsoap
+目录下直接复制的。</p></div></div><p class="p">到此，所需的文件准备完毕。</p></div>
+</li>
+</ol>
+</li><li class="li step stepexpand"><span class="ph cmd">建立基于对话框的MFC工程</span>
+<ol type="a" class="ol substeps">
+<li class="li substep substepexpand"><span class="ph cmd">把上一步生产的6个文件和gsoap-2.8\gsoap目录下的stdsoap2.cpp\stdsoap2.h一共8个文件添加到工程</span>
+</li>
+<li class="li substep substepexpand"><span class="ph cmd">给工程添加socket支持 Project -&gt; Setting &nbsp;在对话框中的Link选项卡中
+Object/library modules：下添加ws2_32.lib</span>
+<div class="itemgroup info"><p class="p"><img class="image" src="../../images/2018-06/gsoap3.png"></p></div>
+</li>
+<li class="li substep substepexpand"><span class="ph cmd">soapWebServiceSoapProxy.cpp\stdsoap2.cpp\soapC.cpp三个文件不适用预编译头，方法：Project-&gt;Setting
+选中上述的3个文件在C/C++选项卡中的Category 中选择Precompiled Headers，然后点击下面的单选框Not
+using precompiled headers。</span>
+<div class="itemgroup info"><p class="p"><img class="image" src="../../images/2018-06/gsoap4.png"></p></div>
+</li>
+<li class="li substep substepexpand"><span class="ph cmd">在Stdafx.h文件中增加我们刚才加入到工程中的头文件，如下：</span>
+<div class="itemgroup info"><pre class="pre codeblock"><code>#include "soapWebServiceSoapProxy.h"
+#include "WebServiceSoap.nsmap"</code></pre></div>
+</li>
+</ol>
+</li><li class="li step stepexpand"><span class="ph cmd">http和https</span>
+<div class="itemgroup info"><p class="p">代理类和非代理类方式都支持http和https。</p><p class="p">为了支持https，代理类和非代理类相关代码都必须先生成一个支持https的soap对象，代码大致如下：</p><p class="p">/* Init OpenSSL */</p><p class="p">soap_ssl_init();</p><p class="p">&nbsp;</p><p class="p">struct
+soap client_soap;</p><p class="p">soap_init(&amp;client_soap);</p><p class="p">soap_ssl_client_context(&amp;client_soap,SOAP_SSL_NO_AUTHENTICATION,</p><p class="p">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+NULL,</p><p class="p">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+NULL,</p><p class="p">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+NULL,</p><p class="p">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+NULL,</p><p class="p">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+NULL);</p><p class="p">&nbsp;</p><p class="p">根据此soap对象来支持https的情形大致如下：</p><p class="p">代理类：</p><p class="p">ServiceSoapProxy service_proxy(&amp;client_soap);</p><p class="p">非代理类：</p><p class="p">soap_call___ns3__accessService(&amp;client_soap,</p><p class="p">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+dest_url,</p><p class="p">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+NULL,</p><p class="p">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+NULL,</p><p class="p">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&amp;response);</p><p class="p">&nbsp;</p><p class="p">除了上面的支持https的soap对象，对于代理类和非代理类代码要支持
+HTTPS，还需要在编译的时候对 gSOAP 进行配置。在您的平台上安装 OpenSSL 库，以允许安全 SOAP 客户机使用 HTTPS/SSL。安装完成后，在应用程序工程中添加宏WITH_OPENSSL选项来让gSOAP打开对OpenSSL的支持。然后只需要编译应用程序的所有源文件就可以了。</p><p class="p">具体步骤可参考：</p><p class="p">https://www.ibm.com/developerworks/cn/webservices/ws-soa-gsoap/</p><p class="p">&nbsp;</p></div>
+</li><li class="li step stepexpand"><span class="ph cmd">gsoap支持汉字:</span>
+<div class="itemgroup info"><p class="p">如果gsoap要支持汉字，则要执行gsoap为utf8编码，然后在设置soap接口参数之前，都要把字符转换为utf8格式。Web
+service API接口接收的也是utf8字符串，程序中需要按照需要，将收到的utf8字符串转换为所需要的格式。 soap_init(&amp;client_soap); </p><p class="p">soap_set_mode(&amp;client_soap,SOAP_C_UTFSTRING); </p></div>
+</li><li class="li step stepexpand"><span class="ph cmd"></span><br></li><li class="li step stepexpand"><span class="ph cmd"></span><br></li><li class="li step stepexpand"><span class="ph cmd"></span><br></li></ol></section>
+<section class="section result"></section>
+<section class="example"><h2 class="title sectiontitle">FAQ</h2><ol class="ol">
+<li class="li"><p class="p">Q:如果看到soapcpp2提示:”Critical error: #import: Cannot open file
+"stlvector.h" for reading.“， </p><p class="p">A:那是因为我们的头文件使用了STL(wsdl2h 没用-s选项)，这时要使用<strong class="ph b">-I</strong>选项指定gSOAP的 import文件路径。如：</p><p class="p">soapcpp2&nbsp; -C -x -L -IC:\webservice\gsoap\gsoap-2.8\gsoap\import&nbsp;&nbsp;&nbsp;
+calc.h&nbsp;</p></li>
+<li class="li"><p class="p">Q:error&nbsp;C2079:&nbsp;'storage'&nbsp;uses&nbsp;undefined&nbsp;struct&nbsp;'sockaddr_storage'</p><div class="p">'sockaddr_storage'结构没有定义.关于这个错误网上很多大侠都说了,可能是使用的winsock2.h文件不完整.我找了好多版本我也没发现一个带这个结构定义的,最简单的办法,就是自己定义一个,&nbsp;sockaddr_storage的定义: <strong class="ph b">放哪里,自己看着办吧,我是放到了stdsoap2.h中了</strong> <pre class="pre codeblock"><code>#ifndef WITH_NOIO
+//增加begin，约2210-2869行
+struct sockaddr_storage { 
+ u_char sa_len; 
+ u_char sa_family; 
+ u_char padding[128]; 
+ }; 
+//增加end
+  unsigned int ipv6_multicast_if; </code></pre></div></li>
+<li class="li"><p class="p">Q: stdsoap2.h(2935) : error C2146: syntax error : missing ';'
+before identifier 'c_locale' </p><p class="p">stdsoap2.h(2935) : error C2501:
+'_locale_t' : missing storage-class or type specifiers </p><p class="p">stdsoap2.h(2935)
+: error C2501: 'c_locale' : missing storage-class or type specifiers</p><p class="p">A: Project -&gt; Setting &nbsp;在对话框中的C++选项卡中 Genernal/Project Options：下添加
+/D "WITH_NO_C_LOCALE"或:/* if this does not compile use -DWITH_INCLUDE_XLOCALE_H,
+or use -DWITH_NO_C_LOCALE to disable locale support */</p></li>
+<li class="li"><p class="p">Q:如何使用gSoap在同一个程序里面生成访问多个web service的类?</p><p class="p">A:使用wsdl2h&nbsp;-q
+namespace&nbsp;参数，会根据命名空间生成不同的头文件，再用soapcpp2去一一生成类。https://stackoverflow.com/questions/13656883/gsoap-multiple-wsdls-but-only-one-proxy-class</p></li>
+<li class="li"><p class="p">Q:error LNK2001: 无法解析的外部符号 _namespaces</p><p class="p">A:</p><p class="p">&nbsp; 工程--属性--配置属性---C/C++---预处理器, 添加 WITH_NONAMESPACES</p></li>
+</ol><ul class="ul">
+<li class="li"><p class="p">gsoap官网 http://www.cs.fsu.edu/~engelen/soap.html 是学习的宝库</p></li>
+<li class="li"><p class="p"><a class="xref" href="https://www.codeproject.com/Articles/17958/CurrencyConvertor-How-to-Use-gSOAP-and-Webservices" target="_blank" rel="external noopener">CurrencyConvertor: How to Use gSOAP and Webservices,
+Part One</a></p><a class="xref" href="https://www.helplib.com/Web_Development/article_4907" target="_blank" rel="external noopener">CurrencyConvertor: 如何使用gSOAP和 web Webservices，第一个部分</a></li>
+<li class="li"><p class="p"><a class="xref" href="https://www.codeproject.com/Articles/17961/CurrencyConvertor-How-use-gSOAP-and-WebServices-Pa" target="_blank" rel="external noopener">CurrencyConvertor - How use gSOAP and WebServices
+- Part 2 Doing</a></p></li>
+<li class="li"><p class="p"></p></li>
+</ul></section>
+<section class="section postreq"></section>
+</div>
+<nav role="navigation" class="related-links"><div class="familylinks"><div class="parentlink"><strong>父主题：</strong> <a class="link" href="GSoap%E4%BD%BF%E7%94%A8.html">gSoap使用</a></div></div></nav></article></main></body></html>

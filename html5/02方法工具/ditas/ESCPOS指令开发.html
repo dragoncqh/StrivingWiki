@@ -1,0 +1,1119 @@
+<!DOCTYPE html
+  SYSTEM "about:legacy-compat">
+<html lang="zh-cn"><head><meta charset="UTF-8"><meta name="copyright" content="(C) 版权 2024"><meta name="generator" content="DITA-OT"><meta name="description" content=""><title>ESC/POS指令开发</title><link rel="stylesheet" type="text/css" href="../../commonltr.css">
+<link rel="stylesheet" type="text/css" href="../../common-extended.css"></head><body id="ESCPOS指令开发-71057A7C"><main role="main"><article role="article" aria-labelledby="ariaid-title1">
+<h1 class="title topictitle1" id="ariaid-title1">ESC/POS指令开发</h1>
+
+
+<div class="body conbody"><p class="shortdesc"></p>
+<section class="section"><h2 class="title sectiontitle">背景技术</h2><p class="p">随着科学技术的不断发展和人们生活水平的持续提高，商场、超市、餐饮店面等各
+种消费场所都开始使用收银系统对消费者购买的商品进行结算，实现了自动化商业的管 理。由于收银系统可以提高收银、结算效率，避免计算错误，精简人手、节约人力资源，且能
+够保留结算证据、实现有据可查，因此，收银系统在人们的日常生活中越来越普遍的被使 用。一般来说，收银系统包括收银机和打印机。而且，随着银行卡使用的不断普及，顾客在收
+银系统结账时，经常会采用刷卡消费的方式。为此，由收银系统和P0S终端集成的P0S系统使 用的方式也越来越普及。</p><p class="p">为了简化P0S系统的整体结构，一般来说，P0S系统中不再单独的设置一台物理打印机，而是采用支持标准ESC
+(Escape，转义字符)指令集的热敏打印模块集成在P0S终端内部，由P0S终端完成票据的打印工作。ESC指令集最早是EPSON公司自己制定的针式打印机的
+标准化指令集，现在已成为嵌入式打印机控制语言上的工业标准，现在大多数P0S终端票据 打印都采用该指令集。其显著特征是:其中很大一部分指令都是以ESC控制符开始的一串代码。</p><p class="p">P0S终端内部的打印模块中的ESC指令集对文字打印的大致处理过程是:首先，获 得二进制编码字符串和ESC指令的混合数据，其中，字符编码一般英文采用ASCI
+I编码，中文采用Gffi编码等其次，解析每个字符，从打印模块的内部字库中获得该字符的bitmap (位图）点阵接着，按照字符之间ESC排版指令和bitmap点阵进行输出图像的排版最后，调用打印机接口进行图像的输出。</p></section>
+<section class="section"><h2 class="title sectiontitle">连接方式</h2><p class="p">EscPos 为目前主流小票打印机都支持的一种打印机控制命令集， 而其很重要的一个特点是无需驱动支持。
+有以下方式可以向一台打印机发送这种命令。</p><ol class="ol">
+<li class="li"><p class="p">串口/并口连接：向串口(COM)/并口写入命令</p></li>
+<li class="li"><p class="p">USB连接的情况下，直接向 LPT1 这个设备写入命令。在windows下，外接设备被映射到系统中，其实也有其自己的路径，
+不过这个路径和一般的文件路径不一样罢了， 如果从Linux的/dev/sda0 =&gt; /mnt/sda0 这样来理解可能会好理解点。那么使用CreateFile(设备路径),
+获取一个缓冲区地址，然后往这个缓冲区写入数据，数据就会被发送到设备，以实现通讯</p></li>
+<li class="li"><p class="p">网线连接。一般的小票打印机都可以插网线，同时开放了9100这个端口， 可以通过socket建立连接，向这个端口发送数据，也同样可以和设备建立通讯连接</p></li>
+</ol></section>
+<section class="section"><h2 class="title sectiontitle">模板设计</h2><p class="p">小票打印机， 目前主要有这么几个宽度规格 58mm 70mm 80mm，常见的58mm和80mm为用得比较多，
+对于模板的设计来说，其中的区别基本上只在于每行可以显示多少个字符。58mm的小票热敏纸，一行最大可以显示32个半角字符，而80mm的则可以显示48个半角字符。</p><p class="p">由于小票的适用范围， 其实可以归结为以下几点：</p><ol class="ol">
+<li class="li"><p class="p">小票可以看作是一行一行的字符拼接成完整的小票， 按照布局上来说， 那么就像是一个只有一栏的表格， 只要决定了每一行是什么样子，
+整体的样子就有了</p></li>
+<li class="li"><p class="p">由于小票一般都不是很宽，那么一个字符或者一个字符串在当前行的某个具体位置并不重要，只需要 居左 居中 居右 三种位置属性即可，即使有，
+横向的布局也应该是横向的填充布局</p></li>
+<li class="li"><p class="p">小票不需要很多很花的样式</p></li>
+</ol><p class="p">。。。</p><p class="p">基于以上几点， 将小票分为三个部分</p><ul class="ul">
+<li class="li"><p class="p">头</p></li>
+<li class="li"><p class="p">体</p></li>
+<li class="li"><p class="p">尾</p></li>
+</ul><p class="p">头的部分，主要显示标题、打印时间、单号等信息 体的部分，主要显示项目明细，从一个List里按顺序输出每行即可 尾的部分，一些其他内容，可以是文本，可以是链接</p><p class="p">按照上面github的这个库里所说， 把内容类型分为 文本 条形码 二维码 和图片，黑白的情况下，图片并不是很有必要</p></section>
+<section class="section"><h2 class="title sectiontitle">常用ESC/POS指令整理表</h2><div class="p"><table class="table"><caption></caption><colgroup><col><col><col><col><col><col><col><col></colgroup><tbody class="tbody">
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"><p class="p">命令编号</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">中文名</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">指令</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">参数</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">命令长度</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">参数大小范围</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">字符串</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">HEX格式</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"><p class="p">1</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">水平TAB定位</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">HT</p></td>
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1</p></td>
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">'\x09'</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">9</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"><p class="p">2</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">打印并换行</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">LF</p></td>
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1</p></td>
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">'\x0A'</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">0A</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"><p class="p">3</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">打印并回归复始</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">FF</p></td>
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1</p></td>
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">'\x0C'</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">0C</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"><p class="p">4</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">打印并回车</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">CR</p></td>
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1</p></td>
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">'\x0D'</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">0D</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"><p class="p">5</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">页模式下取消打印数据</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">CAN</p></td>
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1</p></td>
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">'\x18'</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">18</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"><p class="p">6</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">实时产生指定脉冲</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">DLE DC4</p></td>
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">2</p></td>
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">'\x10\x14'</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">10 14</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"><p class="p">7</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">实时传送指定状态</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">DLE DC4
+7</p></td>
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">3</p></td>
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">'\x10\x14\x07'</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">10 14 07</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"><p class="p">8</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">清空缓冲区</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">DLE DC4
+8</p></td>
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">3</p></td>
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">'\x10\x14\x08'</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">10 14 08</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"><p class="p">9</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">实时状态传输</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">DLE EOT</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">n</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">3</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1&lt;=n&lt;=4</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">'\x10\x04'</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">10 04</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"><p class="p">10</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">实时打印机请求</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">DLE ENQ</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">n</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">3</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1&lt;=n&lt;=2</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">'\x10\x05'</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">10 05</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"><p class="p">11</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">页模式下打印数据</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">ESC FF</p></td>
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">2</p></td>
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">'\x1B\x0C'</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1B 0C</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"><p class="p">12</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">设置右测字符间距</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">ESC SP</p></td>
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">2</p></td>
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">'\x1B\x20'</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1B 20</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"><p class="p">13</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">选择打印模式</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">ESC !</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">n</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">3</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">0&lt;=n&lt;=255</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">'\x1B\x21'</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1B 21</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"><p class="p">14</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">设置绝对打印位置</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">ESC $</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">nL nH</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">4</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">0&lt;=nL&lt;=255,0&lt;=nH&lt;=255</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">'\x1B\x24'</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1B 24</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"><p class="p">15</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">选择|取消用户自定义字符集</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">ESC %</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">n</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">3</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">0&lt;=n&lt;=255</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">'\x1B\x25'</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1B 25</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"><p class="p">16</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">定义用户自定义字符</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">ESC &amp;</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">y c1 c2
+[x1 d1...d(y × x1)]...[xk d1...d(y ×xk)]</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">255</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">y = 332&lt;=c1&lt;=c2&lt;=1260&lt;=x&lt;=12
+(当设定字型A (12&lt;=24)时)0&lt;=x&lt;=9 (当设定字型B (9&lt;=17)时)0&lt;=d1...d(y×xk)&lt;=255</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">'\x1B\x26'</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1B 26</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"><p class="p">17</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">选择位图模式</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">ESC *</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">m nL nH
+d1... dk</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">255</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">m = 0,1,32,330&lt;=nL&lt;=255,0&lt;=nH&lt;=30&lt;=d&lt;=255</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">'\x1B\x2A'</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1B 2A</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"><p class="p">18</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">设定|解除下划线</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">ESC -</p></td>
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">2</p></td>
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">'\x1B\x2D'</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1B 2D</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"><p class="p">19</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">选择缺省行间距</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">ESC 2</p></td>
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">2</p></td>
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">'\x1B\x32'</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1B 32</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"><p class="p">20</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">设置行间距</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">ESC 3</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">n</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">3</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">0&lt;=n&lt;=255</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">'\x1B\x33'</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1B 33</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"><p class="p">21</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">选择周边设备</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">ESC =</p></td>
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">2</p></td>
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">'\x1B\x3D'</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1B 3D</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"><p class="p">22</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">取消用户自定义字符</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">ESC ?</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">n</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">3</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">32&lt;=n&lt;=126</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">'\x1B\x3F'</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1B 3F</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"><p class="p">23</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">初始化打印机</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">ESC @</p></td>
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">2</p></td>
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">'\x1B\x40'</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1B 40</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"><p class="p">24</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">设置水平TAB定位点</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">ESC D</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">n1 . . .
+nk NUL</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">255</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1&lt;=n&lt;=255,0&lt;=k&lt;=32</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">'\x1B\x44'</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1B 44</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"><p class="p">25</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">设定|解除粗体打印</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">ESC E</p></td>
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">2</p></td>
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">'\x1B\x45'</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1B 45</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"><p class="p">26</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">设定|解除重叠打印</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">ESC G</p></td>
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">2</p></td>
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">'\x1B\x47'</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1B 47</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"><p class="p">27</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">打印并进纸</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">ESC J</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">n</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">3</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">0&lt;=n&lt;=255</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">'\x1B\x4A'</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1B 4A</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"><p class="p">28</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">选择页模式</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">ESC L</p></td>
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">2</p></td>
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">'\x1B\x4C'</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1B 4C</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"><p class="p">29</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">选择字型</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">ESC M</p></td>
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">2</p></td>
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">'\x1B\x4D'</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1B 4D</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"><p class="p">30</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">选择国际字符集</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">ESC R</p></td>
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">2</p></td>
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">'\x1B\x52'</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1B 52</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"><p class="p">31</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">选择标准模式</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">ESC S</p></td>
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">2</p></td>
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">'\x1B\x53'</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1B 53</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"><p class="p">32</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">页模式下选择打印方向</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">ESC T</p></td>
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">2</p></td>
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">'\x1B\x54'</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1B 54</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"><p class="p">33</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">设置|解除顺时针90°旋转</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">ESC V</p></td>
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">2</p></td>
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">'\x1B\x56'</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1B 56</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"><p class="p">34</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">页模式下设置打印区域</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">ESC W</p></td>
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">2</p></td>
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">'\x1B\x57'</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1B 57</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"><p class="p">35</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">设置相对打印位置</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">ESC \</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">nL nH</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">4</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">0&lt;=nL&lt;=255,0&lt;=nH&lt;=255</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">'\x1B\x5C'</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1B 5C</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"><p class="p">36</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">选择对齐方式</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">ESC a</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">n</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">3</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">0&lt;=n&lt;=2,48&lt;=n&lt;=50</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">'\x1B\x61'</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1B 61</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"><p class="p">37</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">选择打印纸传感器以输出“缺纸”信号</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">ESC c 3</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">n</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">4</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">0&lt;=n&lt;=255</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">'\x1B\x63\x33'</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1B 63 33</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"><p class="p">38</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">选择打印纸传感器以停止打印</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">ESC c 4</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">n</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">4</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">0&lt;=n&lt;=255</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">'\x1B\x63\x34'</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1B 63 34</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"><p class="p">39</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">激活|禁止面板按键</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">ESC c 5</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">n</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">4</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">0&lt;=n&lt;=255</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">'\x1B\x63\x35'</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1B 63 35</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"><p class="p">40</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">打印并进纸n行</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">ESC d</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">n</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">3</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">0&lt;=n&lt;=255</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">'\x1B\x64'</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1B 64</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"><p class="p">41</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">全切</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">ESC i</p></td>
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">2</p></td>
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">'\x1B\x69'</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1B 69</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"><p class="p">42</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">产生指定脉冲</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">ESC p</p></td>
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">2</p></td>
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">'\x1B\x70'</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1B 70</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"><p class="p">43</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">选择字符代码表</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">ESC t</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">n</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">3</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">0&lt;=n&lt;=5,16&lt;=n&lt;=19,n
+= 255</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">'\x1B\x74'</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1B 74</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"><p class="p">44</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">向主机传送周边设备状态</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">ESC u</p></td>
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">2</p></td>
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">'\x1B\x75'</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1B 75</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"><p class="p">45</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">向主机传送打印纸传感器状态</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">ESC v</p></td>
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">2</p></td>
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">'\x1B\x76'</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1B 76&nbsp;</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"><p class="p">46</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">设置|解除颠倒打印模式</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">ESC í</p></td>
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">2</p></td>
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">'\x1B\x7B'</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1B 7B&nbsp;</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"><p class="p">47</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">选择字体</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">Fs G</p></td>
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">2</p></td>
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">'\x1C\x47'</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1C 47</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"><p class="p">48</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">下载一个BMP文件</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">Fs B</p></td>
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">2</p></td>
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">'\x1C\x42'</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1C 42</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"><p class="p">49</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">打印二维码</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">Fs k</p></td>
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">2</p></td>
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">'\x1C\x6B'</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1C 6B</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"><p class="p">50</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">二维码XY规格</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">Fs H</p></td>
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">2</p></td>
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">'\x1C\x48'</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1C 48</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"><p class="p">51</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">强制进纸</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">Fs A</p></td>
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">2</p></td>
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">'\x1C\x41'</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1C 41</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"><p class="p">52</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">强制退纸</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">Fs R</p></td>
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">2</p></td>
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">'\x1C\x52'</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1C 52</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"><p class="p">53</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">定义PDF417的方向</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">Fs C</p></td>
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">2</p></td>
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">'\x1C\x43'</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1C 43</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"><p class="p">54</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">定义PDF417的ECC级别</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">Fs D</p></td>
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">2</p></td>
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">'\x1C\x44'</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1C 44</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"><p class="p">55</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">页模式构建下的垂直与水平栏数</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">Fs E</p></td>
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">2</p></td>
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">'\x1C\x45'</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1C 45</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"><p class="p">56</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">设置汉字字符打印模式组合</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">FS !</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">n</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">3</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">0&lt;=n&lt;=&lt;=255</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">'\x1C\x21'</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1C 21</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"><p class="p">57</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">设定汉字模式</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">FS &amp;</p></td>
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">2</p></td>
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">'\x1C\x26'</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1C 26</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"><p class="p">58</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">设定|解除汉字下划线</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">FS -</p></td>
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">2</p></td>
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">'\x1C\x2D'</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1C 2D</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"><p class="p">59</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">解除汉字模式</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">FS .</p></td>
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">2</p></td>
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">'\x1C\x2E'</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1C 2E</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"><p class="p">60</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">定义用户自定义中文字符</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">FS 2</p></td>
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">2</p></td>
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">'\x1C\x32'</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1C 32</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"><p class="p">61</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">选择汉字字符编码系统</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">FS C</p></td>
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">2</p></td>
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">'\x1C\x43'</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1C 43</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"><p class="p">62</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">设置全角汉字字间距</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">FS S</p></td>
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">2</p></td>
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">'\x1C\x53'</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1C 53</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"><p class="p">63</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">设定|解除四倍角中文打印</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">FS W</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">n</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">3</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">0&lt;=n&lt;=255</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">'\x1C\x57'</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1C 57</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"><p class="p">64</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">将标记打印纸进纸到打印起始位置</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">GS FF</p></td>
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">2</p></td>
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">'\x1D\x0C'</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1D 0C&nbsp;</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"><p class="p">65</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">打印NV位图</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">FS p</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">n m</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">4</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1&lt;=n&lt;=255,0&lt;=m&lt;=3
+,48&lt;=m&lt;=51</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">'\x1C\x70'</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1C 70</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"><p class="p">66</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">定义NV位图</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">FS q</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">n [xL xH
+yL yH d1...dk]1...[xL xH yL yH d1...dk]n</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">255</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1&lt;=n&lt;=255,0&lt;=xL&lt;=255,0&lt;=xH&lt;=3
+(当 1&lt;=(xL&lt;=xH&lt;=256)&lt;=10230&lt;=yL&lt;=255,0&lt;=yH&lt;=1
+(当 1&lt;=(yL&lt;=yH&lt;=256)&lt;=2880&lt;=d&lt;=255k = (xL&lt;=xH&lt;=256)&lt;=(yL&lt;=yH&lt;=256)&lt;=8总计定义的数据区
+= 192K 字节</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">'\x1C\x71'</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1C 71</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"><p class="p">67</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">执行测试打印</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">GS ( A</p></td>
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">3</p></td>
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">'\x1D\x28\x41'</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1D 28 41</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"><p class="p">68</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">NV存储用户编辑</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">GS ( C</p></td>
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">3</p></td>
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">'\x1D\x28\x43'</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1D 28 43&nbsp;</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"><p class="p">69</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">用户设置命令</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">GS ( E</p></td>
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">3</p></td>
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">'\x1D\x28\x45'</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1D 28 45</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"><p class="p">70</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">设置调整值</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">GS ( F</p></td>
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">3</p></td>
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">'\x1D\x28\x46'</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1D 28 46&nbsp;</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"><p class="p">71</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">请求传送响应</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">GS ( H</p></td>
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">3</p></td>
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">'\x1D\x28\x48'</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1D 28 48</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"><p class="p">72</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">选择打印控制模式</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">GS ( K</p></td>
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">3</p></td>
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">'\x1D\x28\x4B'</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1D 28 4B</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"><p class="p">73</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">自定义打印机控制值</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">GS ( M</p></td>
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">3</p></td>
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">'\x1D\x28\x4D'</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1D 28 4D</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"><p class="p">74</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">设置并打印符号</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">GS ( k</p></td>
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">3</p></td>
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">'\x1D\x28\x6B'</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1D 28 6B</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"><p class="p">75</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">设定字符大小</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">GS !</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">n</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">3</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">0&lt;=n&lt;=255(1&lt;=垂直倍数&lt;=8,1&lt;=水平倍数&lt;=8)</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">'\x1D\x21'</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1D 21</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"><p class="p">76</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">页模式下设置绝对垂直打印位置</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">GS $</p></td>
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">2</p></td>
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">'\x1D\x24'</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1D 24</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"><p class="p">77</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">页模式下设置相对垂直打印位置</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">GS \</p></td>
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">2</p></td>
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">'\x1D\x5C'</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1D 5C</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"><p class="p">78</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">定义下传位图</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">GS *</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">x y d1..d(
+x y 8 )</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">255</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1&lt;=x&lt;=2551&lt;=y&lt;=48
+(x&lt;=y&lt;=1536)0&lt;=d&lt;=255</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">'\x1D\x2A'</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1D 2A</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"><p class="p">79</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">运行宏</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">GS ^</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">r t m</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">5</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">0&lt;=r&lt;=255,0&lt;=t&lt;=255m&lt;=0,1</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">'\x1D\x2A'</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1D 2A</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"><p class="p">80</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">打印下传位图</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">GS /</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">m</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">3</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">0&lt;=m&lt;=3,48&lt;=m&lt;=51</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">'\x1D\x2F'</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1D 2F</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"><p class="p">81</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">开始|结束宏定义</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">GS :</p></td>
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">2</p></td>
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">'\x1D\x3A'</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1D 3A&nbsp;</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"><p class="p">82</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">设定|解除反白打印模式</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">GS B</p></td>
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">2</p></td>
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">'\x1D\x42'</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1D 42</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"><p class="p">83</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">设定计数值打印模式</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">GS C 0</p></td>
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">3</p></td>
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">'\x1D\x43\x00'</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1D 43 00</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"><p class="p">84</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">选择计数模式(A)</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">GS C 1</p></td>
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">3</p></td>
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">'\x1D\x43\x01'</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1D 43 01</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"><p class="p">85</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">设置计数值</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">GS C 2</p></td>
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">3</p></td>
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">'\x1D\x43\x02'</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1D 43 02</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"><p class="p">86</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">选择计数模式(B)</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">GS C ;</p></td>
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">3</p></td>
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">'\x1D\x43\x3B'</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1D 43 3B</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"><p class="p">87</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">选择打印头控制模式</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">GS E</p></td>
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">2</p></td>
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">'\x1D\x45'</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1D 45</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"><p class="p">88</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">选择HRI字符的打印位置</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">GS H</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">n</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">3</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">0&lt;=n&lt;=3,48&lt;=n&lt;=51</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">'\x1D\x48'</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1D 48</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"><p class="p">89</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">传送打印机ID</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">GS I</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">n</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">3</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1&lt;=n&lt;=3,49&lt;=n&lt;=51</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">'\x1D\x49'</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1D 49</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"><p class="p">90</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">设定左侧空白量</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">GS L</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">nL nH</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">4</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">0&lt;=nL&lt;=255,0&lt;=nH&lt;=255</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">'\x1D\x4C'</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1D 4C</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"><p class="p">91</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">设置垂直和水平运动单位</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">GS P</p></td>
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">2</p></td>
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">'\x1D\x50'</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1D 50</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"><p class="p">92</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">设置打印位置为打印行起点</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">GS T</p></td>
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">2</p></td>
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">'\x1D\x54'</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1D 54</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"><p class="p">93</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">选择裁纸模式并半切割裁纸</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">GS V</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">m (n)</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">4</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">① m = 1,49②
+m = 66,0&lt;=n&lt;=255</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">'\x1D\x56'</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1D 56</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"><p class="p">94</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">设置打印区域宽度</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">GS W</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">nL nH</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">4</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">0&lt;=nL&lt;=255,0&lt;=nH&lt;=255</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">'\x1D\x57'</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1D 57</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"><p class="p">95</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">允许|禁止自动状态回复(ASB)</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">GS a</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">n</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">3</p></td>
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">'\x1D\x61'</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1D 61</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"><p class="p">96</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">设置|解除平滑模式</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">GS b</p></td>
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">2</p></td>
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">'\x1D\x62'</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1D 62&nbsp;</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"><p class="p">97</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">打印计数值</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">GS c</p></td>
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">2</p></td>
+<td class="entry" rowspan="1" colspan="1"></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">\x1D\x63'</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1D 63</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"><p class="p">98</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">选择HRI字符字型</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">GS f</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">n</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">3</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">n&lt;=&lt;=1,48,49</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">'\x1D\x66'</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1D 66&nbsp;</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"><p class="p">99</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">设置条形码高度</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">GS h</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">n</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">3</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1&lt;=n&lt;=255</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">'\x1D\x68'</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1D 68</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"><p class="p">100</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">打印条形码</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">GS k</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">k m d1 .
+dk NUL ②GS k m n d1 . dn</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">255</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">① 0&lt;=m&lt;=6
+(k 和d 取决于使用的条形码系统)② 65&lt;=m&lt;=73 (n 和 d 取决于使用的条形码系统)</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">'\x1D\x6B'</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1D 6B</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"><p class="p">101</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">传送状态</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">GS r</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">n</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">3</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">n = 1,49</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">'\x1D\x72'</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1D 72</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"><p class="p">102</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">打印光栅位图</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">GS v 0</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">m xL xH
+yL yH d1 ... Dk</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">255</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">0&lt;=m&lt;=3,48&lt;=m&lt;=510&lt;=xL&lt;=255,0&lt;=xH&lt;=255
+在此 1&lt;=(xL + xH&lt;=256)&lt;=1280&lt;=yL&lt;=255,0&lt;=yH&lt;=8
+在此 1&lt;=(yL + yH&lt;=256)&lt;=40950&lt;=d ?255k = (xL + xH&lt;=256)&lt;=(yL
++ yH&lt;=256) (k&lt;=0)</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">'\x1D\x76\x00'</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1D 76 00</p></td>
+</tr>
+<tr class="row">
+<td class="entry" rowspan="1" colspan="1"><p class="p">103</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">设置条形码宽度</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">GS w</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">n</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">3</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">2&lt;=n&lt;=6</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">'\x1D\x77'</p></td>
+<td class="entry" rowspan="1" colspan="1"><p class="p">1D 77</p></td>
+</tr>
+</tbody></table></div></section>
+<section class="section"><h2 class="title sectiontitle">XLS版本《ESC/POS指令整理表》</h2><p class="p"><a class="xref" href="../../codes/2019-08/ESCPOS%E5%91%BD%E4%BB%A4%E6%95%B4%E7%90%86.xls">XLS版本《ESC/POS指令整理表》</a></p></section>
+<section class="section"></section>
+<section class="section"></section>
+<section class="section"></section>
+<section class="section"><h2 class="title sectiontitle">参见</h2><ol class="ol">
+<li class="li"><p class="p"><a class="xref" href="https://blog.csdn.net/qq_28912317/article/details/73341629" target="_blank" rel="external noopener">ESC/POS协议打印机工具类(java) - 红颜笑- CSDN博客</a></p></li>
+<li class="li"><p class="p"><a class="xref" href="https://blog.csdn.net/kenneth95/article/details/54341887" target="_blank" rel="external noopener">ESC/POS 工具类- kenneth95的博客- CSDN博客</a></p></li>
+<li class="li"><p class="p"><a class="xref" href="https://blog.csdn.net/winxsm/article/details/72423422" target="_blank" rel="external noopener">EPSON/POS指令集封装- 正文- CSDN博客</a></p></li>
+<li class="li"><p class="p"><a class="xref" href="https://github.com/hasyimibhar" target="_blank" rel="external noopener">hasyimibhar</a>/<a class="xref" href="https://github.com/hasyimibhar/escpos-printer" target="_blank" rel="external noopener"><strong class="ph b">escpos-printer</strong>:C library for operating thermal printers by
+sending ESC/POS commands</a></p></li>
+<li class="li"><p class="p"><a class="xref" href="https://github.com/joshuajnoble" target="_blank" rel="external noopener">joshuajnoble</a>/<a class="xref" href="https://github.com/joshuajnoble/ESC-POS-header" target="_blank" rel="external noopener"><strong class="ph b">ESC-POS-header:</strong>:headers for ESC/POS in C++</a></p></li>
+<li class="li"><p class="p"><a class="xref" href="https://stackoverflow.com/questions/21349599/how-to-use-esc-pos-command-with-c" target="_blank" rel="external noopener">How to use esc/pos command with c#?</a></p></li>
+<li class="li"><p class="p"><a class="xref" href="https://stackoverflow.com/questions/7039673/read-epson-printer-status-using-c-and-esc-p" target="_blank" rel="external noopener">Read Epson Printer Status using C++ and ESC/P</a></p></li>
+<li class="li"><a class="xref" href="https://download.epson-europe.com/pub/download/182/epson18162eu.zip" target="_blank" rel="external noopener">epson18162eu.zip</a>:FTP上指令版本兼容性参考资料</li>
+<li class="li"><a class="xref" href="https://epson.com.cn/store/pdf/200871124725.pdf" target="_blank" rel="external noopener">TECHNICAL WORKSHOP VII ESC/POS - 爱普生</a></li>
+<li class="li"><p class="p"><a class="xref" href="https://patents.google.com/patent/CN107423004A/zh" target="_blank" rel="external noopener">CN107423004A - Pos终端打印票据的方法及pos终端-</a></p></li>
+<li class="li"><p class="p"><a class="xref" href="https://blog.csdn.net/weixin_34081595/article/details/90915087" target="_blank" rel="external noopener">EscPos 小票打印机模板设计</a></p>:Java实现网络小票打印机自定义无驱打印 <a class="xref" href="https://github.com/SubLuLu/thermal_printer" target="_blank" rel="external noopener">thermal_printer</a></li>
+<li class="li"><p class="p"><a class="xref" href="https://blog.csdn.net/jhting/article/details/53940725" target="_blank" rel="external noopener">HTML定义ESCPOS热敏打打印模板,打印小票</a></p></li>
+</ol></section>
+</div>
+<nav role="navigation" class="related-links"><ul class="ullinks"><li class="link ulchildlink"><strong><a href="%E6%9F%A5%E9%98%85ESCPOS%E6%8C%87%E4%BB%A4%E9%9B%86%E8%BF%9B%E8%A1%8C%E5%BC%80%E5%8F%91.html">查阅ESC/POS指令集进行开发</a></strong><br></li></ul><div class="familylinks"><div class="parentlink"><strong>父主题：</strong> <a class="link" href="%E6%89%93%E5%8D%B0%E6%9C%BA%E7%BC%96%E7%A8%8B.html">打印机编程</a></div></div></nav></article></main></body></html>

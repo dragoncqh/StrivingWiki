@@ -1,0 +1,232 @@
+<!DOCTYPE html
+  SYSTEM "about:legacy-compat">
+<html lang="zh-cn"><head><meta charset="UTF-8"><meta name="copyright" content="(C) 版权 2024"><meta name="generator" content="DITA-OT"><meta name="description" content=""><title>驱动过滤型串口监控开发</title><link rel="stylesheet" type="text/css" href="../../commonltr.css">
+<link rel="stylesheet" type="text/css" href="../../common-extended.css"></head><body id="驱动过滤型串口监控开发-C11F601B"><main role="main"><article role="article" aria-labelledby="ariaid-title1">
+<h1 class="title topictitle1" id="ariaid-title1">驱动过滤型串口监控开发</h1>
+
+
+<div class="body conbody"><p class="shortdesc"></p>
+<section class="section"><h2 class="title sectiontitle">概要</h2><p class="p">串行端口监视器的基本思想是：创建系统驱动程序，然后向其添加过滤器驱动程序功能。</p></section>
+<section class="section"><h2 class="title sectiontitle">拦截I/O调用</h2><p class="p">NT设备驱动<strong class="ph b">serial.sys</strong>处理COM端口通信。它在初始化时枚举所有可用的COM端口然后一一创建对应设备对象。这些设备对象都在NT
+Object Manager命名空间的子树<strong class="ph b">\Device</strong>下创建.命名格式为<strong class="ph b">Serialx(x为1, 2, 3等)</strong>。为方便用户态程序访问COM端口，<strong class="ph b">serial.sys</strong>也在子树<strong class="ph b">\??</strong>下创建符号链接名，命名格式如：<strong class="ph b">COM1</strong>,&nbsp;<strong class="ph b">COM2</strong>等。驱动不允许多个用户态程序同时打开一个端口。</p><div class="p">有两种办法可以监听串口数据。<ol class="ol">
+<li class="li"><p class="p">API钩子：封装自定义的<strong class="ph b">CreateFile()</strong>,&nbsp;<strong class="ph b">WriteFile()</strong>,&nbsp;<strong class="ph b">SetCommState()</strong>等接口的DLL，设法让程序调用你封装的程序。为实现DLL注入程序的地址空间（参见Jeffrey
+Richter的<em class="ph i">Advanced Windows</em>），可以修改程序的外部链接表，执行你的封装DLL中去。封装DLL的接口在完成监控需求之后，仍然会访问原装版的接口。这种方法在WIN98或NT上都可运行，只能运行于用户态程序中，不需要管理员权限。但它比较难以实现。</p></li>
+<li class="li"><p class="p">过滤型驱动：附加该驱动到串口设备上，转发所有原串口需求，并拦截传送给监控程序。这种方法比较容易实现，因为使用的是MSDN文档中的方法，也比较有趣。</p></li>
+</ol></div></section>
+<section class="section"><h2 class="title sectiontitle">驱动源码分析</h2><ol class="ol">
+<li class="li"><p class="p">驱动的初始化与分发处理代码在<strong class="ph b">sermon.h</strong>和<strong class="ph b">sermon.cpp</strong>文件中。</p></li>
+<li class="li"><p class="p">驱动的内存管理和双向链接列表代码在<strong class="ph b">drvclass.h</strong>和<strong class="ph b">drvclass.cpp</strong>文件中。</p></li>
+<li class="li"><p class="p">驱动的设备驱动的主要实现类代码在<strong class="ph b">devext.h</strong>和<strong class="ph b">devext.cpp</strong>文件中。</p></li>
+<li class="li"><p class="p">驱动的版本信息在<strong class="ph b">sermon.rc</strong>文件中。</p></li>
+<li class="li"><p class="p">驱动的驱动与用户态程序(通过条件编译区分)的通用结构体定义在<strong class="ph b">sermonex.h</strong>文件中。</p></li>
+</ol></section>
+<section class="section"><h2 class="title sectiontitle">初始化</h2><p class="p">驱动的初始化是由<strong class="ph b">sermon.cpp</strong>中的<strong class="ph b">DriverEntry()</strong>接口完成的。<strong class="ph b">CreateDevices()</strong>首先创建名为<strong class="ph b">\Device\SerMon</strong>的自定义设备对象，和名为<strong class="ph b">\??\SerMon</strong>的符号链接名。符号链接名用于用户态程序访问设备对象。如果出现异常，<strong class="ph b">DriverEntry()</strong>返回一个非<strong class="ph b">STATUS_SUCCESS</strong>的异常信息给I/O管理器。只要<strong class="ph b">DriverEntry()</strong>一创建主设备对象，它就会填入到I/O管理器的<strong class="ph b">DRIVER_OBJECT</strong>结构体中的主要接口句柄数组。过滤驱动需要处理各种本来会直接发给串口设备驱动的请求。</p><p class="p">驱动实现两类设备，一种过滤请求并转发给串口设备驱动，一种提供相应接口，服务于用户态程序。所以可使用C++的继承关系来捕捉两种设备实现之间的共同信息。<strong class="ph b">devext.h</strong>和<strong class="ph b">devext.cpp</strong>定义了一个父类<strong class="ph b">CDevice</strong>和两个派生类<strong class="ph b">CAttachedDevice</strong>和<strong class="ph b">CSERMONDevice</strong>，这样就可以有机会实现IRP处理宏接口。</p><p class="p"><strong class="ph b">sermon.h</strong>包含了两个由<strong class="ph b">DriverEntry()</strong>存储在驱动对象主接口列表中的，声明与定义IRP接口的宏。</p><div class="p"><pre class="pre codeblock"><code>#define DECLARE_FUNCTION(x) extern "C" NTSTATUS \
+SERMON##x (IN PDEVICE_OBJECT DeviceObject, IN PIRP Irp);
+#define IMPLEMENT_FUNCTION(x) NTSTATUS \
+SERMON##x (IN PDEVICE_OBJECT DeviceObject, IN PIRP Irp) \
+    { \
+    return ((CDevice *) (DeviceObject-&gt;DeviceExtension))-&gt;x(Irp); \
+    }</code></pre></div><p class="p">宏所生成的接口要求设备对象的<strong class="ph b">DeviceExtension</strong>域包含一个指向<strong class="ph b">CDevice</strong>派生对象的指针，以使用这个指针去调用相应的虚拟接口。这和把window信息映射到C++类的虚拟接口的技术很相似。对于每个请求类型，<strong class="ph b">CDevice</strong>提供一个默认的简单完成请求并返回一个无错误状态码<strong class="ph b">STATUS_SUCCESS</strong>的实现。</p><p class="p">最后，<strong class="ph b">DriverEntry()</strong>组成一个空白的链接列表，用于包含一些指向已创建或已附加的设备的指针。</p></section>
+<section class="section"><h2 class="title sectiontitle">与驱动通信</h2><p class="p"><strong class="ph b">SerMon</strong>设备对象创建成功后，就可供用户态程序与过滤驱动进行通信。它实现了4种特殊的I/O控制请求，而用户态程序可以通过WIN32的<strong class="ph b">DeviceIoControl()</strong>接口去访问。用户态程序可以通过调用<strong class="ph b">CreateFile()</strong>来打开<strong class="ph b">SerMon</strong>设备。</p><div class="p"><pre class="pre codeblock"><code>hDevice=CreateFile(_T("\\\\.\\SerMon"),
+    GENERIC_READ | GENERIC_WRITE | GENERIC_EXECUTE,
+    FILE_SHARE_WRITE | FILE_SHARE_READ,
+    NULL,
+    OPEN_EXISTING,
+    FILE_ATTRIBUTE_NORMAL | FILE_FLAG_OVERLAPPED,
+    NULL);</code></pre></div><p class="p">CreateFile()返回一个句柄，可供用户态程序传递进<strong class="ph b">DeviceIoControl()</strong>指令，然后就可传入传出数据缓冲等。</p><div class="p"><pre class="pre codeblock"><code>BOOL res=DeviceIoControl(hDevice,
+    IOCTL_SERMON_STARTMONITOR,
+    (PVOID) (LPCTSTR) s,
+    (s.GetLength()+1)*sizeof(WCHAR),
+    &amp;handle;,sizeof(MHANDLE),
+    &amp;dw;,
+    NULL);</code></pre></div><p class="p">当用户态程序调用<strong class="ph b">DeviceIoControl()</strong>, 控制<strong class="ph b">devext.cpp</strong>中的<strong class="ph b">CSERMONDevice::IoControl()</strong>的传输事件。这个接口可以接受传入指令并进行检查以决定如何处理请求。<strong class="ph b">sermonex.h</strong>中定义了4种指令。如下：</p><p class="p"><strong class="ph b">IOCTL_SERMON_STARTMONITOR</strong>. 把本指令传入<strong class="ph b">DeviceIoControl()</strong>接口，就可以开始监听一个设备，入参是一个过滤驱动所附加到的设备的Unicode字符名。名称格式为<strong class="ph b">\Device\Serialx</strong>或<strong class="ph b">\??\COMx</strong>, 其中表示串口编号。在执行本附加指令时，设备必须处于尚未打开状态，否则会返回一个<strong class="ph b">STATUS_ACCESS_VIOLATION</strong>的异常状态码.</p><p class="p">本指令返回一个指向新创建的C++<strong class="ph b">CAttachedDevice</strong>类型对象的指针<strong class="ph b">MHANDLE</strong>。用户态程序在之后调用<strong class="ph b">DeviceIoControl()</strong>指定监控对话时，必须把该指针句柄传入。</p><p class="p"><strong class="ph b">IOCTL_SERMON_STOPMONITOR</strong>. 把本指令传入<strong class="ph b">DeviceIoControl()</strong>接口，就可以停止监听会话。必须要把上一个<strong class="ph b">IOCTL_SERMON_STARTMONITOR</strong>指令所返回的指针句柄<strong class="ph b">MHANDLE</strong>传入。&nbsp;</p><p class="p"><strong class="ph b">IOCTL_SERMON_GETINFOSIZE</strong>.&nbsp;<strong class="ph b">SerMon</strong>会产生指定长度的数据流供用户态程序解析与显示。传入本指令和会话指针句柄<strong class="ph b">MHANDLE</strong>，可以获得下一个传输队列的数据长度。返回一个<strong class="ph b">DWORD</strong>类型的缓冲数据字节长度。</p><p class="p"><strong class="ph b">IOCTL_SERMON_GETINFO</strong>. 只要你获得了传输队列中的下一个事件的数据流长度，你就可以使用本指令来复制数据到用户态程序的缓存中。入参包括会话指针句柄<strong class="ph b">MHANDLE</strong>&nbsp;和一个容量不小于上述缓冲数据长度的缓存区.</p></section>
+<section class="section"><h2 class="title sectiontitle">附加到串口设备</h2><p class="p">当用户态程序传入<strong class="ph b">IOCTL_SERMON_STARTMONITOR</strong>以调用<strong class="ph b">DeviceIoControl()</strong>时，该事件会执行一个对<strong class="ph b">devext.cpp</strong>中的<strong class="ph b">CSERMONDevice::IoControl()</strong>的调用。后者接口会传入目标设备名称参数到<strong class="ph b">CSERMONDevice::TryConnectToSerialDevice()</strong>，后者合伙调用全局的<strong class="ph b">Attach()</strong>接口</p><p class="p"><strong class="ph b">Attach()</strong>首先调用<strong class="ph b">IoGetDeviceObjectPointer()</strong>尝试寻找并打开目标设备，后者会返回一个指向设备对象及其对应文件对象的指针。此处不需要文件对象，所以可以在接口末尾调用<strong class="ph b">ObDereferenceObject()</strong>来释放它。然后，<strong class="ph b">Attach()</strong>会创建一个未命名的设备对象，并把一个指向新创建的<strong class="ph b">CAttachedDevice</strong>对象的指针存储在它的device extension扩展设备域中。之后由于该对象未准备好接收驱动请求，<strong class="ph b">Attach()</strong>会锁定该<strong class="ph b">CAttachedDevice</strong>对象。</p><p class="p">接下来，<strong class="ph b">Attach()</strong>调用<strong class="ph b">IoAttachDeviceByPointer()</strong>把新创建的设备附加到目标设备中去。I/O管理器会在该设备的<strong class="ph b">DEVICE_OBJECT</strong>结构中填入所有必填信息，使之能够处理与转发其他设备的请求。简单地说，该设备对象就被标记为可处理可缓存的I/O类型。幸运的是，串口设备驱动本身和大多其它类似驱动都可使用这种类型的I/O。</p><p class="p">上述操作成功后。<strong class="ph b">Attach()</strong>解锁<strong class="ph b">CAttachedDevice</strong>对象，以使其可以接收请求并返回给用户态程序一个<strong class="ph b">MHANDLE</strong>(<strong class="ph b">typedef</strong>中定义是<strong class="ph b">DWORD</strong>)的指针，其指向其已创建的<strong class="ph b">CAttachedDevice</strong>对象的指针。为了尽量区分真实句柄和假货，驱动会在指定内存地址读取数据并验证其数据签名。</p></section>
+<section class="section"><h2 class="title sectiontitle">CAttachedDevice</h2><p class="p"><strong class="ph b">CAttachedDevice</strong>类在<strong class="ph b">devext.h</strong>中声明。每个<strong class="ph b">CAttachedDevice</strong>对象包含两个列表。一个事件列表和一个请求列表。这些列表是FIFO的双向链接列表，通过<strong class="ph b">CAttachedDevice</strong>中的<strong class="ph b">CDBLinkedList</strong>辅助模板类来实现。</p><p class="p">在<strong class="ph b">CAttachedDevice</strong>中, <strong class="ph b">Signature</strong>域用来二次检查用户态程序是否传入了一个有效的<strong class="ph b">MHANDLE</strong>指针(指向<strong class="ph b">CAttachedDevice</strong>).<strong class="ph b">eres</strong>域是一个<strong class="ph b">ERESOURCE</strong>变量，用于锁定和解锁整个<strong class="ph b">CAttachedDevice</strong>设备。这个类还包含了一个<strong class="ph b">KEVENT</strong>类型的动态事件，并在其构造器中调用<strong class="ph b">KeInitializeEvent()</strong>对其初始化。这个事件很重要。当开发驱动时，当串口被某些应用占用打开时，如果从串口设备分离并卸载过滤驱动，下一个请求就会引发NT产生一个BS0D(Blue
+Screen Of Death)蓝屏。所以必须在分离与卸载过滤驱动之前，保证所有的用户态甚至内核态程序都释放对该串口的占用。这就是使用<strong class="ph b">Num</strong>和<strong class="ph b">bFirstTime</strong>域的目的了。</p><p class="p"><strong class="ph b">CAttachedDevice::Num</strong>域包含设备被打开的次数，串口只能被打开一次(其他可监听的设备可能可以被多次打开如USB口)。因为代码会忽略初始打开的IRP，所以<strong class="ph b">CAttachedDevice::bFirstTime</strong>在构造器阻止关闭句柄(<strong class="ph b">devext.cpp</strong>中的<strong class="ph b">CloseCompletion()</strong>)对<strong class="ph b">Num</strong>减值时，，被设置为<strong class="ph b">TRUE</strong>。当<strong class="ph b">Num</strong>为0或大于0时，<strong class="ph b">CloseCompletion()</strong>会相应分别设置该事件为signaled或non-signaled状态。这就使得在销构器中对<strong class="ph b">KeWaitForSingleObject()</strong>的调用会等待串口被关闭。</p><p class="p"><strong class="ph b">CAttachedDevice</strong>初始化所有这些域，并把自身插入到内部驱动的指向<strong class="ph b">CAttachedDevice</strong>对象(<strong class="ph b">DriverEntry()</strong>中创建)的指针链接列表中去，这样可以保证驱动的卸载干净。</p><p class="p">附加操作之后，驱动立即准备就绪开始监听。每个原发往串口设备的请求会被被I/O管理器转发往已附加的过滤驱动，该请求会被分发往对应的<strong class="ph b">CAttachedDevice</strong>中的虚拟接口。</p><p class="p">驱动监控程序只有打开、关闭、写入，读取和I/O这几种控制请求。此外，它会忽略那些串口设备返回不成功状态信息的请求。收到IRP请求后会调用<strong class="ph b">CAttachedDevice::Standard()</strong>，并且传入一个指向完成请求执行的对应程序的当前I/O栈位置的指针。<strong class="ph b">CAttached::Standard()</strong>复制当前栈位置到下一步，并使用<strong class="ph b">IoSetCompletionRoutine()</strong>宏设置IRP的完成执行程序。在位元复制之后，下一个栈位置将会在其<strong class="ph b">CompletionRoutine</strong>域包含和当前栈同样的信息。如果目标驱动之上有多个驱动层，它就会引发对同个接口的多次调用，结果无法预料。由此安全的做法就是总是只指定一个完成执行的程序。如果是一些驱动不需要指定完成指定程序的(如清缓存和清理请求)，它会注册<strong class="ph b">DefaultCompletion()</strong>为完成执行的默认程序。<strong class="ph b">DefaultCompletion()</strong>不执行任何操作，仅返回<strong class="ph b">STATUS_SUCCESS</strong>成功状态给I/O管理器。</p><p class="p">主要的处理动作代码在<strong class="ph b">ReadCompletion()</strong>,&nbsp;<strong class="ph b">WriteCompletion()</strong>,&nbsp;<strong class="ph b">OpenCompletion()</strong>,&nbsp;<strong class="ph b">CloseCompletion()</strong>和<strong class="ph b">IOCompletion()</strong>接口内。如果请求成功了，它们会构建一个新的<strong class="ph b">IOReq</strong>类型对象，填满必填的信息，然后调用<strong class="ph b">CAttachedDevice::New()</strong>。<strong class="ph b">CAttachedDevice::New()</strong>会先锁定<strong class="ph b">CAttachedDevice</strong>对象，以防止内部事件列表不一致，然后把最新创建的<strong class="ph b">IOReq</strong>对象添加到当前事件列表的末尾。</p><p class="p">事件列表存储了串口请求的信息，供调用程序提取使用。但是，来自调用程序的<strong class="ph b">IOCTL_SERMON_GETINFOSIZE</strong>和<strong class="ph b">IOCTL_SERMON_GETINFO</strong>也可能被存储在一个链接列表即请求列表中。当调用程序发送<strong class="ph b">IOCTL_SERMON_GETINFOSIZE</strong>或<strong class="ph b">IOCTL_SERMON_GETINFO</strong>请求时，如果事件列表是空的，请求会被标记为pending等待审核状态并存入请求列表的末尾。当<strong class="ph b">CAttachedDevice::New()</strong>在列表末尾添加了一个新的<strong class="ph b">IOReq</strong>对象之后，它同时会检查请求列表。如果已存在pending等待审核的请求，那么<strong class="ph b">CAttachedDevice::New()</strong>继续调用<strong class="ph b">ProcessSize()</strong>或<strong class="ph b">ProcessNext()</strong>执行请求。这些函数提取解析事件列表最顶部的请求并完成执行，再从请求列表中删除。(<strong class="ph b">ProcessNext()</strong>也会删除事件列表最顶部的事件)</p></section>
+<section class="section"><h2 class="title sectiontitle">停止监听</h2><p class="p">当程序发送一个<strong class="ph b">IOCTL_SERMON_STOPMONITOR</strong>请求之后，驱动简单地删除<strong class="ph b">CAttachedDevice</strong>对象。所有操作在该对象的销构器中完成。<strong class="ph b">CAttachedDevice::~CAttachedDevice()</strong>先先改变signature签名域，这样如果又有对原句柄的调用发生，就会返回一个无效指针信息。然后引发前述等待事件，直到端口关闭。然后从设备中分离并删除过滤驱动。然后，所有搁置的IRP都被执行完成，返回以<strong class="ph b">STATUS_CANCELLED</strong>。最后，返回结果给用户态程序。</p></section>
+<section class="section"><h2 class="title sectiontitle">控制程序</h2><p class="p">控制程序通过<strong class="ph b">SerMon</strong>驱动来监听串口。它采用MFC的MDI界面，允许用户同时监听多个串口。程序启动时，会先通过传入参数<strong class="ph b">\\.\SerMon</strong>来调用<strong class="ph b">CreateFile()</strong>打开<strong class="ph b">SerMon</strong>设备驱动，如果驱动不能成功打开(可能是因为驱动尚未安装)，程序会先尝试使用便捷的SCCM(service
+control manager)来安装驱动。</p><p class="p">当你选择<span class="ph uicontrol">开始监听</span>的菜单项后，程序会弹出小窗询问你选择哪个端口，选择之后，程序会创建一个新的文档/视图窗体，窗体包括上下两个读入字节和写入字节的监听文本框。打开，关闭和I/O控制请求都在两个文本框中显示。</p><p class="p"></p><p class="p">程序向驱动发送<strong class="ph b">IOCTL_SERMON_STARTMONITOR</strong>请求，然后获得监听会话的句柄。然后它创建一个并行线程，循环处理<strong class="ph b">IOCTL_SERMON_GETINFOSIZE</strong>和<strong class="ph b">IOCTL_SERMON_GETINFO</strong>两种请求，使用<strong class="ph b">OVERLAPPED</strong>结构体来调用<strong class="ph b">DeviceIoControl()</strong>引发处理异步I/O。当线程接收到数据时，它会发送一个信息给视图窗体，窗体会显示该数据供用户监控。</p><p class="p">当你选择<span class="ph uicontrol">停止监听</span>菜单项时，或直接关闭视图，程序先向用户弹出一个“请先关闭所有占用串口的程序”的警告提示信息后，就向驱动发送一个<strong class="ph b">IOCTL_SERMON_STOPMONITOR</strong>请求。</p></section>
+<section class="section"><h2 class="title sectiontitle">结论</h2><p class="p">创建一个过滤驱动是监听NT串口的优雅解决方案，它还可以扩展到监听几乎所有内核模式的设备驱动。例如监听你调试中的一个驱动的IRP流。串口监听程序只是NT的可扩展设备驱动框架的应用之一。</p></section>
+<section class="section"></section>
+<section class="section"><p class="p">这是一个精简系统驱动程序，没有真正的硬件，实现了系统驱动程序的最简化的调度处理功能(完整系统驱动程序的要求请查看MSDN)。程序使用WDK建议的“标准PnP和电源分派处理(standard
+PnP and Power dispatch handling)”，作为默认处理程序,将发送到此驱动程序的IRP转发给较低级别​​的驱动程序。负责处理打开Open，清理Clean
+up，关闭Close，读取Read和控制Control请求，并处理另外一些请求，如在WDK（Window Driver Kits）中串行端口驱动程序IRP处理程序的请求。</p></section>
+<section class="section"><h2 class="title sectiontitle">加入Attach和分离Detach目标设备</h2><p class="p">客户端发出附加到目标设备的请求(IOCTL_DKPORTMON_ATTACH_DEVICE
++ 串口名称字符串参数)时，驱动开始执行如下步骤：</p><ol class="ol">
+<li class="li"><p class="p"><strong class="ph b">sermon.h</strong>&nbsp;(<a class="xref" href="http://www.drdobbs.com/showArticle.jhtml?documentID=wdj9910a&amp;pgno=10" target="_blank" rel="external noopener">Listing 1</a>) contains two macros used to declare
+and define IRP functions that&nbsp;<strong class="ph b">DriverEntry()</strong>&nbsp;stores
+in the driver object’s major function table:</p><p class="p">#define DECLARE_FUNCTION(x)
+extern "C" NTSTATUS \ SERMON##x (IN PDEVICE_OBJECT DeviceObject, IN
+PIRP Irp); #define IMPLEMENT_FUNCTION(x) NTSTATUS \ SERMON##x (IN
+PDEVICE_OBJECT DeviceObject, IN PIRP Irp) \     { \     return ((CDevice
+*) (DeviceObject-&gt;DeviceExtension))-&gt;x(Irp); \     }</p><p class="p">The functions
+that these macros generate expect that the&nbsp;<strong class="ph b">DeviceExtension</strong>&nbsp;field of the device object contains a pointer to a&nbsp;<strong class="ph b">CDevice</strong>-derived object, and they use that pointer to invoke the
+appropriate virtual function. This is similar to techniques for mapping
+window messages onto C++ class virtual functions. For each request
+type,&nbsp;<strong class="ph b">CDevice</strong>&nbsp;supplies a default implementation that
+simply completes the request and returns a non-error status code,&nbsp;<strong class="ph b">STATUS_SUCCESS</strong>.</p><p class="p">Finally,&nbsp;<strong class="ph b">DriverEntry()</strong>&nbsp;constructs
+an empty linked list that will eventually contain pointers to created
+attached devices.&nbsp;<strong class="ph b">DriverEntry()</strong>&nbsp;then returns&nbsp;<strong class="ph b">STATUS_SUCCESS</strong>.</p><p class="p">驱动通过设备名入参去获取原顶层设备对象，即执行IoGetDeviceObjectPointer()获得目标设备指针。</p></li>
+<li class="li"><p class="p">驱动创建一个新的设备对象，扩展大小为0。</p></li>
+<li class="li"><p class="p">驱动复制原顶层设备对象的所有标志Flags,还可以加入自定义的标志。</p></li>
+<li class="li"><p class="p">执行IoAttachDeviceToDeviceStack()，附加到新的设备对象中，并设置初始化标志。</p></li>
+</ol><p class="p">附加到设备的源码如下(完整版见DkIoExt.c中的DkCreateAndAttachDevice()函数)：</p><pre class="pre codeblock"><code>...
+RtlInitUnicodeString(&amp;usTgtDevName, 
+                         (PCWSTR) pIrp-&gt;AssociatedIrp.SystemBuffer);
+
+ntStat = IoGetDeviceObjectPointer(&amp;usTgtDevName, 
+                                      GENERIC_ALL, 
+                                      &amp;pFlObj, 
+                                      &amp;pTgtDevObj);
+if (!NT_SUCCESS(ntStat)){
+    DkDbgVal("Error get device object pointer!", ntStat);
+    return ntStat;
+}
+
+ObDereferenceObject(pFlObj);
+
+ntStat = IoCreateDevice(pDevEx-&gt;pDrvObj, 
+                            0, 
+                            NULL, 
+                    pTgtDevObj-&gt;Characteristics, 
+                            FILE_DEVICE_SECURE_OPEN, 
+                            FALSE, 
+                            &amp;pDevEx-&gt;pTgtDevObj);
+if (!NT_SUCCESS(ntStat)){
+    DkDbgVal("Error create target device object!", ntStat);
+    goto EndFunc;
+}
+
+pDevEx-&gt;pTgtDevObj-&gt;Flags |= (pTgtDevObj-&gt;Flags &amp; 
+              (DO_BUFFERED_IO | DO_POWER_PAGABLE | DO_DIRECT_IO));
+
+pDevEx-&gt;pTgtNextDevObj = NULL;
+pDevEx-&gt;pTgtNextDevObj = IoAttachDeviceToDeviceStack(pDevEx-&gt;pTgtDevObj, 
+                                                         pTgtDevObj);
+if (pDevEx-&gt;pTgtNextDevObj == NULL){
+    DkDbgVal("Error attach device to device stack!", ntStat);
+    ntStat = STATUS_UNSUCCESSFUL;
+    goto EndFunc;
+}
+
+pDevEx-&gt;pTgtDevObj-&gt;Flags &amp;= ~DO_DEVICE_INITIALIZING;
+...</code></pre><p class="p">当客户端程序发送一个从目标设备分离的请求(IOCTL_DKPORTMON_DETACH_DEVICE)时，驱动从目标设备分离并删除其创建的设备对象。代码如下：</p><pre class="pre codeblock"><code>...
+if (pDevEx-&gt;pTgtNextDevObj){
+    IoDetachDevice(pDevEx-&gt;pTgtNextDevObj);
+    pDevEx-&gt;pTgtNextDevObj = NULL;
+}
+if (pDevEx-&gt;pTgtDevObj){
+    IoDeleteDevice(pDevEx-&gt;pTgtDevObj);
+    pDevEx-&gt;pTgtDevObj = NULL;
+}
+...</code></pre></section>
+<section class="section"><h2 class="title sectiontitle">处理IO请求</h2><p class="p">附加到目标设备后，驱动除了自身收到的IO请求之外，还要处理目标设备收到的IO请求。因为驱动位于目标设备的堆栈Stack的顶层，所以发往该设备的请求会先发往我们的驱动。如果判断IO请求的真实地址呢？最简单的办法是使用目标设备对象的全局变量，在DkAddDevice()中创建该对象，那么在收到IO请求时就能使用如下一个if做个简单的判断：</p><pre class="pre codeblock"><code>...
+extern PDEVICE_OBJECT        g_pThisDevObj;
+...
+NTSTATUS DkCreateClose(PDEVICE_OBJECT pDevObj, PIRP pIrp)
+{
+...
+    if (pDevObj != g_pThisDevObj)
+        return DkTgtCreateClose(pDevExt, pIrp);
+...</code></pre></section>
+<section class="section"><h2 class="title sectiontitle">处理对新驱动设备对象的IO请求</h2><p class="p">驱动使用两种队列，一个是处理IRP(Cancel-Safe
+queue as WDK suggested)的队列，一个是收集数据的FIFO先入先出队列(simple First In First
+Out data queue / FIFO data queue)。</p><p class="p">驱动负责处理打开Open(IRP_MJ_CREATE)，清理Clean
+up(IRP_MJ_CLEANUP)，关闭Close(IRP_MJ_CLOSE)，读取Read(IRP_MJ_READ)和控制Control(IOCTL_DKPORTMON_ATTACH_DEVICE和IOCTL_DKPORTMON_DEATCH_DEVICE)请求，打开、关闭和清理请求在同一个dispatch分离过程DkCreateClose()中处理。对打开请求，驱动初始化FIFO数据队列，成功完成后返回一个STATUS_SUCCESS；对于清理请求，驱动从目标设备(前提是该设备存在)分离，清除数据队列和
+Cancel-Safe撤销安全对列，成功完成请求后返回一个STATUS_SUCCESS。</p><p class="p">对于读取请求，驱动先从FIFO先入先出队列读取数据，如果数据存在，就复制数据到系统中的用户缓存中去，然后移除/摧毁/删除/释放数据，成功完成后返回一个STATUS_SUCCESS和从FIFO队列中获得数据的长度。如果数据不存在，就把IRP暂存到Cancel-Safe队列，返回一个Pending等待处理状态，这表示该IRP已暂存进队列，稍后将由驱动的另外一个函数DkTgtCompletePendedIrp()来完成请求。文件DkIoReq.c中函数DkReadWrite()代码如下：</p><pre class="pre codeblock"><code>...
+pQueDat = DkQueGet();
+if(pQueDat == NULL){
+
+    IoCsqInsertIrp(&amp;pDevExt-&gt;ioCsq, pIrp, NULL);
+    IoReleaseRemoveLock(&amp;pDevExt-&gt;ioRemLock, (PVOID) pIrp);return STATUS_PENDING;
+
+} else {
+    pDat = (PDKPORT_DAT) pIrp-&gt;AssociatedIrp.SystemBuffer;            
+    RtlCopyMemory(pDat, &amp;pQueDat-&gt;Dat, sizeof(DKPORT_DAT));        
+            
+    DkQueDel(pQueDat);
+
+    IoReleaseRemoveLock(&amp;pDevExt-&gt;ioRemLock, (PVOID) pIrp);
+                
+    DkCompleteRequest(pIrp, ntStat, (ULONG_PTR) sizeof(DKPORT_DAT));return ntStat;
+}
+...</code></pre><p class="p">对于控制请求，参见前述“加入Attach和分离Detach目标设备”章节内容。</p></section>
+<section class="section"><h2 class="title sectiontitle">处理针对目标设备的IO请求</h2><p class="p">对于发往目标设备的IO请求，过滤型驱动一般会转发往更底层的目标设备对象。驱动监控功能还需要对往来数据进行收集。问题在于数据采集的时间点是在转发前还是转发后？首先要确定数据的传送方向，就是IO请求是GET请求(for
+example,&nbsp;IRP_MJ_READ,&nbsp;IOCTL_SERIAL_GET_BAUD_RATE, and so
+on)还是PUT请求，GET请求的数据是目标设备发出，这时驱动就要在目标设备完成请求之后采集数据，即在GET请求上设置一个completon完成后动作，该动作在底层目标设备驱动完成请求后执行。如下，文件DkIoReq.c中，当驱动收到一个发往目标设备的IRP_MJ_READ请求时，DkTgtReadWrite()执行该请求，该函数设置了一个完成后动作，然后转发IO请求到底层目标设备去。</p><pre class="pre codeblock"><code>...
+IoCopyCurrentIrpStackLocationToNext(pIrp);
+IoSetCompletionRoutine(pIrp, 
+              (PIO_COMPLETION_ROUTINE) DkTgtReadCompletion, 
+                           NULL, 
+                           TRUE, 
+                           TRUE, 
+                           TRUE);
+
+return IoCallDriver(pDevExt-&gt;pTgtNextDevObj, pIrp);
+...</code></pre><p class="p">在完成阶段，可以通过DkTgtCompletePendedIrp()函数收集数据，如下：</p><pre class="pre codeblock"><code>...
+pDevExt = (PDEVICE_EXTENSION) g_pThisDevObj-&gt;DeviceExtension;
+
+pIrp = IoCsqRemoveNextIrp(&amp;pDevExt-&gt;ioCsq, NULL);
+if (pIrp == NULL){
+
+    DkQueAdd(szFuncName, ulFuncNameByteLen, pDat, ulDatByteLen);
+
+} else {
+
+    pNewDat = (PDKPORT_DAT) pIrp-&gt;AssociatedIrp.SystemBuffer;
+    RtlFillMemory(pNewDat, sizeof(DKPORT_DAT), '\0');
+    pNewDat-&gt;FuncNameLen = ulFuncNameByteLen;
+    pNewDat-&gt;DataLen = ulDatByteLen;if(szFuncName != NULL){
+        RtlCopyMemory(pNewDat-&gt;StrFuncName, szFuncName, ulFuncNameByteLen);
+    }if (pDat != NULL){
+        RtlCopyMemory(pNewDat-&gt;Data, pDat, ulDatByteLen);
+    }
+
+    pIrp-&gt;IoStatus.Status = STATUS_SUCCESS;
+    pIrp-&gt;IoStatus.Information = sizeof(DKPORT_DAT);
+    IoCompleteRequest(pIrp, IO_NO_INCREMENT);
+}
+...</code></pre><p class="p">对于发往目标设备的控制型IO请求，处理方法同上，关键也是要注意数据的方向。</p>.</section>
+<section class="section"><h2 class="title sectiontitle">客户端程序</h2><p class="p">客户端程序打开设备驱动并开始监控。在新的循环线程中采集数据。新数据到达时会触发事件，执行绑定的程序。参见文件DkPortClient.h和DkPortClient.cpp中的CDkPortClient类。启动监控时，客户端程序发送IOCTL_DKPORTMON_ATTACH_DEVICE指令到驱动中；停止监控时，发送IOCTL_DKPORTMON_DETACH_DEVICE</p></section>
+<section class="section"><h2 class="title sectiontitle">缺点</h2><ol class="ol">
+<li class="li"><p class="p">必须要先启动监控，再打开串口，因为每个物理串口只能打开一次。</p></li>
+<li class="li"><p class="p">无法保证IO请求的时序。</p><p class="p">如一些应用程序使用overlapped重叠标志来打开端口，然后异步读取端口，然后写入端口，再等待来自先前读取请求的传入数据，在监控端收到的数据次序可能如下：</p><pre class="pre">...
+IRP_MJ_CREATE
+...
+IRP_MJ_WRITE
+...
+IRP_MJ_READ
+...</pre><p class="p">IRP_MJ_WRITE数据直接在IRP_MJ_CREATE之后就到达了，因为驱动忽略了IRP state，只是纯粹的数据转发。</p></li>
+<li class="li"><p class="p">驱动对发往目标设备的IO请求的成功/失败状态不做判断</p></li>
+</ol></section>
+<section class="section"><h2 class="title sectiontitle">&nbsp;安装</h2><p class="p">此驱动程序仅支持Windows XP x86。&nbsp;如果在除Windows
+XP之外的其他平台上使用此功能，则需要在所需目标下重新编译它。&nbsp;因此，下面的此过程仅适用于Windows XP。</p><p class="p">逐步安装驱动程序：</p><p class="p">&nbsp;</p><p class="p">在“控制面板”中，双击“添加硬件”，然后单击“下一步”，这将显示“搜索硬件”对话框。</p><p class="p">“搜索硬件”对话框完成后，单击单选按钮“是，我已连接硬件”，然后单击“下一步”。</p><p class="p">在“已安装的硬件”列表框中，向下滚动并选择/单击“添加新硬件设备”，然后单击“下一步”。</p><p class="p">选择/单击“安装我从列表中手动选择的硬件（高级）”单选按钮，然后单击“下一步”。</p><p class="p">在“通用硬件类型”列表框中，选择/单击“系统设备”，然后单击“下一步”。</p><p class="p">单击“从磁盘安装”按钮，然后找到文件DkPortMon2.inf ，然后单击“下一步”。</p><p class="p">再次单击Next以完成驱动程序安装。</p><p class="p">如果驱动程序已成功安装，则设备管理器应如下所示：</p><p class="p"><img class="image" src="../../images/2018-08/PortMon1.jpg"></p></section>
+<section class="section"><h2 class="title sectiontitle">&nbsp;使用</h2><p class="p">只需在Bin目录中运行名为“&nbsp;DkPortMonGui.exe&nbsp;”的程序即可&nbsp;。&nbsp;首先，您需要选择要监控的端口，方法是单击工具
+- 选择端口&nbsp;，选择它，然后单击工具 - 开始开始监控端口。&nbsp;如果要查看来自驱动程序的一些调试消息，请使用SysInternals中的DbgView。</p><p class="p"><img class="image" src="../../images/2018-08/PortMon2.jpg"></p></section>
+<section class="section"><h2 class="title sectiontitle">源代码编译和链接源</h2><p class="p">源码由两部分组成，驱动源本身和客户端程序。&nbsp;安装WDK，然后单击开始
+-&gt; WDK xxx-xxxxxx-x -&gt; Build Environment -&gt; Windows XP -&gt; x86 Checked
+Build Environment&nbsp;。&nbsp;这将为您提供命令行提示环境（checked build environment
+/ debug build for x86 machine）以编译源码。Enter each directory and then
+type&nbsp;build -cegZ&nbsp;to compile and link the source. This method
+is valid for Windows XP with "Debug build" environment.&nbsp;&nbsp;</p></section>
+<section class="section"><h2 class="title sectiontitle">注意</h2><p class="p">PS:一个问题</p><p class="p">ObDereferenceObject(KS_FileObj);</p><p class="p">万一这时候，串口正好被拔下来了，然后你def一下，就爆炸了。</p><p class="p">PS2:</p><p class="p">另一个问题是兼容性</p><p class="p">https://msdn.microsoft.com/zh-tw/library/windows/hardware/ff548236</p><p class="p">中说了IoAttachDeviceToDeviceStackSafe 的支持是这样子的</p><p class="p">This routine
+is available on Update Rollup for Windows 2000 Service Pack 4 (SP4)
+and on Windows XP and later.</p></section>
+<section class="section"><h2 class="title sectiontitle">参见</h2><ol class="ol">
+<li class="li"><p class="p">《Windows内核安全与驱动开发》</p>读书笔记：<a class="xref" href="https://bbs.pediy.com/thread-212699.htm" target="_blank" rel="external noopener">[原创]windows内核编程之[串口过滤]-『编程技术』-看雪安全论坛</a></li>
+<li class="li"><p class="p"><a class="xref" href="https://blog.csdn.net/sxslyy/article/details/5192247" target="_blank" rel="external noopener">(原创)串口监视过滤驱动程序开发详解(1) - CSDN博客</a></p></li>
+<li class="li"><p class="p"><a class="xref" href="https://blog.csdn.net/u010988850/article/details/41278951" target="_blank" rel="external noopener">MFC串口调试助手线程监听事件小解- CSDN博客</a>,貌似API HOOK监听</p></li>
+<li class="li"><p class="p"><a class="xref" href="http://www.drdobbs.com/a-serial-port-spy-for-nt/184416559" target="_blank" rel="external noopener"><strong class="ph b">A Serial Port Spy for NT | Dr Dobb's</strong></a>：sermon.sys开发讲解</p></li>
+<li class="li"><p class="p"><a class="xref" href="https://www.codeproject.com/Articles/311159/SIMPLE-SERIAL-PORT-MONITOR" target="_blank" rel="external noopener">Simple Serial Port Monitor - CodeProject</a></p>驱动式监听，<a class="xref" href="https://github.com/BradenCalderMurphy" target="_blank" rel="external noopener">BradenCalderMurphy</a>/<a class="xref" href="https://github.com/BradenCalderMurphy/DkPortMon" target="_blank" rel="external noopener"><strong class="ph b">DkPortMon</strong></a>-64位vs2015版</li>
+<li class="li"><p class="p">Here is a tried and tested way of signing the .sys and .cat
+files on a 64bit Windows Vista or higher system: <a class="xref" href="http://www.rage3d.com/board/showthread.php?t=33920573" target="_blank" rel="external noopener">http://www.rage3d.com/board/showthread.php?t=33920573</a></p></li>
+<li class="li"><p class="p"><a class="xref" href="https://www.codeproject.com/Articles/13340/Serial-driver-for-Pocket-PC" target="_blank" rel="external noopener">Serial driver for Pocket PC - CodeProject</a>，是用EVC开发的，用于wince下的串口驱动源码</p></li>
+<li class="li"><p class="p"><a class="xref" href="https://blog.csdn.net/tr0j4n/article/details/4628364" target="_blank" rel="external noopener">揭示Win32 API拦截细节</a><a class="xref" href="https://www.codeproject.com/Articles/2082/API-hooking-revealed" target="_blank" rel="external noopener">API hooking revealed - CodeProject</a></p></li>
+<li class="li"><p class="p"><a class="xref" href="https://stackoverflow.com/questions/733014/win32-commport-sniffing" target="_blank" rel="external noopener">Win32 Commport Sniffing</a>This is how my program
+that can control the values returned by&nbsp;GetTickCount()&nbsp;in
+another program works (see here&nbsp;<a class="xref" href="http://www.lenholgate.com/blog/2006/04/tickshifter-v02.html" target="_blank" rel="external noopener">http://www.lenholgate.com/blog/2006/04/tickshifter-v02.html</a>)</p></li>
+<li class="li"><p class="p">HookComm 和 Portmon 的源码.两个都是通过Hook监视串口通讯的程序， HookComm在编程沙龙(http://member.netease.com/~inetsoft/index.htm)上有，可我不是会员下不到。
+Portmon是&nbsp;www.sysinternals.com&nbsp;的开放程序，可是这个站关闭了。</p></li>
+</ol></section>
+</div>
+<nav role="navigation" class="related-links"><div class="familylinks"><div class="parentlink"><strong>父主题：</strong> <a class="link" href="%E4%B8%B2%E5%8F%A3%E7%BC%96%E7%A8%8B.html">串口编程</a></div></div></nav></article></main></body></html>

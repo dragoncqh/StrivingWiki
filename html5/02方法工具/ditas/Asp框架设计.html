@@ -1,0 +1,137 @@
+<!DOCTYPE html
+  SYSTEM "about:legacy-compat">
+<html lang="zh-cn"><head><meta charset="UTF-8"><meta name="copyright" content="(C) 版权 2024"><meta name="generator" content="DITA-OT"><meta name="description" content=""><title>asp框架设计</title><link rel="stylesheet" type="text/css" href="../../commonltr.css">
+<link rel="stylesheet" type="text/css" href="../../common-extended.css"></head><body id="Asp框架设计-350BBA5D"><main role="main"><article role="article" aria-labelledby="ariaid-title1">
+<h1 class="title topictitle1" id="ariaid-title1">asp框架设计</h1>
+
+
+<div class="body conbody"><p class="shortdesc"></p>
+<p class="p">一，概述</p>
+<p class="p">ASP源代码的容易获得(如果用DLL封装则又不利于虚拟主机部署)使得ASP源码在国内流行到泛滥，程序员倾向于快速编程和快速忘记，可读性和维护性都为人诟病。其实，ASP代码也可以支持”不彻底”的面向对象编程和模块化，籍此创建的ASP框架可以最大限度地封装操作，优化代码，利于维护和阅读及向ASP.NET整合或迁移。</p>
+<p class="p">asp和vb是自由的,而.net划了一个圈套,怎么利用.net的先进理念和asp的自由,是ASP的残存价值.</p>
+<p class="p">JScript的面向对象编程:<a class="xref" href="http://dev.csdn.net/develop/article/19/19401.shtm" target="_blank" rel="external noopener"><strong class="ph b">面向对象的JavaScript编程</strong></a>&nbsp;<a class="xref" href="http://dev.csdn.net/develop/article/19/19485.shtm" target="_blank" rel="external noopener"><strong class="ph b">评“面向对象的JavaScript编程”一文</strong></a>&nbsp;<a class="xref" href="http://blog.csdn.net/liuruhong/archive/2003/08/01/1928.aspx" target="_blank" rel="external noopener"><strong class="ph b">再论面向对象的Javascript编程</strong></a></p>
+<p class="p"><a class="xref" href="http://www.bc-cn.net/Article/web/asp/jszl/200506/678.html" target="_blank" rel="external noopener">ASP面向对象编程探讨及比较</a></p>
+<p class="p">二，设计模式</p>
+<p class="p">因为ASP只是支持不彻底的面向对象思想，所以很多设计模式是不能真正实现的，只能以设计模式思想作指导，以VBScript为实现(可结合COM组件技术)来编写ASP框架Framework。</p>
+<p class="p">1, DNA架构：ASP框架是典型的微软的DNA架构，包括数据层（data），业务层（business），表示层（presentation）的三层体系结构,业务层是整个应用的心脏(核心)部分。</p>
+<p class="p">DNA(Windows Distributed Internet Applications Architecture分布式互连网应用结构)架构:</p>
+<p class="p">(1)，数据存储层（data）: 数据服务层为应用提供数据来源。我们可以根据需要选择MicrosoftSQLServer?、Oracle或任何与OLEDB或ODBC兼容的数据源。</p>
+<p class="p">使用中等规模以上的关系数据库，采用存储过程、触发器。确定数据库结构主要方法是：客户需求能否满足－－进行数据库范式化－－性能是否受影响－－进行数据库非范式化。数据库设计必须遵循一致的规范,设计好就马上编写相应的存储过程、触发器，</p>
+<p class="p">(2)，业务层（business）:事务逻辑层负责处理表示层的应用请求，完成商务逻辑的计算任务，并将处理结果返回给用户。事务逻辑处理层是将原先置于C/S客户端的事务逻辑分离出来，集中置于服务器部分，为所有用户共享。</p>
+<p class="p">A，数据访问层DAL(Data Access Layer): 负责访问和控制所有数据库，为了便于改动可以暂时写成一个VBS CLASS进行封装，在后台开发完毕后再封装成COM+组件。所有用户提交的数据全都交给DAL处理，比如FORM数据或者是URL参数，后台逻辑层的其它相关处理都必须从DAL获取返回值，这里应该进行的操作一般有：获取Request数据－－进行安全处理－－检查用户数据是否规范－－输出返回值。</p>
+<p class="p">B，业务逻辑层(Business Logic Layer)：建议把相关性的业务活动封装成一个个的VBS　CLASS。比如要求制作一个内部的调货平台，那么就必然有入库、出库、分仓库存、汇总等操作，那么把这些跟仓库相关的操作都整理成一个CLASS，再从CLASS内部去调用上面提到的数据库处理层那些去协同处理仓库相关的操作。尤其要考虑权限控制层：要支持用户分组和二层用户角色(类似于Windows的二层用户角色)，甚至大型项目的N级可继承的用户角色。</p>
+<p class="p">(3)，表示层（presentation）: 是以Java Script(浏览器的支持较友好)+XML为主的可加上HTM,DHTML,Scripting,JavaApplet?,Active
+X等组成的用户界面层和数据传递层，Internet环境中常为瘦型客户机,以实现用户与应用逻辑处理结果的通信。一般后台管理的用户界面层风格比较固定，可以使用封装好的统一的各种表格、表单、统计报表等风格。而用于前台的用户界面风格比较多变，就可采用UI框架进行开发，对于大型项目，应采用轻量级框架，JSVM是一个不错的选择。数据传递层(网页表单)负责预处理用户提交的所有数据，也负责接收后台输出的轻量级数据，可采用JSAX技术获取局部资料等</p>
+<p class="p">2，COM组件技术：COM(组件对象模型)则相当于业务层这个心脏可选用的加速器。</p>
+<p class="p">业务层通过COM组件进行事务处理，可以使用VB(VC和C++等)来创建用户组件，可以将同一业务逻辑下的页面和逻辑封装到一个类里，用不同的方法来实现。这样就能充分利用廉价的内存来存储逻辑上独立的一个复杂对象，从而减少昂贵资源（例如数据库链接）的使用。为了代码和数据库安全，也为了开发公司的安全，对于核心业务层，一般都要求编译成DLL组件。而且业务层COM组件的开发和测试工作，和根据商务逻辑的需要以精练的ASP脚本语言来选择和使用COM组件的工作就实现了分工。这对组件的标准化和复用效率是有利的。</p>
+<p class="p">IIS(Internet Information Server)负责业务层Web页面的管理，MTS(Microsoft Transaction
+Server)负责统一管理业务层COM组件。MTS在多线程支持下实现对COM组件的分布式连接管理、线程池自动管理及高性能事务处理的监视。这样数据库不再和(C/S两层体系结构中)每个活动客户保持一个连接，而是若干个客户通过应用逻辑组件共享数据库的连接，从而减少了连接次数;而且MTS的安全管理机制可以按权限将特定组件授给不同的用户组，提高了数据服务器的性能和安全性。</p>
+<p class="p">可以使用XML的提供应用程序的简单配置，在ASP页面与组件之间建立一种松散联系。有了这种联系，应用程序就可以以一种非常随意而轻松的方式进行分工、拆卸和组装。这种思想也可以借鉴MVC
+Struts中的struts-config.xml和ASP.NET中的web.config。</p>
+<p class="p">3, ACCESS的类似SQL存储过程封装:ACCESS2000在AC库中提供了传递参数的查询，所以可以使用类似于SQL存储过程的方式来封装ASP中的SQL语句到查询中，直接用ADODB.COMMAND对象来调用返回值。虽然目前该方法执行效率不高，但可以将对数据库的操作从程序中剥离了开来。实现了：显示层、逻辑层、数据库操作层的彻底分离。</p>
+<p class="p">举例说明：</p>
+<p class="p">USER表：U_Id,U_Name,U_Key</p>
+<p class="p">Login查询：SELECT User.U_Id FROM User WHERE User.U_Name=[@UserName?]
+AND User.U_Key=[@UserKey?];</p>
+<p class="p">建立Login类：</p>
+<p class="p">主要代码如下：</p>
+<p class="p">Public Function getUID(UserName,UserKey)</p>
+<p class="p">Dim CMD,Rs</p>
+<p class="p">Set CMD=Server.CreateObject(“ADODB.COMMAND”)</p>
+<p class="p">CMD.ActiveConnection = Conn</p>
+<p class="p">CMD.CommandType = 4</p>
+<p class="p">CMD.CommandText = “Login”</p>
+<p class="p">Set Rs = CMD.Execute ( ,Array(UserName,UserKey))</p>
+<p class="p">Set CMD = Nothing</p>
+<p class="p">If Rs.EOF&nbsp;And Rs.BOF Then</p>
+<p class="p">getUID = ””</p>
+<p class="p">Else</p>
+<p class="p">getUID = Rs(“U_Id”)</p>
+<p class="p">End If</p>
+<p class="p">Set Rs = Nothing</p>
+<p class="p">End Function</p>
+<p class="p">逻辑层调用代码：</p>
+<p class="p">Dim theUID</p>
+<p class="p">Dim Login</p>
+<p class="p">If UserName &lt;&gt; ”” Or UserKey &lt;&gt; ”” Then</p>
+<p class="p">'clsLogin类就是前面建立的Login类</p>
+<p class="p">Set Login = New clsLogin</p>
+<p class="p">Login.Connection = Conn</p>
+<p class="p">theUID = Login.getUID(UserName,UserKey)</p>
+<p class="p">Set Login = Nothing</p>
+<p class="p">If theUID &lt;&gt; ”” Then</p>
+<p class="p">Response.Write “登陆成功!”</p>
+<p class="p">Else</p>
+<p class="p">Response.Write “登陆失败!”</p>
+<p class="p">End If</p>
+<p class="p">Response.End</p>
+<p class="p">End If</p>
+<p class="p">三，开源项目</p>
+<p class="p">推荐使用EasyIDE framework 。</p>
+<p class="p">1.01-ZONE&nbsp;ASP&nbsp;framework 大小：53.8 KB 网站：<a class="xref" href="http://www.01-zone.com/asp-framework/" target="_blank" rel="external noopener"><strong class="ph b">http://www.01-zone.com/asp-framework/</strong></a>&nbsp;协议：GNU通用公共授权第三版(GPL3)</p>
+<p class="p">简要说明：</p>
+<p class="p">01-ZONE&nbsp;ASP&nbsp;framework 是一个开源的&nbsp;ASP&nbsp;Web 开发框架，基于
+T-MVC 模式设计，可以简化ASP程序的开发过程，有利于网页设计人员和程序设计人员的分工，提高程序代码的可维护性及可重用性。任何组织或个人可依据自由软件基金会所发布的GNU通用公共授权(GPL)第三版或以后版本条款，对本框架进行修改、再发布。</p>
+<p class="p">2.EasyASP 大小：16.6 KB 网站：<a class="xref" href="http://code.google.com/p/easyasp/" target="_blank" rel="external noopener"><strong class="ph b">http://code.google.com/p/easyasp/</strong></a>&nbsp;简要说明：</p>
+<p class="p">能方便的实现一个或多个数据库的增、删、改等控制操作。对数据库字段进行操作时可以不用考虑字段值数据类型的差别(如文本字段不用加单引号)。自带记录集分页和调用存储过程分页功能，拥有功能丰富的可完全自定义配置及调用。能方便的执行带各种参数的MSSQL存储过程并返回多个值或多个记录集。完善的数据库操作容错功能，能即时输出出错SQL语句方便调试。在使用已经存在的数据库连接对象时能自动判定数据库类型。专为Ajax设计的数据获取方式及输出Json格式数据。能有效防止SQL注入。自带数据类型验证及服务器端表单验证功能。能轻松实现页面地址获取并对URL参数进行过滤以及替换。具有专为EasyASP开发的适用于Dreamweaver
+CS3 和 CS4 的代码高亮及代码提示扩展插件。具有完善的帮助手册及大量应用实例。</p>
+<p class="p">3.EasyIDE framework</p>
+<p class="p">大小：47.373KB</p>
+<p class="p">网站：<a class="xref" href="http://freecontex.com/" target="_blank" rel="external noopener"><strong class="ph b">http://freecontex.com/</strong></a></p>
+<p class="p">简要说明：</p>
+<p class="p">EasyIDE framework就一次发布了包括字符串操作、文件操作、数组操作、翻页操作、base64加密/解密操作、XML文件解析操作、EasyIDE
+framework基础函数库七大类操作函数，可以满意绝大部分开发要求。</p>
+<p class="p">4.领星ASP开发平台(ACP框架)</p>
+<p class="p">大小：有完整版本和精简版本，33KB-592KB</p>
+<p class="p">网站：<a class="xref" href="http://www.lxasp.com/" target="_blank" rel="external noopener"><strong class="ph b">http://www.lxasp.com/</strong></a></p>
+<p class="p">简要说明：</p>
+<p class="p">高效：每个模块均经过多次性能测试和优化 安全：防止Cookie欺骗和SQL注入 易用：接口和结构简明清楚</p>
+<p class="p">“强调简朴直接·反对过分灵活” ——开发宗旨</p>
+<p class="p">5.ASPHAND（mvc模式）</p>
+<p class="p">大小:17KB</p>
+<p class="p">网站：<a class="xref" href="http://www.kidhand.cn/" target="_blank" rel="external noopener"><strong class="ph b">http://www.kidhand.cn/</strong></a>(已无法访问)</p>
+<p class="p"><a class="xref" href="http://code.google.com/p/kidhand/" target="_blank" rel="external noopener">http://code.google.com/p/kidhand/</a></p>
+<p class="p"><a class="xref" href="http://hi.baidu.com/kidhand/home" target="_blank" rel="external noopener">http://hi.baidu.com/kidhand/home</a></p>
+<p class="p">网站说明：</p>
+<p class="p">1、完整的MVC模式支持</p>
+<p class="p">2、支持多层权限模式</p>
+<p class="p">3、多层级缓存</p>
+<p class="p">4、视图路径与根路径自动统一</p>
+<p class="p">5、灵活的模板语法处理</p>
+<p class="p">6、ActiveRecord动态数据对象支持</p>
+<p class="p">7、自动的权限创建</p>
+<p class="p"><a class="xref" href="http://code.google.com/p/asasp/" target="_blank" rel="external noopener">ASASP</a></p>
+<p class="p"><a class="xref" href="https://sites.google.com/a/deepcast.net/vb-vb-net-/Home/ASP/CLASP" target="_blank" rel="external noopener">CLASP</a>:比较成熟的ASP框架</p>
+<p class="p"><a class="xref" href="http://thoth.robrohan.com/client/index.cfm/2006/9/19/Simple-MVC-ASP-Framework" target="_blank" rel="external noopener">Simple MVC ASP Framework</a>简单的MVC ASP框架</p>
+<p class="p"><a class="xref" href="https://sites.google.com/a/deepcast.net/vb-vb-net-/Home/ASP/ow.asp?JSVM" target="_blank" rel="external noopener">JSVM</a>:由万春华最早在51jsDotCom上提出的关于表示层的<a class="xref" href="https://sites.google.com/a/deepcast.net/vb-vb-net-/Home/ASP/ow.asp?JavaScript" target="_blank" rel="external noopener">Java Script</a>虚拟机的ASP框架&nbsp;<a class="xref" href="http://sourceforge.net/projects/jsvm2" target="_blank" rel="external noopener">JSVM框架项目</a></p>
+<p class="p">JSVM (Java Script Virtual Machine 的缩写) 是一个面向 Java Script 开发领域的基础框架。该软件是自由软件，2003年底由万常华(wch3116)发起,
+目前是2.0版,采用的是 BSD License 授权协议。</p>
+<p class="p"><a class="xref" href="http://www17.brinkster.com/zseryzsery/" target="_blank" rel="external noopener">Zsery ASPFramwork</a>:捷克人Zsery写的ASP框架</p>
+<p class="p"><a class="xref" href="http://bitdb.com/" target="_blank" rel="external noopener">bit
+DB</a>:数据库框架</p>
+<p class="p"><a class="xref" href="http://space.flash8.net/bbs/thread-247879-1-1.html" target="_blank" rel="external noopener">ASP框架半成品</a>我佛山人的ASP框架</p>
+<p class="p"><a class="xref" href="https://sites.google.com/a/deepcast.net/vb-vb-net-/Home/ASP/ASP-2" target="_blank" rel="external noopener">ASP数据库驱动封装</a>&nbsp;Aether关于数据库驱动封装的ASP框架</p>
+<p class="p"><a class="xref" href="http://blog.csdn.net/nhconch/archive/2004/07/10/38683.aspx" target="_blank" rel="external noopener">使用模板实现ASP代码与页面分离</a>ASP仿PHPLIB模板实现代码与页面分离</p>
+<p class="p">参见</p>
+<p class="p"><a class="xref" href="http://www.jtbc.net.cn/" target="_blank" rel="external noopener">jtbc CMS PHP ASP</a>&nbsp;<a class="xref" href="http://www.08nian.cn/article.asp?id=306" target="_blank" rel="external noopener">JTBC(CMS)测试了一半暂停</a></p>
+<p class="p"><a class="xref" href="http://www.movoin.com/index.php/development" target="_blank" rel="external noopener">Moal ASP Framework v1.0</a>&nbsp;<a class="xref" href="http://code.google.com/p/movoin-asp-libs/" target="_blank" rel="external noopener">movoin-asp-libs 快速的开发ASP程序,针对企业网站的ASP框架. ASP rapid development procedures,
+corporate website ASP framework.</a></p>
+<p class="p"><a class="xref" href="http://topic.csdn.net/u/20080316/22/19723e24-ddca-47be-b6e7-472df1fd4fe5.html" target="_blank" rel="external noopener">ASP现在有人写出框架吗?</a></p>
+<p class="p"><a class="xref" href="http://www.lxasp.com/bbs/ShowPost.asp?ThreadID=62" target="_blank" rel="external noopener">领星ASP开发平台(ACP框架)精简版——ASP开发框架</a>&nbsp;<a class="xref" href="http://www.lxasp.com/bbs/ShowPost.asp?ThreadID=64" target="_blank" rel="external noopener">领星ASP开发平台(ACP框架)——ASP开发框架•入门教程第一讲</a>&nbsp;<a class="xref" href="http://www.cnitblog.com/lxasp/" target="_blank" rel="external noopener">领星动网开发代码园地blog</a></p>
+<p class="p"><a class="xref" href="http://code.google.com/p/rusher-cn/" target="_blank" rel="external noopener">rusher-cn 用于快速开发的web服务端框架及客户端jq库</a>&nbsp;<a class="xref" href="http://www.rusher.cn/blog/show.asp?id=8" target="_blank" rel="external noopener">用Ajax-MVC框架编写web应用程序</a>&nbsp;<a class="xref" href="http://www.deepcast.net/wiki/http:www.ajaxsamples.cn:show" target="_blank" rel="external noopener">Rusher - ASP服务端框架 For AJAX 简介</a></p>
+<p class="p"><a class="xref" href="http://www.5iya.com/blog/post/asp-cms.asp" target="_blank" rel="external noopener">ASP框架规划</a></p>
+<p class="p"><a class="xref" href="http://www.lkhuasoft.com/manual.asp" target="_blank" rel="external noopener">《世纪桥》管理信息系统设计平台</a></p>
+<p class="p"><a class="xref" href="http://www.soho-works.net/BLOG/315.asp" target="_blank" rel="external noopener">vb6框架设计 - asp 支持</a></p>
+<p class="p"><a class="xref" href="http://www.jonathanhodgson.co.uk/downloads.asp" target="_blank" rel="external noopener">Jonathan Hodgson的ASP学习笔记</a></p>
+<p class="p"><a class="xref" href="http://builder.com.com/5100-6387-1045644.html" target="_blank" rel="external noopener">A framework for your ASP application</a></p>
+<p class="p"><a class="xref" href="http://blog.csdn.net/oyiboy/archive/2006/02/09/595164.aspx" target="_blank" rel="external noopener">用MVC模型引导你的ASP设计思路-第二版</a></p>
+<p class="p"><a class="xref" href="http://www.21ds.net/article/94/26200" target="_blank" rel="external noopener">面向对象的asp编程之一开篇</a></p>
+<p class="p"><a class="xref" href="http://www.knowsky.com/2970.html" target="_blank" rel="external noopener">面向对象的ASP技术：思考与实践</a></p>
+<p class="p"><a class="xref" href="http://club.yesky.com/viewthread2.php?tid=2551575&amp;pid=&amp;page=" target="_blank" rel="external noopener">我眼中的ASP新框架</a></p>
+<p class="p"><a class="xref" href="http://bbs.mpig.net/showpost.php?p=287&amp;postcount=1" target="_blank" rel="external noopener">ASP数据持久层抽象POAsp</a>这是最早由jzchen.net发表的一些关于POAsp框架的构想，目前该网站已夭折。</p>
+<p class="p"><a class="xref" href="http://woooh.com/post/134.html" target="_blank" rel="external noopener">ASP分页程式之分页类封装Access/MS SQL</a></p>
+<p class="p"><a class="xref" href="http://web.tongji.edu.cn/~yangdy/ASP/DNA.htm" target="_blank" rel="external noopener">DNA, 组件对象模型与商务逻辑计算</a></p>
+<p class="p"><a class="xref" href="http://www.chinabs.net/webasp/default.asp?infoid=30" target="_blank" rel="external noopener">建立三层结构的ASP应用程序</a></p>
+<p class="p"></p>
+</div>
+<nav role="navigation" class="related-links"><div class="familylinks"><div class="parentlink"><strong>父主题：</strong> <a class="link" href="ASP.html">ASP</a></div></div></nav></article></main></body></html>
