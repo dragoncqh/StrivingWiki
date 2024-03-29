@@ -1,0 +1,199 @@
+<!DOCTYPE html PUBLIC "-//IETF//DTD HTML 2.0//EN"> <html style><!--
+ Page saved with SingleFile 
+ url: http://mark.random-article.com/musings/db-tables.html 
+ saved date: Wed Mar 27 2024 22:46:02 GMT+0800 (中国标准时间)
+--><meta charset=utf-8>
+<title> Database Table Types </title>
+<meta name=Author content="Mark Whitley">
+<meta name=Description content>
+<style>li{padding-bottom:1%}</style>
+<meta name=referrer content=no-referrer><style>.sf-hidden{display:none!important}</style><link rel=canonical href=http://mark.random-article.com/musings/db-tables.html><meta http-equiv=content-security-policy content="default-src 'none'; font-src 'self' data:; img-src 'self' data:; style-src 'unsafe-inline'; media-src 'self' data:; script-src 'unsafe-inline' data:; object-src 'self' data:; frame-src 'self' data:;"><style>img[src="data:,"],source[src="data:,"]{display:none!important}</style></head>
+<body bgcolor=white text=black>
+<h1> Database Table Types </h1>
+<p> The following is a listing of general categories of tables that you find
+in databases. Emphasis is placed on the <i>roles</i> of each table type. Note
+also that this category listing is simply my own paradigm based on my own
+experiences. Other people will surely disagree with me (but I suspect their
+disagreements would be mostly on the details). I present this info to help you
+get a grasp on database design. Problem solving is easier when you can
+<i>break down</i> the problem, and this listing is one approach to breaking
+down database tables into different types.
+<h2> Core Table </h2>
+<p> <b>Definition:</b> This is a "main" table in your database. Without these,
+there really wouldn't be any reason for the database to exist.
+<p> <b>How to Identify:</b> You can identify the Core tables because they
+contain the <i>most relationships</i> to other tables. They will frequently
+have relationships to numerous Lookup and Detail tables. They also typically
+contain more fields than any other table in the database (but not always).
+<h3> Core Table Fields </h3>
+<p> A Core table typically contains (at minimum) the following fields, using
+certain naming conventions.
+<ol>
+ <li> A <b>primary key</b> that is an AutoNumber. Using an AutoNumber
+ ensures that each record will have a unique ID. The name of this field
+ will be the same name as the table, only singular plus the suffix "ID",
+ i.e. for an "Employees" table, the primary key would be "EmployeeID".
+ <li> A <b>text field</b> containing the <i>most important information</i>
+ in the table. This field should be indexed because the table will be
+ sorted by this field (i.e. alphabetically). Additionally, this field will
+ be searched / querried on frequently. The name of this field will probably
+ be the same name as the table, only singular, i.e. if the table was named
+ "Employees", this field would be called "Employee". Note: It is not
+ unheard of for this field to be split up, i.e. in an "Employees" table,
+ you might have "FirstName", "LastName" instead of just "Employee".
+ <li> Other fields as necessary, with some conditions. (Read on.)
+</ol>
+<h2> Lookup Table </h2>
+<p> <b>Definition:</b> A Lookup table is a "reference" table that contains
+categories, types, keywords, tags, or other "classification" labels.
+Typically these categories represent some kind of finite scale. Examples
+include: priority, severity, frequency, quality, etc. 
+<p> <b>How to Identify:</b> A Lookup table typically has a single relationship
+to a Core table or Detail table and usually contains only 2 or 3 fields. Due
+to their nature, they are <i>not</i> sorted alphabetically.
+<p> <b>Warning on Naming Lookup Tables:</b> Having already described Lookup
+tables as containing types, categories, or tags, I strongly discourage you
+from using the words "class", "type", "category" or similar to name the table.
+Why, you ask? Simple answer: What does the word "type" mean? If I have two
+Lookup tables that both list "types" of a Core table record, how exactly do I
+distinguish between those two "types"? Here's a guideline to follow: if you
+are about to use the word "type" in a Lookup table name, ask yourself "What
+'type' of thing is this?" The answer to that question is the name you should
+use instead. 
+<h3> Lookup Table Fields </h3>
+<p> A Lookup table typically contains the following fields, using the same
+naming conventions as Core tables.
+<ol>
+ <li> A <b>primary key</b> that is a Long Integer (<u>not</u> an
+ AutoNumber). The talbe will be sorted by this field such that the
+ priorities / severities / frequencies all sort logically from "highest" to
+ "lowest". The name will be "Table (singular) + ID". Note: A
+ forward-thinking database designer will not number the records
+ sequentially (1,2,3,4...) but rather by 10s or 100s, so as to allow easy
+ addition of records later on.
+ <li> A <b>text field</b> containing the category name. Name is "Table
+ (singular)".
+ <li> (Optional) Another, longer <b>text field</b> (or memo field)
+ containing a description of this category.
+</ol>
+<h3> More on Adding Core Table Fields </h3>
+<p> When you add a new text field to a Core table, ask yourself: "Does this
+field represent a 'type' or 'class'?" If so, you should not add a text field,
+you should add a Lookup table instead.
+<p> In order to make your Lookup table work with your Core table, you need to
+be able to create a relationship between them. Thus, we need to add another
+field to the Core table: a <b>foriegn key</b>. This field should be a Long
+Integer to match the type of the primary key in the Lookup tables. They should
+have the same name as the primary key field name of the Lookup table.
+<p> <b>Why do we create relationships based on numbers instead of text?</b>
+Valid question. Here's why:
+<ul>
+ <li> Integers consume <i>less space</i> than text fields.
+ <li> Integers <i>sort faster</i> than text.
+ <li> It is easier to make typos with text than with integers. Such typos
+ can quickly render querries useless.
+ <li> The VB ADO controls have a very easy method for managing these kind
+ of relationships.
+</ul>
+<h2> List Table </h2>
+<p> <b>Definition:</b> This is another kind of "reference" table, similar to a
+Lookup table, but it contains a longer listing of records and new records will
+frequently be added. (Hence "List".) Examples include: Vendors, Shippers,
+Suppliers, Reasons, Purposes, Genres, etc. You could think of it as a
+"Growable Lookup" table.
+<p> <b>How to Identify:</b> A List table typically has a single relationship
+to a Core table or Detail table but often contains numerous fields. These
+typically <i>are</i> be sorted alphabetically. List tables might even have
+Lookup and Detail tables related to them! 
+<p> <b>Warning on Naming:</b> The same warning given earlier regarding naming
+Lookup tables applies to List tables as well.
+<h3> List Table Fields </h3>
+<ol>
+ <li> A <b>primary key</b> that is an AutoNumber. An AutoNumber is used so
+ as to easily allow the addition of new entries. The name will be "Table
+ (singular) + ID".
+ <li> A <b>text field</b> containing the category name. This field will be
+ indexed so it can be quickly sorted and querried on. Name is "Table
+ (singular)".
+ <li> Other fields as needed, following the same rules as Core tables. In
+ other words, don't add new fields if you should be adding new Lookup /
+ List / Detail tables instead.
+</ol>
+<p> <b>More on Adding Core Table Fields:</b> The same counsel given above on
+adding a "type" field to a Core table applies here: don't add a text field
+when you should be adding a List table instead. To make List tables work, you
+need to be able to create a relationship between Core and Lookup tables.
+Thus, we need to add another foreign key field to the Core table, just as we
+did for Lookup tables.
+<p> <b>Note:</b> Because List tables have the potential to grow into whole
+entities of their own, some people prefer to implement them as Core tables
+from the start. It's only a naming difference after all, and a rose is a rose.
+<h2> Detail Table </h2>
+<p> <b>Definition:</b> A Detail table contains specific items that are
+subordinate to the records in a Core table. Examples include: Order Details,
+Event Logs, Incident Reports, User Comments, and so forth.
+<p> <b>How to Identify:</b> A Detail table typically has a single relationship
+to a Core table, hence it contains a field that is a foreign key to a Core
+table. It also typically has a 2-part name, the first part being the same as
+the Core table to which it is related. For example, if there is a table called
+"Orders", it might have a Detail table called "OrderItems". It is not unheard
+of to have a Detail table with Lookup / List fields related to it. Sometimes
+Detail tables will contain further Detail tables, but this is rare.
+<h3> Detail Table Fields </h3>
+<ol>
+ <li> A <b>primary key</b> that is an AutoNumber. An AutoNumber is used so
+ as to easily allow the addition of new detail records. The name will be
+ "Table (singular) + ID".
+ <li> A <b>foreign key</b> that is a Long Integer. This will reference the
+ primary key in a Core table and should have the same name.
+ <li> Other fields as needed, following the same rules as Core tables. In
+ other words, don't add new fields if you should be adding new Lookup /
+ List / Detail tables instead.
+</ol>
+<h3> More On Adding Core Table Fields </h3>
+<p> Happily, you do not need to add any additional fields to your Core table
+to create a relationship to a Detail table. This is because <i>the Detail
+records are responsible for maintaining the relationship</i> not the Core
+table.
+<p> That having been said, I have some additional counsel for designing your
+Core tables: Add additional fields as needed to your Core tables but only if
+you can <i>guarantee</i> that a given record will never require more than one
+instance of that field. If you can imagine a case where more than one instance
+will be required, make a Detail table instead. You can tell you've made a
+mistake, if, for example, in a "Contacts" table you have fields that read
+"PhoneNumber", "PhoneNumber1", "PhoneNumber2", etc.
+<h2> Cross-Reference Table </h2>
+<p> <b>Definition:</b> A Cross-Reference table exists only to create a
+many-to-many relationship between two other tables. Typically, these two other
+tables will be Core tables, but that is not a requirement.
+<p> <b>How to Identify:</b> You can identify Cross-Reference tables because
+they typically contain only 2 fields: 2 foreign keys that reference primary
+keys in Core tables. A <i>compound primary key</i> will be made out of these
+two foreign keys, so as to disallow duplicate entries of the same two foreign
+keys.
+<h3> Cross-Reference Table Fields </h3>
+<ol>
+ <li> A <b>foreign key</b> to one table. It will have the same name as the
+ primary key in the table it references.
+ <li> A <b>foreign key</b> to another table. It will have the same name as
+ the primary key in the table it references.
+ <li> Optionally, an additional text / memo field that describes this
+ entry. These are rare, though.
+</ol>
+<h3> More on Adding Core Table Fields </h3>
+<p> When you add a new foreign key to a Core table that will reference a
+Lookup / List table, ask yourself if there is a chance that two of the
+categories in that Lookup / List table could describe the Core table record,
+you should be adding a Cross-Reference table instead. For example: if I was
+making a "Movies" table, and I was about to add a foreign key to reference a
+"Genres" List table, I should ask myself: "Is it possible that a movie could
+fit into more than one genre?" If the answer is yes, I should add a
+Cross-Reference table instead.
+<p> <b>Note:</b> Cross-Reference tables are the <i>least common</i> of all of
+the above tables because they serve a very special purpose: to create a
+many-to-many relationship. RDBMSes that provide built-in support for
+many-to-many relationships will not need Cross-Reference tables. From another
+point of view, any table that contains two foreign keys can be used as a
+Cross-Reference table, so these could arguably be considered the <i>most
+common</i> of all of the above tables.
+</p>
